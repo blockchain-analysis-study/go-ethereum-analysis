@@ -320,8 +320,11 @@ func (pool *TxPool) loop() {
 				if pool.chainconfig.IsHomestead(ev.Block.Number()) {
 					pool.homestead = true
 				}
-				// 根据当前 链上的最高块，和被广播过来的 新最高块
-				// 决定是否重组 tx pool
+
+				/**
+				根据当前 链上的最高块，和被广播过来的 新最高块
+				决定是否重组 tx pool
+				 */
 				pool.reset(head.Header(), ev.Block.Header())
 				// 将同步过来的新的最高块 赋值到 head 指针上
 				head = ev.Block
@@ -329,22 +332,28 @@ func (pool *TxPool) loop() {
 				pool.mu.Unlock()
 			}
 		// Be unsubscribed due to system stopped
+		// 如果是由于系统停止则取消订阅
 		case <-pool.chainHeadSub.Err():
 			return
 
 		// Handle stats reporting ticks
+		// 处理报告统计数据的定时器
 		case <-report.C:
 			pool.mu.RLock()
+			// 返回 pending 和 queue 中的数量
 			pending, queued := pool.stats()
+			// 获取 过期而被删除的tx 数目
 			stales := pool.priced.stales
 			pool.mu.RUnlock()
 
 			if pending != prevPending || queued != prevQueued || stales != prevStales {
 				log.Debug("Transaction pool status report", "executable", pending, "queued", queued, "stales", stales)
+				// 重置 全局的 技术中转变量
 				prevPending, prevQueued, prevStales = pending, queued, stales
 			}
 
 		// Handle inactive account transaction eviction
+		// 定时移除非活动帐户的tx 处理
 		case <-evict.C:
 			pool.mu.Lock()
 			// 每分钟 定时扫描 queue中的tx
@@ -355,6 +364,9 @@ func (pool *TxPool) loop() {
 					continue
 				}
 				// Any non-locals old enough should be removed
+				// 任何足够旧 (过时的)的非本地 addr 的 tx都应该被删除  (Lifetime: 默认 3小时)
+				// 如果当前账户的 tx 的 beat 是 Lifetime 之前的
+				// 需要全部移除
 				if time.Since(pool.beats[addr]) > pool.config.Lifetime {
 					for _, tx := range pool.queue[addr].Flatten() {
 						pool.removeTx(tx.Hash(), true)
@@ -512,12 +524,18 @@ func (pool *TxPool) reset(oldHead, newHead *types.Header) {
 	pool.demoteUnexecutables()
 
 	// Update all accounts to the latest known pending nonce
+	// 将所有帐户更新为最新的已知待处理的nonce
+	// 即：遍历 pending，逐个处理 addr的 tx list
 	for addr, list := range pool.pending {
-		txs := list.Flatten() // Heavy but will be cached and is needed by the miner anyway
+		// 对 tx list构建 构建一个 根据 nonce 从小到大的 排序的 cache，并返回 cache中的tx
+		// 即：获取按照 nonce 排好序的tx
+		txs := list.Flatten() // Heavy but will be cached and is needed by the miner anyway   虽然很重但是会被缓存，而且无论如何都需要矿工
+		// 预先对nonce 做 +1 处理 (其实这个是 对下一次发过来的 tx 所需要的值，在这里预先设定了)
 		pool.pendingState.SetNonce(addr, txs[len(txs)-1].Nonce()+1)
 	}
 	// Check the queue and move transactions over to the pending if possible
 	// or remove those that have become invalid
+	/** 检查 queue 队列 并尽可能将tx 移至 pending 队列，或删除已失效的 tx */
 	pool.promoteExecutables(nil)
 }
 
@@ -582,6 +600,10 @@ func (pool *TxPool) Stats() (int, int) {
 
 // stats retrieves the current pool stats, namely the number of pending and the
 // number of queued (non-executable) transactions.
+/**
+stats函数：
+检索当前池的统计信息，即pending的数量和 queue（非可执行）中的 tx 的数量。
+ */
 func (pool *TxPool) stats() (int, int) {
 	pending := 0
 	for _, list := range pool.pending {
@@ -1139,6 +1161,7 @@ func (pool *TxPool) promoteExecutables(accounts []common.Address) {
 		// Drop all transactions that are too costly (low balance or out of gas)
 		// 删除所有成本过高的交易（低余额或 gas 不足；这里的成本过高，是指 超出了账户自身所能承受与的价格）
 		// 过滤掉非法的交易
+		// 入参为：当前账户的 余额 和当前pool中规定的 MaxGas
 		drops, _ := list.Filter(pool.currentState.GetBalance(addr), pool.currentMaxGas)
 		// 遍历 由于不够支付 金额或者gas而被删除掉的txs
 		for _, tx := range drops {
@@ -1392,21 +1415,35 @@ func (pool *TxPool) demoteUnexecutables() {
 			pool.priced.Removed()
 		}
 		// Drop all transactions that are too costly (low balance or out of gas), and queue any invalids back for later
+		// 删除所有成本过高的交易（低余额或 gas 不足；这里的成本过高，是指 超出了账户自身所能承受与的价格）
+		// 并且将任何 失效的 （这里的失效是指 返回的：invalids 也就是收到 drops 的影响而 移除的 tx ）tx 组装到queue中以备日后使用
+		// 入参为当前账户的 余额 和 pool的 MaxGas
 		drops, invalids := list.Filter(pool.currentState.GetBalance(addr), pool.currentMaxGas)
+		// 遍历 由于不够支付 金额或者gas而被删除掉的txs
 		for _, tx := range drops {
 			hash := tx.Hash()
 			log.Trace("Removed unpayable pending transaction", "hash", hash)
+			// 将对应的tx从 all(存储所有交易的池)中移除
 			pool.all.Remove(hash)
+			// 自判断去调整最小堆
 			pool.priced.Removed()
 			pendingNofundsCounter.Inc(1)
 		}
+		// 遍历所有 收到drops 影响的 tx
 		for _, tx := range invalids {
 			hash := tx.Hash()
 			log.Trace("Demoting pending transaction", "hash", hash)
+			// 重新转移到 queue 中
 			pool.enqueueTx(hash, tx)
 		}
 		// If there's a gap in front, alert (should never happen) and postpone all transactions
+		// 如果前面有差距，请提醒（这种情况应该绝不会发生）并推迟所有tx
+		// 就是说，如果当前 addr 的pending中的 tx list 不为空，
+		// 且根据当前 state中该账户的 nonce 去该 tx list 中找不到对应的 tx 时
 		if list.Len() > 0 && list.txs.Get(nonce) == nil {
+			// 返回当前list 中所有大于 硬限制 threshold (这里的 threshold 指的是 list的items中所存储的 tx数量) 的tx
+			// 这里传0 说白了，就是要拿之前在 items (被维护在 items 中 (items：nonce -> tx)的所有 tx)
+			// 全部都拿出来，丢到 queue 中
 			for _, tx := range list.Cap(0) {
 				hash := tx.Hash()
 				log.Error("Demoting invalidated transaction", "hash", hash)

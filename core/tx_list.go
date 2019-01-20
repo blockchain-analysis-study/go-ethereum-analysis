@@ -141,6 +141,9 @@ func (m *txSortedMap) Filter(filter func(*types.Transaction) bool) types.Transac
 		}
 		heap.Init(m.index)
 		// 清空缓存
+		/**
+		(【注意】： cache 是在 Flatten 函数中被 创建)
+		*/
 		m.cache = nil
 	}
 	// 返回被删除的tx集
@@ -202,6 +205,9 @@ func (m *txSortedMap) Remove(nonce uint64) bool {
 		}
 	}
 	delete(m.items, nonce)
+	/**
+	(【注意】： cache 是在 Flatten 函数中被 创建)
+	*/
 	m.cache = nil
 
 	return true
@@ -226,6 +232,10 @@ func (m *txSortedMap) Ready(start uint64) types.Transactions {
 		delete(m.items, next)
 		heap.Pop(m.index)
 	}
+
+	/**
+	(【注意】： cache 是在 Flatten 函数中被 创建)
+	*/
 	m.cache = nil
 
 	return ready
@@ -241,12 +251,17 @@ func (m *txSortedMap) Len() int {
 // it's requested again before any modifications are made to the contents.
 /**
 Flatten 函数：
-基于松散排序的内部表现创建一个随机数排序的 tx slice。
+基于松散排序的内部表现创建一个按照 nonce 排序的 tx slice。
 如果在对内容进行任何修改之前再次请求，则对缓存的结果须是有序的。
+
+即：对 tx list构建 构建一个 根据 nonce 从小到大的 排序的 cache，并返回 cache中的tx
  */
 func (m *txSortedMap) Flatten() types.Transactions {
 	// If the sorting was not cached yet, create and cache it
 	// 如果尚未缓存排序，则创建并缓存它
+	/**
+	(【注意】： cache 是在 Filter、Remove、Ready 函数中被 清空)
+	*/
 	if m.cache == nil {
 		m.cache = make(types.Transactions, 0, len(m.items))
 		// 将 items 中的交易全部收集到 cache中
@@ -372,16 +387,17 @@ func (l *txList) Forward(threshold uint64) types.Transactions {
 // is lower than the costgas cap, the caps will be reset to a new high after removing
 // the newly invalidated transactions.
 /**
-过滤器从列表中删除所有事务，其成本或气体限制高于提供的阈值。  还返回严格模式的无效事务。
+过滤器从列表中删除所有tx，其成本或气体限制高于提供的阈值。  还返回严格模式的无效tx。
 
 Filter 函数：(只过滤当前账户的所有 tx)
 移除掉所有在tx集中由于 成本过高，或者 gas限制过高(本身gas不足于支付)的tx。
-对于任何删除后维护，都会返回每个已删除的事务。
+对于任何删除后维护，都会返回每个已删除的tx。
 且返回在严格模式的无效tx。
 
 
 此方法使用缓存的costcap和gascap来快速确定是否在计算所有成本或者余额是否涵盖完整。
-如果阈值低于成本限额上限，则在删除新的无效事务后，上限将重置为新的高。
+如果阈值低于成本限额上限，则在删除新的无效tx后，上限将重置为新的高。
+
  */
 func (l *txList) Filter(costLimit *big.Int, gasLimit uint64) (types.Transactions, types.Transactions) {
 	// If all transactions are below the threshold, short circuit
@@ -467,8 +483,10 @@ func (l *txList) Empty() bool {
 // it's requested again before any modifications are made to the contents.
 /**
 Flatten 函数：
-基于松散排序的内部表现创建一个随机数排序的 tx slice。
+基于松散排序的内部表现创建一个按照 nonce 排序的 tx slice。
 如果在对内容进行任何修改之前再次请求，则对缓存的结果须是有序的。
+
+即：对 tx list构建 构建一个 根据 nonce 从小到大的 排序的 cache，并返回 cache中的tx
  */
 func (l *txList) Flatten() types.Transactions {
 	return l.txs.Flatten()
@@ -519,6 +537,7 @@ type txPricedList struct {
 	items  *priceHeap // Heap of prices of all the stored transactions
 
 	// 过期价格点数（重堆积触发器）其实就是个计数器啦
+	// 记录删除了对少个因过期而删除的 tx
 	stales int        // Number of stale price points to (re-heap trigger)
 }
 
