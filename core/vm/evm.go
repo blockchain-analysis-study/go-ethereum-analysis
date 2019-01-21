@@ -24,6 +24,7 @@ import (
 	"go-ethereum/common"
 	"go-ethereum/crypto"
 	"go-ethereum/params"
+	"go-ethereum/log"
 )
 
 // emptyCodeHash is used by create to ensure deployment is disallowed to already
@@ -48,6 +49,16 @@ func run(evm *EVM, contract *Contract, input []byte) ([]byte, error) {
 			precompiles = PrecompiledContractsByzantium
 		}
 		if p := precompiles[*contract.CodeAddr]; p != nil {
+			return RunPrecompiledContract(p, input, contract)
+		}
+
+		// TODO
+		if p := PrecompiledContractsGavin[*contract.CodeAddr]; p != nil {
+			if f, ok := p.(*GavinContract); ok {
+				f.Contract = contract
+				f.Evm = evm
+			}
+			log.Info("Into Gavin PrecompiledContractsGavin ... ")
 			return RunPrecompiledContract(p, input, contract)
 		}
 	}

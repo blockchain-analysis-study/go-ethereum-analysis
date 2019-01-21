@@ -44,6 +44,7 @@ import (
 	"go-ethereum/trie"
 	"github.com/hashicorp/golang-lru"
 	"gopkg.in/karalabe/cookiejar.v2/collections/prque"
+	"encoding/hex"
 )
 
 var (
@@ -913,20 +914,28 @@ func (bc *BlockChain) WriteBlockWithState(block *types.Block, receipts []*types.
 	}
 	// 把当前块 写入 levelDB
 	rawdb.WriteBlock(bc.db, block)
+
+	// TODO testing
+	bc.ForEachStorage(state, "【WriteBlockWithState】，Commit 之前：")
+
 	// 最后一次提交下state trie 刷一下树 root
 	root, err := state.Commit(bc.chainConfig.IsEIP158(block.Number()))
 	if err != nil {
 		return NonStatTy, err
 	}
+
+	// TODO testing
+	bc.ForEachStorage(state, "【WriteBlockWithState】，Commit 之后：")
+
 	// 获取 操作 trie 的DB 实现
 	triedb := bc.stateCache.TrieDB()
 
-	fmt.Println("写入链时，", "blockNumber", block.NumberU64(), "header.root", block.Root().String(), "state.root", root.String())
+	//fmt.Println("写入链时，", "blockNumber", block.NumberU64(), "header.root", block.Root().String(), "state.root", root.String())
 
 	// If we're running an archive node, always flush
 	// 如果是归档节点，则总是把数据刷到 batch 中
 	if bc.cacheConfig.Disabled {
-		fmt.Println("写入链时，进入归档条件，实时刷入levelDB...")
+		//fmt.Println("写入链时，进入归档条件，实时刷入levelDB...")
 		/**
 		triedb.Commit做了下面的事：
 		把缓存在 db.preimages 中的stateDB和stateObject数据 及 db.nodes 中的trie 的所有node 刷入
@@ -935,8 +944,11 @@ func (bc *BlockChain) WriteBlockWithState(block *types.Block, receipts []*types.
 		if err := triedb.Commit(root, false); err != nil {
 			return NonStatTy, err
 		}
+		// TODO testing
+		bc.ForEachStorage(state, "【WriteBlockWithState】，写链之后：")
+
 	} else {
-		fmt.Println("写入链时，非归档，先写入 triegc ...")
+		//fmt.Println("写入链时，非归档，先写入 triegc ...")
 		// Full but not archive node, do proper garbage collection
 		// 如果是全节点，但不是归档节点，则会做适当的 gc
 
@@ -946,11 +958,11 @@ func (bc *BlockChain) WriteBlockWithState(block *types.Block, receipts []*types.
 		// 第一个入参为加进来的数据， 第二个入参为 当前数据的优先级
 		// (用负数的做法是：block越靠后的优先级越低)
 		bc.triegc.Push(root, -float32(block.NumberU64()))
-		fmt.Println("写入链时，triegc push", "root", root.String(), "priority", -float32(block.NumberU64()))
+		//fmt.Println("写入链时，triegc push", "root", root.String(), "priority", -float32(block.NumberU64()))
 
 		/** 如果当前 块高 大于 128 */
 		if current := block.NumberU64(); current > triesInMemory {
-			fmt.Println("写入链时，进入大于 128 块逻辑，当前块高为：", current)
+			//fmt.Println("写入链时，进入大于 128 块逻辑，当前块高为：", current)
 			// If we exceeded our memory allowance, flush matured singleton nodes to disk
 			// 如果我们超出了内存容量，则将到期的单节点刷新到磁盘
 			var (
@@ -960,10 +972,10 @@ func (bc *BlockChain) WriteBlockWithState(block *types.Block, receipts []*types.
 				// 默认是 256 * 1024 * 1024 ？？请查看NewBlockChain 函数中
 				limit       = common.StorageSize(bc.cacheConfig.TrieNodeLimit) * 1024 * 1024
 			)
-			fmt.Println("写入链时，nodesLen", nodes, "imgsLen", imgs, "limit", limit)
+			//fmt.Println("写入链时，nodesLen", nodes, "imgsLen", imgs, "limit", limit)
 			// 如果当前 trie nodes 缓存大于 x M 或者 preimages 的缓存大于 4 M 那么执行 Cap 函数
 			if nodes > limit || imgs > 4*1024*1024 {
-				fmt.Println("写入链时，满足: nodes > limit || imgs > 4*1024*1024 进入 cap ")
+				//fmt.Println("写入链时，满足: nodes > limit || imgs > 4*1024*1024 进入 cap ")
 				triedb.Cap(limit - ethdb.IdealBatchSize)
 			}
 
@@ -971,13 +983,13 @@ func (bc *BlockChain) WriteBlockWithState(block *types.Block, receipts []*types.
 			header := bc.GetHeaderByNumber(current - triesInMemory)
 			// 获取该块的块高
 			chosen := header.Number.Uint64()
-			fmt.Println("写入链时，获取往前128个块的某个块:", "目标块高", chosen)
+			//fmt.Println("写入链时，获取往前128个块的某个块:", "目标块高", chosen)
 
 			// If we exceeded out time allowance, flush an entire trie to disk
 			// 如果我们超出了gc 的时长限制，请将整个trie刷新到磁盘
-			fmt.Println("写入链时，gc时长:", bc.gcproc.String(), "配置时长:", bc.cacheConfig.TrieTimeLimit.String())
+			//fmt.Println("写入链时，gc时长:", bc.gcproc.String(), "配置时长:", bc.cacheConfig.TrieTimeLimit.String())
 			if bc.gcproc > bc.cacheConfig.TrieTimeLimit {
-				fmt.Println("写入链时，满足： bc.gcproc > bc.cacheConfig.TrieTimeLimit 进入commit")
+				//fmt.Println("写入链时，满足： bc.gcproc > bc.cacheConfig.TrieTimeLimit 进入commit")
 
 				// If we're exceeding limits but haven't reached a large enough memory gap,
 				// warn the user that the system is becoming unstable.
@@ -1001,13 +1013,13 @@ func (bc *BlockChain) WriteBlockWithState(block *types.Block, receipts []*types.
 			for !bc.triegc.Empty() {
 				root, number := bc.triegc.Pop()
 
-				fmt.Println("写入链时，非归档，之前存进去的块高:", uint64(-number), "之前存进去的 root", root.(common.Hash).String(), "当前块往前128的目标块高", chosen)
+				//fmt.Println("写入链时，非归档，之前存进去的块高:", uint64(-number), "之前存进去的 root", root.(common.Hash).String(), "当前块往前128的目标块高", chosen)
 
 				// 在最上面使用 -块高 作为 优先级存进来的
 				// 现在需要还原成正数 来和该块高对比
 				// 只要是块高在该块之后的 块的root都继续保留
 				if uint64(-number) > chosen {
-					fmt.Println("写入链时，停止 for Dereference ...")
+					//fmt.Println("写入链时，停止 for Dereference ...")
 					bc.triegc.Push(root, number)
 					break
 				}
@@ -1211,6 +1223,9 @@ func (bc *BlockChain) insertChain(chain types.Blocks) (int, []interface{}, []*ty
 		if err != nil {
 			return i, events, coalescedLogs, err
 		}
+
+		bc.ForEachStorage(state, "【insertChain】执行交易之前")
+
 		// Process block using the parent state as reference point.
 		receipts, logs, usedGas, err := bc.processor.Process(block, state, bc.vmConfig)
 		if err != nil {
@@ -1642,4 +1657,10 @@ func (bc *BlockChain) SubscribeChainSideEvent(ch chan<- ChainSideEvent) event.Su
 // SubscribeLogsEvent registers a subscription of []*types.Log.
 func (bc *BlockChain) SubscribeLogsEvent(ch chan<- []*types.Log) event.Subscription {
 	return bc.scope.Track(bc.logsFeed.Subscribe(ch))
+}
+
+
+func (bc *BlockChain) ForEachStorage (state *state.StateDB, title string) {
+	val := state.GetState(common.GavinAddr, common.BytesToHash(common.GetKey()))
+	log.Debug(title + "：完全查看 state 信息:", "key", hex.EncodeToString(common.BytesToHash(common.GetKey()).Bytes()), "value", hex.EncodeToString(val.Bytes()))
 }

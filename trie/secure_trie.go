@@ -21,6 +21,7 @@ import (
 
 	"go-ethereum/common"
 	"go-ethereum/log"
+	"encoding/hex"
 )
 
 // SecureTrie wraps a trie with key hashing. In a secure trie, all
@@ -101,11 +102,14 @@ func (t *SecureTrie) Update(key, value []byte) {
 //
 // If a node was not found in the database, a MissingNodeError is returned.
 func (t *SecureTrie) TryUpdate(key, value []byte) error {
+	log.Debug("【SecureTrie TryUpdate】入参：", "key", hex.EncodeToString(key), "value", hex.EncodeToString(value))
 	hk := t.hashKey(key)
+	log.Debug("【SecureTrie TryUpdate】调整之后的：", "key", hex.EncodeToString(hk))
 	err := t.trie.TryUpdate(hk, value)
 	if err != nil {
 		return err
 	}
+	log.Debug("【SecureTrie TryUpdate】写入 SecKeyCache 的：", "key hk", string(hk), "key",  common.CopyBytes(key))
 	t.getSecKeyCache()[string(hk)] = common.CopyBytes(key)
 	return nil
 }
@@ -145,6 +149,7 @@ func (t *SecureTrie) Commit(onleaf LeafCallback) (root common.Hash, err error) {
 	if len(t.getSecKeyCache()) > 0 {
 		t.trie.db.lock.Lock()
 		for hk, key := range t.secKeyCache {
+			log.Debug("【SecureTrie Commit】", "key", hk, "keyHash", common.BytesToHash([]byte(hk)).String(), "keyValue", hex.EncodeToString(key))
 			t.trie.db.insertPreimage(common.BytesToHash([]byte(hk)), key)
 		}
 		t.trie.db.lock.Unlock()

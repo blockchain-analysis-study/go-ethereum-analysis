@@ -23,6 +23,7 @@ import (
 	"go-ethereum/log"
 	"go-ethereum/params"
 	"go-ethereum/rlp"
+	"encoding/hex"
 )
 
 // ReadDatabaseVersion retrieves the version number of the database.
@@ -81,6 +82,7 @@ func ReadPreimage(db DatabaseReader, hash common.Hash) []byte {
 // current block number, and is used for debug messages only.
 func WritePreimages(db DatabaseWriter, number uint64, preimages map[common.Hash][]byte) {
 	for hash, preimage := range preimages {
+		log.Debug("【WritePreimages】", "blockNumber", number, "key", hash.String(), "value",  hex.EncodeToString(preimage))
 		if err := db.Put(preimageKey(hash), preimage); err != nil {
 			log.Crit("Failed to store trie preimage", "err", err)
 		}

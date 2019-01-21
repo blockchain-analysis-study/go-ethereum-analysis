@@ -615,12 +615,12 @@ func (s *StateDB) Commit(deleteEmptyObjects bool) (root common.Hash, err error) 
 			return nil
 		}
 		if account.Root != emptyState {
-			fmt.Println("提交 storage root ...")
+			//fmt.Println("提交 storage root ...")
 			s.db.TrieDB().Reference(account.Root, parent)
 		}
 		code := common.BytesToHash(account.CodeHash)
 		if code != emptyCode {
-			fmt.Println("提交Code Hash ...")
+			//fmt.Println("提交Code Hash ...")
 			s.db.TrieDB().Reference(code, parent)
 		}
 		return nil

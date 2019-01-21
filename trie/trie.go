@@ -25,6 +25,7 @@ import (
 	"go-ethereum/crypto"
 	"go-ethereum/log"
 	"go-ethereum/metrics"
+	"encoding/hex"
 )
 
 var (
@@ -198,7 +199,9 @@ func (t *Trie) Update(key, value []byte) {
 //
 // If a node was not found in the database, a MissingNodeError is returned.
 func (t *Trie) TryUpdate(key, value []byte) error {
+	log.Debug("【Trie TryUpdate】入参：", "key", hex.EncodeToString(key), "value", hex.EncodeToString(value))
 	k := keybytesToHex(key)
+	log.Debug("【Trie TryUpdate】拿取压树的：", "key", hex.EncodeToString(k), "value", hex.EncodeToString(value))
 	if len(value) != 0 {
 		_, n, err := t.insert(t.root, nil, k, valueNode(value))
 		if err != nil {

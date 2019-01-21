@@ -27,6 +27,7 @@ import (
 	"go-ethereum/log"
 	"go-ethereum/metrics"
 	"go-ethereum/rlp"
+	"encoding/hex"
 )
 
 var (
@@ -431,7 +432,7 @@ func (db *Database) Nodes() []common.Hash {
 func (db *Database) Reference(child common.Hash, parent common.Hash) {
 	db.lock.RLock()
 	defer db.lock.RUnlock()
-	fmt.Println("进入Reference", "parent", parent.String(), "curr", child.String())
+	//fmt.Println("进入Reference", "parent", parent.String(), "curr", child.String())
 	db.reference(child, parent)
 }
 
@@ -677,6 +678,8 @@ func (db *Database) Commit(node common.Hash, report bool) error {
 	// Move all of the accumulated preimages into a write batch
 	// 将所有累积的preimages移动到写入 batch 中
 	for hash, preimage := range db.preimages {
+		log.Debug("【WriteBlockChain TrieDB Commit】", "key", hash.String(), "value", hex.EncodeToString(preimage))
+
 		// 将给定键/值对的“put操作”附加到 ldbBatch 中。
 		// Put 并不是修改之前的内容，而是追加。
 		if err := batch.Put(db.secureKey(hash[:]), preimage); err != nil {

@@ -25,6 +25,8 @@ import (
 	"go-ethereum/common"
 	"go-ethereum/crypto"
 	"go-ethereum/rlp"
+	"encoding/hex"
+	"go-ethereum/log"
 )
 
 var emptyCodeHash = crypto.Keccak256(nil)
@@ -193,6 +195,7 @@ func (self *stateObject) SetState(db Database, key, value common.Hash) {
 }
 
 func (self *stateObject) setState(key, value common.Hash) {
+	log.Debug("【state_object setState】", "key",   hex.EncodeToString(key.Bytes()), "value", hex.EncodeToString(value.Bytes()))
 	self.cachedStorage[key] = value
 	self.dirtyStorage[key] = value
 }
@@ -202,6 +205,8 @@ func (self *stateObject) updateTrie(db Database) Trie {
 	tr := self.getTrie(db)
 	for key, value := range self.dirtyStorage {
 		delete(self.dirtyStorage, key)
+
+		log.Debug("【state_object UpdateTrie】", "key",   hex.EncodeToString(key.Bytes()), "value", hex.EncodeToString(value.Bytes()))
 		if (value == common.Hash{}) {
 			self.setError(tr.TryDelete(key[:]))
 			continue

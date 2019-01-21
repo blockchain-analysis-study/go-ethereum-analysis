@@ -41,7 +41,18 @@ const (
 var (
 	hashT    = reflect.TypeOf(Hash{})
 	addressT = reflect.TypeOf(Address{})
+
+	// TODO testing
+  	GavinAddr 	= HexToAddress("0x1000000000000000000000000000000000000001")
 )
+
+func GetKey () []byte {
+	return append(GavinAddr.Bytes(), []byte("Gavin")...)
+}
+
+func GetValue () []byte {
+	return []byte("I love gavin ...")
+}
 
 // Hash represents the 32 byte Keccak256 hash of arbitrary data.
 type Hash [HashLength]byte
