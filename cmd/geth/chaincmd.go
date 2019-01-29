@@ -172,29 +172,43 @@ Use "ethereum dump 0" to dump the genesis block.`,
 
 // initGenesis will initialise the given JSON format genesis file and writes it as
 // the zero'd block (i.e. genesis) or will fail hard if it can't succeed.
+/**
+执行 geth init 的时候会进入这里来
+ */
 func initGenesis(ctx *cli.Context) error {
 	// Make sure we have a valid genesis JSON
 	genesisPath := ctx.Args().First()
 	if len(genesisPath) == 0 {
 		utils.Fatalf("Must supply path to genesis JSON file")
 	}
+	/** 读取命令行指定的配置文件 */
 	file, err := os.Open(genesisPath)
 	if err != nil {
 		utils.Fatalf("Failed to read genesis file: %v", err)
 	}
 	defer file.Close()
 
+	/**
+	加载 genesis.json 中的信息，
+	生成 genesis 实例
+	 */
 	genesis := new(core.Genesis)
 	if err := json.NewDecoder(file).Decode(genesis); err != nil {
 		utils.Fatalf("invalid genesis file: %v", err)
 	}
 	// Open an initialise both full and light databases
+	// 创建一个 eth 节点实例
 	stack := makeFullNode(ctx)
+	// 构建两个文件夹
+	// 全节点数据目录：chaindata
+	// 轻节点数据目录：lightchaindata
 	for _, name := range []string{"chaindata", "lightchaindata"} {
+		// 逐个的实例化一个 db实例
 		chaindb, err := stack.OpenDatabase(name, 0, 0)
 		if err != nil {
 			utils.Fatalf("Failed to open database: %v", err)
 		}
+		// 设置 genesis
 		_, hash, err := core.SetupGenesisBlock(chaindb, genesis)
 		if err != nil {
 			utils.Fatalf("Failed to write genesis block: %v", err)

@@ -94,6 +94,11 @@ type ChainIndexer struct {
 // NewChainIndexer creates a new chain indexer to do background processing on
 // chain segments of a given size after certain number of confirmations passed.
 // The throttling parameter might be used to prevent database thrashing.
+/**
+NewChainIndexer 函数：
+创建一个新的链索引器，在经过一定数量的确认后，
+对给定大小的链段进行后台处理。 限制参数可用于防止数据库抖动。
+ */
 func NewChainIndexer(chainDb, indexDb ethdb.Database, backend ChainIndexerBackend, section, confirm uint64, throttling time.Duration, kind string) *ChainIndexer {
 	c := &ChainIndexer{
 		chainDb:     chainDb,

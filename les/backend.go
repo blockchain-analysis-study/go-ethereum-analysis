@@ -77,6 +77,9 @@ type LightEthereum struct {
 	wg sync.WaitGroup
 }
 
+/**
+创建一个 轻节点服务
+ */
 func New(ctx *node.ServiceContext, config *eth.Config) (*LightEthereum, error) {
 	chainDb, err := eth.CreateDB(ctx, config, "lightchaindata")
 	if err != nil {

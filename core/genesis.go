@@ -150,6 +150,11 @@ func (e *GenesisMismatchError) Error() string {
 // error is a *params.ConfigCompatError and the new, unwritten config is returned.
 //
 // The returned chain configuration is never nil.
+/**
+设置 genesis 至 磁盘
+如果是节点启动进来的，那么 genesis 应该为 nil
+如果是 geth init 进来的那么 genesis 不为 nil
+ */
 func SetupGenesisBlock(db ethdb.Database, genesis *Genesis) (*params.ChainConfig, common.Hash, error) {
 	if genesis != nil && genesis.Config == nil {
 		return params.AllEthashProtocolChanges, common.Hash{}, errGenesisNoConfig

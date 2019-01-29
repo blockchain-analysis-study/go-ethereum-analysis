@@ -40,9 +40,11 @@ type ServiceContext struct {
 // if no previous can be found) from within the node's data directory. If the
 // node is an ephemeral one, a memory database is returned.
 func (ctx *ServiceContext) OpenDatabase(name string, cache int, handles int) (ethdb.Database, error) {
+	/** 如果 命令行不指定 dataDir 那么就默认用 内存 db */
 	if ctx.config.DataDir == "" {
 		return ethdb.NewMemDatabase(), nil
 	}
+	// 否则，使用 磁盘 db
 	db, err := ethdb.NewLDBDatabase(ctx.config.ResolvePath(name), cache, handles)
 	if err != nil {
 		return nil, err

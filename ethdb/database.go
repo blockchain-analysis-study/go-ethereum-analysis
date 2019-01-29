@@ -396,6 +396,10 @@ type table struct {
 
 // NewTable returns a Database object that prefixes all keys with a given
 // string.
+/**
+NewTable 函数
+返回一个Database对象，该对象为具有给定字符串的所有键添加前缀。
+ */
 func NewTable(db Database, prefix string) Database {
 	return &table{
 		db:     db,

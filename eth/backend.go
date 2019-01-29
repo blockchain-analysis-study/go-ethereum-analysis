@@ -101,6 +101,9 @@ func (s *Ethereum) AddLesServer(ls LesServer) {
 
 // New creates a new Ethereum object (including the
 // initialisation of the common Ethereum object)
+/**
+创建一个 全节点服务
+ */
 func New(ctx *node.ServiceContext, config *Config) (*Ethereum, error) {
 	if config.SyncMode == downloader.LightSync {
 		return nil, errors.New("can't run eth.Ethereum in light sync mode, use les.LightEthereum")
@@ -108,28 +111,53 @@ func New(ctx *node.ServiceContext, config *Config) (*Ethereum, error) {
 	if !config.SyncMode.IsValid() {
 		return nil, fmt.Errorf("invalid sync mode %d", config.SyncMode)
 	}
+
+	/**
+	创建 DB 实例 (注意了，全局的和 block 相关操作的 db 均是这个 db 的引用)
+	其中，cfx 为命令行入参
+	config 为配置项
+	"chaindata" 为写死的 全节点的 chain 的数据目录名称
+	 */
 	chainDb, err := CreateDB(ctx, config, "chaindata")
 	if err != nil {
 		return nil, err
 	}
+
+	// 设置 genesis 信息，节点启动进来的
+	// 所以 genesis 应该为 nil
 	chainConfig, genesisHash, genesisErr := core.SetupGenesisBlock(chainDb, config.Genesis)
 	if _, ok := genesisErr.(*params.ConfigCompatError); genesisErr != nil && !ok {
 		return nil, genesisErr
 	}
 	log.Info("Initialised chain configuration", "config", chainConfig)
 
+	/**
+	构建一个 Ethereum 全节点服务 实例
+	 */
 	eth := &Ethereum{
+		// 节点的配置
 		config:         config,
+		// 全局的db实例
 		chainDb:        chainDb,
+		// 链的配置
 		chainConfig:    chainConfig,
+		// 事件 (已经过时，后续可能都用 feed)
 		eventMux:       ctx.EventMux,
+		// AccountManager
 		accountManager: ctx.AccountManager,
+		/** 创建一个 共识 */
 		engine:         CreateConsensusEngine(ctx, chainConfig, &config.Ethash, config.MinerNotify, chainDb),
+		// 一个接收 关机信号的 通道
 		shutdownChan:   make(chan bool),
+		// 网络ID
 		networkID:      config.NetworkId,
+		// 整个节点规定的miner的 gasPrice
 		gasPrice:       config.MinerGasPrice,
+		// 当前节点的 矿工账户
 		etherbase:      config.Etherbase,
+		// 一个 布隆服务的 什么什么 通道
 		bloomRequests:  make(chan chan *bloombits.Retrieval),
+		// 布隆服务器
 		bloomIndexer:   NewBloomIndexer(chainDb, params.BloomBitsBlocks, bloomConfirms),
 	}
 
@@ -237,7 +265,11 @@ func makeExtraData(extra []byte) []byte {
 }
 
 // CreateDB creates the chain database.
+/**
+创建一个 levelDB 连接实例
+ */
 func CreateDB(ctx *node.ServiceContext, config *Config, name string) (ethdb.Database, error) {
+	// 打开 levelDB
 	db, err := ctx.OpenDatabase(name, config.DatabaseCache, config.DatabaseHandles)
 	if err != nil {
 		return nil, err
