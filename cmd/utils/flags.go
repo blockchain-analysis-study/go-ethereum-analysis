@@ -619,22 +619,34 @@ func MakeDataDir(ctx *cli.Context) string {
 // setNodeKey creates a node key from set command line flags, either loading it
 // from a file or as a specified hex value. If neither flags were provided, this
 // method returns nil and an emphemeral key is to be generated.
+/**
+设置 nodeKey
+即： 设置节点私钥
+ */
 func setNodeKey(ctx *cli.Context, cfg *p2p.Config) {
 	var (
+		// Name: "nodekeyhex"
 		hex  = ctx.GlobalString(NodeKeyHexFlag.Name)
+		// Name: "nodekey"
 		file = ctx.GlobalString(NodeKeyFileFlag.Name)
+		// 声明节点私钥类型
 		key  *ecdsa.PrivateKey
+
 		err  error
 	)
+
+	// 读取 名为：nodekey 的文件中的节点私钥 或者 读取名为 nodekeyhex 的文件中过的私钥
 	switch {
 	case file != "" && hex != "":
 		Fatalf("Options %q and %q are mutually exclusive", NodeKeyFileFlag.Name, NodeKeyHexFlag.Name)
 	case file != "":
+		// 加载节点私钥
 		if key, err = crypto.LoadECDSA(file); err != nil {
 			Fatalf("Option %q: %v", NodeKeyFileFlag.Name, err)
 		}
+		// 将 节点私钥设置到 cfg 中
 		cfg.PrivateKey = key
-	case hex != "":
+	case hex != "": // 同上
 		if key, err = crypto.HexToECDSA(hex); err != nil {
 			Fatalf("Option %q: %v", NodeKeyHexFlag.Name, err)
 		}
@@ -651,23 +663,33 @@ func setNodeUserIdent(ctx *cli.Context, cfg *node.Config) {
 
 // setBootstrapNodes creates a list of bootstrap nodes from the command line
 // flags, reverting to pre-configured ones if none have been specified.
+/**
+设置引导节点
+ */
 func setBootstrapNodes(ctx *cli.Context, cfg *p2p.Config) {
+	// 读取 默认的 引导节点 (代码级别)
 	urls := params.MainnetBootnodes
 	switch {
+	// Name: "bootnodes" || Name: "bootnodesv4"
 	case ctx.GlobalIsSet(BootnodesFlag.Name) || ctx.GlobalIsSet(BootnodesV4Flag.Name):
 		if ctx.GlobalIsSet(BootnodesV4Flag.Name) {
 			urls = strings.Split(ctx.GlobalString(BootnodesV4Flag.Name), ",")
 		} else {
 			urls = strings.Split(ctx.GlobalString(BootnodesFlag.Name), ",")
 		}
+
+	// Name: "testnet"
 	case ctx.GlobalBool(TestnetFlag.Name):
 		urls = params.TestnetBootnodes
+	// Name: "rinkeby"
 	case ctx.GlobalBool(RinkebyFlag.Name):
 		urls = params.RinkebyBootnodes
+	// 已经设置过引导节点了
 	case cfg.BootstrapNodes != nil:
 		return // already set, don't apply defaults.
 	}
 
+	// 从URL 中读取出各个 引导节点
 	cfg.BootstrapNodes = make([]*discover.Node, 0, len(urls))
 	for _, url := range urls {
 		node, err := discover.ParseNode(url)
@@ -680,6 +702,10 @@ func setBootstrapNodes(ctx *cli.Context, cfg *p2p.Config) {
 
 // setBootstrapNodesV5 creates a list of bootstrap nodes from the command line
 // flags, reverting to pre-configured ones if none have been specified.
+/**
+设置 新版协议的引导节点
+做法同 setBootstrapNodes
+ */
 func setBootstrapNodesV5(ctx *cli.Context, cfg *p2p.Config) {
 	urls := params.DiscoveryV5Bootnodes
 	switch {
@@ -709,18 +735,24 @@ func setBootstrapNodesV5(ctx *cli.Context, cfg *p2p.Config) {
 // setListenAddress creates a TCP listening address string from set command
 // line flags.
 func setListenAddress(ctx *cli.Context, cfg *p2p.Config) {
+	// Name: "port"
 	if ctx.GlobalIsSet(ListenPortFlag.Name) {
+		// 设置 监听 port
 		cfg.ListenAddr = fmt.Sprintf(":%d", ctx.GlobalInt(ListenPortFlag.Name))
 	}
 }
 
 // setNAT creates a port mapper from command line flags.
+// 根据命令行参数创建一个 nat  map
 func setNAT(ctx *cli.Context, cfg *p2p.Config) {
+
+	// Name: "nat"
 	if ctx.GlobalIsSet(NATFlag.Name) {
 		natif, err := nat.Parse(ctx.GlobalString(NATFlag.Name))
 		if err != nil {
 			Fatalf("Option %s: %v", NATFlag.Name, err)
 		}
+		// 设置 NAT
 		cfg.NAT = natif
 	}
 }
@@ -783,6 +815,8 @@ func setWS(ctx *cli.Context, cfg *node.Config) {
 // setIPC creates an IPC path configuration from the set command line flags,
 // returning an empty string if IPC was explicitly disabled, or the set path.
 func setIPC(ctx *cli.Context, cfg *node.Config) {
+	// Exclusive: 独家
+	//
 	checkExclusive(ctx, IPCDisabledFlag, IPCPathFlag)
 	switch {
 	case ctx.GlobalBool(IPCDisabledFlag.Name):
@@ -874,20 +908,35 @@ func MakePasswordList(ctx *cli.Context) []string {
 	return lines
 }
 
+// 设置 P2P选项
 func SetP2PConfig(ctx *cli.Context, cfg *p2p.Config) {
+	// 设置节点私钥
 	setNodeKey(ctx, cfg)
+	// 设置NAT
 	setNAT(ctx, cfg)
+	// 设置 监听地址
 	setListenAddress(ctx, cfg)
+	// 设置 引导节点
 	setBootstrapNodes(ctx, cfg)
+	// 设置 新版的 引导节点
 	setBootstrapNodesV5(ctx, cfg)
 
+	// 判断 同步模式(syncmode) 是否为 light 轻节点
+	// Name: "syncmode"
 	lightClient := ctx.GlobalString(SyncModeFlag.Name) == "light"
+	// 判断轻节点server
+	// Name: "lightserv"
 	lightServer := ctx.GlobalInt(LightServFlag.Name) != 0
+	// 获取轻节点的 对端 peer 数目
+	// Name: "lightpeers"
 	lightPeers := ctx.GlobalInt(LightPeersFlag.Name)
 
+	// 读取全局的 peer最大连接数
+	// Name: "maxpeers"
 	if ctx.GlobalIsSet(MaxPeersFlag.Name) {
 		cfg.MaxPeers = ctx.GlobalInt(MaxPeersFlag.Name)
 		if lightServer && !ctx.GlobalIsSet(LightPeersFlag.Name) {
+			// 最大节点数 += 轻节点数
 			cfg.MaxPeers += lightPeers
 		}
 	} else {
@@ -901,15 +950,19 @@ func SetP2PConfig(ctx *cli.Context, cfg *p2p.Config) {
 	if !(lightClient || lightServer) {
 		lightPeers = 0
 	}
+
+	// 全节点数
 	ethPeers := cfg.MaxPeers - lightPeers
 	if lightClient {
 		ethPeers = 0
 	}
 	log.Info("Maximum peer count", "ETH", ethPeers, "LES", lightPeers, "total", cfg.MaxPeers)
 
+	// Name: "maxpendpeers"
 	if ctx.GlobalIsSet(MaxPendingPeersFlag.Name) {
 		cfg.MaxPendingPeers = ctx.GlobalInt(MaxPendingPeersFlag.Name)
 	}
+	// Name: "nodiscover"
 	if ctx.GlobalIsSet(NoDiscoverFlag.Name) || lightClient {
 		cfg.NoDiscovery = true
 	}
@@ -917,13 +970,17 @@ func SetP2PConfig(ctx *cli.Context, cfg *p2p.Config) {
 	// if we're running a light client or server, force enable the v5 peer discovery
 	// unless it is explicitly disabled with --nodiscover note that explicitly specifying
 	// --v5disc overrides --nodiscover, in which case the later only disables v4 discovery
+	// Name: "nodiscover"
 	forceV5Discovery := (lightClient || lightServer) && !ctx.GlobalBool(NoDiscoverFlag.Name)
+
+	// Name: "v5disc"
 	if ctx.GlobalIsSet(DiscoveryV5Flag.Name) {
 		cfg.DiscoveryV5 = ctx.GlobalBool(DiscoveryV5Flag.Name)
 	} else if forceV5Discovery {
 		cfg.DiscoveryV5 = true
 	}
 
+	// Name: "netrestrict"
 	if netrestrict := ctx.GlobalString(NetrestrictFlag.Name); netrestrict != "" {
 		list, err := netutil.ParseNetlist(netrestrict)
 		if err != nil {
@@ -932,6 +989,7 @@ func SetP2PConfig(ctx *cli.Context, cfg *p2p.Config) {
 		cfg.NetRestrict = list
 	}
 
+	// Name: "dev"
 	if ctx.GlobalBool(DeveloperFlag.Name) {
 		// --dev mode can't use p2p networking.
 		cfg.MaxPeers = 0
@@ -943,7 +1001,9 @@ func SetP2PConfig(ctx *cli.Context, cfg *p2p.Config) {
 
 // SetNodeConfig applies node-related command line flags to the config.
 func SetNodeConfig(ctx *cli.Context, cfg *node.Config) {
+	// 设置 P2P 配置 (读取命令行参数)
 	SetP2PConfig(ctx, &cfg.P2P)
+	// 进行 IPC 通信
 	setIPC(ctx, cfg)
 	setHTTP(ctx, cfg)
 	setWS(ctx, cfg)

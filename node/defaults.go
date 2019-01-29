@@ -27,6 +27,7 @@ import (
 	"go-ethereum/rpc"
 )
 
+// 一些客户端 http 或者 ws 的默认配置项
 const (
 	DefaultHTTPHost = "localhost" // Default host interface for the HTTP RPC server
 	DefaultHTTPPort = 8545        // Default TCP port for the HTTP RPC server
@@ -43,15 +44,23 @@ var DefaultConfig = Config{
 	HTTPTimeouts:     rpc.DefaultHTTPTimeouts,
 	WSPort:           DefaultWSPort,
 	WSModules:        []string{"net", "web3"},
+
+	/**
+	默认的 p2p 选项
+	 */
 	P2P: p2p.Config{
 		ListenAddr: ":30303",
-		MaxPeers:   25,
+		MaxPeers:   25, // 默认连接 25个对端 peer
 		NAT:        nat.Any(),
 	},
 }
 
 // DefaultDataDir is the default data directory to use for the databases and other
 // persistence requirements.
+/**
+构建默认的 数据目录
+(存放 chaindata)
+ */
 func DefaultDataDir() string {
 	// Try to place the data folder in the user's home dir
 	home := homeDir()

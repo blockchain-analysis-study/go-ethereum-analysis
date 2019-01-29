@@ -163,6 +163,7 @@ var (
 
 func init() {
 	// Initialize the CLI app and start Geth
+	// 向 app 实例注册 geth 函数
 	app.Action = geth
 	app.HideVersion = true // we have a command to print the version
 	app.Copyright = "Copyright 2013-2018 The go-ethereum Authors"
@@ -246,7 +247,14 @@ func init() {
 	}
 }
 
+/***
+整个以太坊客户端的入口
+ */
 func main() {
+	// 启动之前在 init 函数中注册的 func (也就是 geth)
+	// 即：在 init函数中的这一句
+	// app.Action = geth
+	// app 是 cli 第三方包的实例
 	if err := app.Run(os.Args); err != nil {
 		fmt.Fprintln(os.Stderr, err)
 		os.Exit(1)
@@ -256,12 +264,19 @@ func main() {
 // geth is the main entry point into the system if no special subcommand is ran.
 // It creates a default node based on the command line arguments and runs it in
 // blocking mode, waiting for it to be shut down.
+/**
+以太坊的 执行入口函数
+ */
 func geth(ctx *cli.Context) error {
+	// 解析命令行参数
 	if args := ctx.Args(); len(args) > 0 {
 		return fmt.Errorf("invalid command: %q", args[0])
 	}
+	// 创建 Ethereum 节点实例
 	node := makeFullNode(ctx)
+	// 启动 Ethereum 节点实例
 	startNode(ctx, node)
+	// 关闭节点
 	node.Wait()
 	return nil
 }

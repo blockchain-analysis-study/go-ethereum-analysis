@@ -97,6 +97,7 @@ func loadConfig(file string, cfg *gethConfig) error {
 	return err
 }
 
+// 获取节点的默认配置项
 func defaultNodeConfig() node.Config {
 	cfg := node.DefaultConfig
 	cfg.Name = clientIdentifier
@@ -109,14 +110,20 @@ func defaultNodeConfig() node.Config {
 
 func makeConfigNode(ctx *cli.Context) (*node.Node, gethConfig) {
 	// Load defaults.
+	// 加载 默认配置
 	cfg := gethConfig{
+		// eth的默认配置
 		Eth:       eth.DefaultConfig,
+		// shh (whisper)的默认配置
 		Shh:       whisper.DefaultConfig,
+		// node的默认配置
 		Node:      defaultNodeConfig(),
+		// dashboard的默认配置
 		Dashboard: dashboard.DefaultConfig,
 	}
 
 	// Load config file.
+	// 加载全局的配置文件 (Name: "config")
 	if file := ctx.GlobalString(configFileFlag.Name); file != "" {
 		if err := loadConfig(file, &cfg); err != nil {
 			utils.Fatalf("%v", err)
@@ -124,7 +131,11 @@ func makeConfigNode(ctx *cli.Context) (*node.Node, gethConfig) {
 	}
 
 	// Apply flags.
+	// 将 ctx 中的内容设置到 cfg 中
 	utils.SetNodeConfig(ctx, &cfg.Node)
+	/**
+	构建一个 不完整的 node 实例
+	 */
 	stack, err := node.New(&cfg.Node)
 	if err != nil {
 		utils.Fatalf("Failed to create the protocol stack: %v", err)
@@ -150,7 +161,12 @@ func enableWhisper(ctx *cli.Context) bool {
 	return false
 }
 
+/**
+ 创建一个Ethereum 节点实例
+ */
 func makeFullNode(ctx *cli.Context) *node.Node {
+
+	// 先创建一个 不完整的 node 实例，及 构建geth的配置
 	stack, cfg := makeConfigNode(ctx)
 
 	utils.RegisterEthService(stack, &cfg.Eth)
