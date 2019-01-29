@@ -285,10 +285,19 @@ func expandNode(hash hashNode, n node, cachegen uint16) node {
 
 // NewDatabase creates a new trie database to store ephemeral trie content before
 // its written out to disk or garbage collected.
+/**
+对 db 实例的封装
+ */
 func NewDatabase(diskdb ethdb.Database) *Database {
+	/**
+	返回一个 封装过后的db实例
+	nodes
+	 */
 	return &Database{
 		diskdb:    diskdb,
+		// 一个存放 trie 的node的缓存 map
 		nodes:     map[common.Hash]*cachedNode{{}: {}},
+		// 一个存放 state 数据的缓存 map
 		preimages: make(map[common.Hash][]byte),
 	}
 }

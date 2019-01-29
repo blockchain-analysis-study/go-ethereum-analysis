@@ -114,6 +114,7 @@ type Config struct {
 	GPO gasprice.Config
 
 	// Enables tracking of SHA3 preimages in the VM
+	// 允许跟踪VM中的SHA3 preimages
 	EnablePreimageRecording bool
 
 	// Miscellaneous options

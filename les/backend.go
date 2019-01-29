@@ -81,10 +81,18 @@ type LightEthereum struct {
 创建一个 轻节点服务
  */
 func New(ctx *node.ServiceContext, config *eth.Config) (*LightEthereum, error) {
+	/**
+	创建 DB 实例 (注意了，全局的和 block 相关操作的 db 均是这个 db 的引用)
+	其中，cfx 为命令行入参
+	config 为配置项
+	"lightchaindata" 为写死的 全节点的 chain 的数据目录名称
+ 	*/
 	chainDb, err := eth.CreateDB(ctx, config, "lightchaindata")
 	if err != nil {
 		return nil, err
 	}
+	// 设置 genesis 信息，节点启动进来的
+	// 所以 genesis 应该为 nil
 	chainConfig, genesisHash, genesisErr := core.SetupGenesisBlock(chainDb, config.Genesis)
 	if _, isCompat := genesisErr.(*params.ConfigCompatError); genesisErr != nil && !isCompat {
 		return nil, genesisErr

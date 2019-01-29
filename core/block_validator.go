@@ -36,6 +36,9 @@ type BlockValidator struct {
 }
 
 // NewBlockValidator returns a new block validator which is safe for re-use
+/**
+创建一个 链的校验器
+ */
 func NewBlockValidator(config *params.ChainConfig, blockchain *BlockChain, engine consensus.Engine) *BlockValidator {
 	validator := &BlockValidator{
 		config: config,

@@ -38,6 +38,9 @@ type StateProcessor struct {
 }
 
 // NewStateProcessor initialises a new StateProcessor.
+/**
+创建一个链的执行器
+ */
 func NewStateProcessor(config *params.ChainConfig, bc *BlockChain, engine consensus.Engine) *StateProcessor {
 	return &StateProcessor{
 		config: config,

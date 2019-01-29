@@ -122,7 +122,7 @@ type BlockChain struct {
 	quit    chan struct{} // blockchain quit channel
 	running int32         // running must be called atomically
 	// procInterrupt must be atomically called
-	procInterrupt int32          // interrupt signaler for block processing
+	procInterrupt int32          // interrupt signaler for block processing  用于块处理的中断信号器
 	wg            sync.WaitGroup // chain processing wait group for shutting down
 
 	engine    consensus.Engine
@@ -136,25 +136,40 @@ type BlockChain struct {
 // NewBlockChain returns a fully initialised block chain using information
 // available in the database. It initialises the default Ethereum Validator and
 // Processor.
+/**
+创建一个 链
+ */
 func NewBlockChain(db ethdb.Database, cacheConfig *CacheConfig, chainConfig *params.ChainConfig, engine consensus.Engine, vmConfig vm.Config) (*BlockChain, error) {
+	/**
+	如果缓存配置为空
+	则，设置默认值
+	*/
 	if cacheConfig == nil {
 		cacheConfig = &CacheConfig{
 			TrieNodeLimit: 256 * 1024 * 1024,
 			TrieTimeLimit: 5 * time.Minute,
 		}
 	}
+	// 创建 lru 缓存
 	bodyCache, _ := lru.New(bodyCacheLimit)
 	bodyRLPCache, _ := lru.New(bodyCacheLimit)
 	blockCache, _ := lru.New(blockCacheLimit)
 	futureBlocks, _ := lru.New(maxFutureBlocks)
 	badBlocks, _ := lru.New(badBlockLimit)
 
+	/**  */
 	bc := &BlockChain{
+		// 链配置
 		chainConfig:  chainConfig,
+		// cache配置
 		cacheConfig:  cacheConfig,
+		// db 实例
 		db:           db,
+		// 创建一个优先级队列
 		triegc:       prque.New(),
+		// 构建一个 db 的封装
 		stateCache:   state.NewDatabase(db),
+		// 一个接收退出信号的 chan
 		quit:         make(chan struct{}),
 		bodyCache:    bodyCache,
 		bodyRLPCache: bodyRLPCache,
@@ -164,10 +179,14 @@ func NewBlockChain(db ethdb.Database, cacheConfig *CacheConfig, chainConfig *par
 		vmConfig:     vmConfig,
 		badBlocks:    badBlocks,
 	}
+
+	/** 创建一个 chain 的校验器 */
 	bc.SetValidator(NewBlockValidator(chainConfig, bc, engine))
+	/** 创建一个 chain 的处理器 */
 	bc.SetProcessor(NewStateProcessor(chainConfig, bc, engine))
 
 	var err error
+	/** 创建一个 由 head 组成的 chain */
 	bc.hc, err = NewHeaderChain(db, chainConfig, engine, bc.getProcInterrupt)
 	if err != nil {
 		return nil, err
@@ -197,6 +216,9 @@ func NewBlockChain(db ethdb.Database, cacheConfig *CacheConfig, chainConfig *par
 	return bc, nil
 }
 
+/**
+返回 块处理是否中断信号标识位
+ */
 func (bc *BlockChain) getProcInterrupt() bool {
 	return atomic.LoadInt32(&bc.procInterrupt) == 1
 }
