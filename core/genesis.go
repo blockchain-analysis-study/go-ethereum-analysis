@@ -341,6 +341,7 @@ func DeveloperGenesisBlock(period uint64, faucet common.Address) *Genesis {
 	config.Clique.Period = period
 
 	// Assemble and return the genesis with the precompiles and faucet pre-funded
+	// 组装一个 genesis
 	return &Genesis{
 		Config:     &config,
 		ExtraData:  append(append(make([]byte, 32), faucet[:]...), make([]byte, 65)...),

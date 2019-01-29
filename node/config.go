@@ -379,8 +379,12 @@ func (c *Config) parsePersistentNodes(path string) []*discover.Node {
 
 // AccountConfig determines the settings for scrypt and keydirectory
 func (c *Config) AccountConfig() (int, int, string, error) {
+	// 椭圆曲线的 N 默认: 1 << 18 (阶数)
 	scryptN := keystore.StandardScryptN
+	// 椭圆曲线的 P 默认: 1 (质数)
 	scryptP := keystore.StandardScryptP
+
+	// 如果是走了轻节点配置文件的，那么使用配置
 	if c.UseLightweightKDF {
 		scryptN = keystore.LightScryptN
 		scryptP = keystore.LightScryptP
@@ -390,11 +394,14 @@ func (c *Config) AccountConfig() (int, int, string, error) {
 		keydir string
 		err    error
 	)
+
+	// 拼接 keystore 路径
 	switch {
 	case filepath.IsAbs(c.KeyStoreDir):
 		keydir = c.KeyStoreDir
 	case c.DataDir != "":
 		if c.KeyStoreDir == "" {
+			// datadirDefaultKeyStore 默认: keystore
 			keydir = filepath.Join(c.DataDir, datadirDefaultKeyStore)
 		} else {
 			keydir, err = filepath.Abs(c.KeyStoreDir)
@@ -405,7 +412,11 @@ func (c *Config) AccountConfig() (int, int, string, error) {
 	return scryptN, scryptP, keydir, err
 }
 
+/**
+根据配置 创建账户manager实例
+ */
 func makeAccountManager(conf *Config) (*accounts.Manager, string, error) {
+	// 获取 椭圆曲线的 N 阶数 和 P 质数 及 keystore 的路径
 	scryptN, scryptP, keydir, err := conf.AccountConfig()
 	var ephemeral string
 	if keydir == "" {
@@ -421,9 +432,12 @@ func makeAccountManager(conf *Config) (*accounts.Manager, string, error) {
 		return nil, "", err
 	}
 	// Assemble the account manager and supported backends
+	// 创建一个 keystore
 	backends := []accounts.Backend{
 		keystore.NewKeyStore(keydir, scryptN, scryptP),
 	}
+
+	// 硬件钱包的相关配置项
 	if !conf.NoUSB {
 		// Start a USB hub for Ledger hardware wallets
 		if ledgerhub, err := usbwallet.NewLedgerHub(); err != nil {
@@ -438,5 +452,6 @@ func makeAccountManager(conf *Config) (*accounts.Manager, string, error) {
 			backends = append(backends, trezorhub)
 		}
 	}
+	// 根据 keystore 创建一个 AccountManager
 	return accounts.NewManager(backends...), ephemeral, nil
 }

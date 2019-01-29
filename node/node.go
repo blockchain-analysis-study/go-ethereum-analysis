@@ -88,9 +88,13 @@ func New(conf *Config) (*Node, error) {
 	}
 	// Ensure that the instance name doesn't cause weird conflicts with
 	// other files in the data directory.
+	/**
+	确保实例名称不会导致与数据目录中的其他文件发生奇怪的冲突。
+	 */
 	if strings.ContainsAny(conf.Name, `/\`) {
 		return nil, errors.New(`Config.Name must not contain '/' or '\'`)
 	}
+	// datadirDefaultKeyStore : keystore
 	if conf.Name == datadirDefaultKeyStore {
 		return nil, errors.New(`Config.Name cannot be "` + datadirDefaultKeyStore + `"`)
 	}
@@ -99,24 +103,42 @@ func New(conf *Config) (*Node, error) {
 	}
 	// Ensure that the AccountManager method works before the node has started.
 	// We rely on this in cmd/geth.
+	/**
+	创建钱包账户
+	返回 AccountManager 和 keystore的 URL
+	*/
 	am, ephemeralKeystore, err := makeAccountManager(conf)
 	if err != nil {
 		return nil, err
 	}
+	// config 的 logger
 	if conf.Logger == nil {
 		conf.Logger = log.New()
 	}
 	// Note: any interaction with Config that would create/touch files
 	// in the data directory or instance directory is delayed until Start.
+	/**
+	构建一个 节点实例 Node
+	 */
 	return &Node{
+		// AccountManager
 		accman:            am,
+		// keystore URL
 		ephemeralKeystore: ephemeralKeystore,
+		// 节点的配置
 		config:            conf,
+		// 这个是 收集节点上的所有 server 服务的
 		serviceFuncs:      []ServiceConstructor{},
+		// IPC 端点
 		ipcEndpoint:       conf.IPCEndpoint(),
+		// HTTP 端点
 		httpEndpoint:      conf.HTTPEndpoint(),
+		// WS 端点
 		wsEndpoint:        conf.WSEndpoint(),
+		// 这个是一个事件管理相关的
+		// 后续都是用 feed
 		eventmux:          new(event.TypeMux),
+		// 这个log 实例和 conf 中的log 实例是同一个
 		log:               conf.Logger,
 	}, nil
 }

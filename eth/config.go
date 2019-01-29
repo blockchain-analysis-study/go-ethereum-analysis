@@ -110,6 +110,7 @@ type Config struct {
 	TxPool core.TxPoolConfig
 
 	// Gas Price Oracle options
+	// Gas 价格的预言机 选项
 	GPO gasprice.Config
 
 	// Enables tracking of SHA3 preimages in the VM

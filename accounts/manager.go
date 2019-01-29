@@ -116,6 +116,7 @@ func (am *Manager) update() {
 }
 
 // Backends retrieves the backend(s) with the given type from the account manager.
+// 返回 AccountManager 中管理的相关 keystore 实例集合
 func (am *Manager) Backends(kind reflect.Type) []Backend {
 	return am.backends[kind]
 }

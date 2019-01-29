@@ -135,19 +135,27 @@ func makeConfigNode(ctx *cli.Context) (*node.Node, gethConfig) {
 	utils.SetNodeConfig(ctx, &cfg.Node)
 	/**
 	构建一个 不完整的 node 实例
+	根据 cfg 去构建
 	 */
 	stack, err := node.New(&cfg.Node)
 	if err != nil {
 		utils.Fatalf("Failed to create the protocol stack: %v", err)
 	}
+
+	// 根据 命令行参数 及 node 实例 及 eth的cfg
+	// 去设置相关的 eth cfg
 	utils.SetEthConfig(ctx, stack, &cfg.Eth)
+	// Name: "ethstats"
 	if ctx.GlobalIsSet(utils.EthStatsURLFlag.Name) {
 		cfg.Ethstats.URL = ctx.GlobalString(utils.EthStatsURLFlag.Name)
 	}
 
+	// 去设置相关的 shh cfg
 	utils.SetShhConfig(ctx, stack, &cfg.Shh)
+	// 去设置相关的 dashboard cfg
 	utils.SetDashboardConfig(ctx, &cfg.Dashboard)
 
+	/** 把初步创建好的不完整 node 和 相关 cfg 返回 */
 	return stack, cfg
 }
 
@@ -169,28 +177,42 @@ func makeFullNode(ctx *cli.Context) *node.Node {
 	// 先创建一个 不完整的 node 实例，及 构建geth的配置
 	stack, cfg := makeConfigNode(ctx)
 
+	/** 往 node 实例注册 ETH 服务 */
 	utils.RegisterEthService(stack, &cfg.Eth)
 
+	// 是否命令行配置了 dashboard
 	if ctx.GlobalBool(utils.DashboardEnabledFlag.Name) {
+		/** 往 node 注册 dashboard 服务 */
 		utils.RegisterDashboardService(stack, &cfg.Dashboard, gitCommit)
 	}
 	// Whisper must be explicitly enabled by specifying at least 1 whisper flag or in dev mode
+	// 必须通过指定至少1个 whisper 标记或 开发模式明确启用 whisper
+
+	// 标识位： whisper 是否启用 (读取命令行参数)
 	shhEnabled := enableWhisper(ctx)
+	// Name: "shh" && Name: "dev"
 	shhAutoEnabled := !ctx.GlobalIsSet(utils.WhisperEnabledFlag.Name) && ctx.GlobalIsSet(utils.DeveloperFlag.Name)
 	if shhEnabled || shhAutoEnabled {
+		// Name: "shh.maxmessagesize"
 		if ctx.GlobalIsSet(utils.WhisperMaxMessageSizeFlag.Name) {
 			cfg.Shh.MaxMessageSize = uint32(ctx.Int(utils.WhisperMaxMessageSizeFlag.Name))
 		}
+		// Name: "shh.pow"
 		if ctx.GlobalIsSet(utils.WhisperMinPOWFlag.Name) {
 			cfg.Shh.MinimumAcceptedPOW = ctx.Float64(utils.WhisperMinPOWFlag.Name)
 		}
+		/** 往node注册 shh 服务 (whisper 相关)*/
 		utils.RegisterShhService(stack, &cfg.Shh)
 	}
 
 	// Add the Ethereum Stats daemon if requested.
+	// 如果需要，添加以太坊统计守护程序。
 	if cfg.Ethstats.URL != "" {
+
+		/** 往 node 注册 EthStats 服务 */
 		utils.RegisterEthStatsService(stack, cfg.Ethstats.URL)
 	}
+	// 最后返回完整的 node 节点实例
 	return stack
 }
 

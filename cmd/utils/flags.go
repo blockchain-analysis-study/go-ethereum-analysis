@@ -771,6 +771,7 @@ func splitAndTrim(input string) []string {
 // command line flags, returning empty if the HTTP endpoint is disabled.
 func setHTTP(ctx *cli.Context, cfg *node.Config) {
 	if ctx.GlobalBool(RPCEnabledFlag.Name) && cfg.HTTPHost == "" {
+		// 默认: 127.0.0.1
 		cfg.HTTPHost = "127.0.0.1"
 		if ctx.GlobalIsSet(RPCListenAddrFlag.Name) {
 			cfg.HTTPHost = ctx.GlobalString(RPCListenAddrFlag.Name)
@@ -816,8 +817,11 @@ func setWS(ctx *cli.Context, cfg *node.Config) {
 // returning an empty string if IPC was explicitly disabled, or the set path.
 func setIPC(ctx *cli.Context, cfg *node.Config) {
 	// Exclusive: 独家
-	//
+	// Name: "ipcdisable"  Name: "ipcpath"
+	// 校验命令行对应参数的值
 	checkExclusive(ctx, IPCDisabledFlag, IPCPathFlag)
+
+	// 设置 IPC 相应参数
 	switch {
 	case ctx.GlobalBool(IPCDisabledFlag.Name):
 		cfg.IPCPath = ""
@@ -1003,29 +1007,39 @@ func SetP2PConfig(ctx *cli.Context, cfg *p2p.Config) {
 func SetNodeConfig(ctx *cli.Context, cfg *node.Config) {
 	// 设置 P2P 配置 (读取命令行参数)
 	SetP2PConfig(ctx, &cfg.P2P)
-	// 进行 IPC 通信
+	// 设置 IPC 通信配置
 	setIPC(ctx, cfg)
+	// 设置 HTTP 通信配置
 	setHTTP(ctx, cfg)
+	// 设置 WS 通信配置
 	setWS(ctx, cfg)
+	// 设置 节点身份标识 配置
 	setNodeUserIdent(ctx, cfg)
 
 	switch {
+	// Name: "datadir"
 	case ctx.GlobalIsSet(DataDirFlag.Name):
 		cfg.DataDir = ctx.GlobalString(DataDirFlag.Name)
+	// Name: "dev"
 	case ctx.GlobalBool(DeveloperFlag.Name):
 		cfg.DataDir = "" // unless explicitly requested, use memory databases
+
+	// Name: "testnet"
 	case ctx.GlobalBool(TestnetFlag.Name):
 		cfg.DataDir = filepath.Join(node.DefaultDataDir(), "testnet")
+	// Name: "rinkeby"
 	case ctx.GlobalBool(RinkebyFlag.Name):
 		cfg.DataDir = filepath.Join(node.DefaultDataDir(), "rinkeby")
 	}
-
+	// Name: "keystore"
 	if ctx.GlobalIsSet(KeyStoreDirFlag.Name) {
 		cfg.KeyStoreDir = ctx.GlobalString(KeyStoreDirFlag.Name)
 	}
+	// Name: "lightkdf"
 	if ctx.GlobalIsSet(LightKDFFlag.Name) {
 		cfg.UseLightweightKDF = ctx.GlobalBool(LightKDFFlag.Name)
 	}
+	// Name: "nousb"
 	if ctx.GlobalIsSet(NoUSBFlag.Name) {
 		cfg.NoUSB = ctx.GlobalBool(NoUSBFlag.Name)
 	}
@@ -1107,6 +1121,11 @@ func setEthash(ctx *cli.Context, cfg *eth.Config) {
 // checkExclusive verifies that only a single instance of the provided flags was
 // set by the user. Each flag might optionally be followed by a string type to
 // specialize it further.
+/**
+checkExclusive函数：
+验证用户是否仅设置了提供的标志的单个实例。
+每个标志可以可选地后跟字符串类型以进一步对其进行特化。
+ */
 func checkExclusive(ctx *cli.Context, args ...interface{}) {
 	set := make([]string, 0, 1)
 	for i := 0; i < len(args); i++ {
@@ -1143,80 +1162,129 @@ func checkExclusive(ctx *cli.Context, args ...interface{}) {
 }
 
 // SetShhConfig applies shh-related command line flags to the config.
+/**
+SetShhConfig 函数
+应用 shh 的相关配置命令行参数去 设置配置
+ */
 func SetShhConfig(ctx *cli.Context, stack *node.Node, cfg *whisper.Config) {
+	// Name: "shh.maxmessagesize"
 	if ctx.GlobalIsSet(WhisperMaxMessageSizeFlag.Name) {
 		cfg.MaxMessageSize = uint32(ctx.GlobalUint(WhisperMaxMessageSizeFlag.Name))
 	}
+	// Name: "shh.pow"
 	if ctx.GlobalIsSet(WhisperMinPOWFlag.Name) {
 		cfg.MinimumAcceptedPOW = ctx.GlobalFloat64(WhisperMinPOWFlag.Name)
 	}
 }
 
 // SetEthConfig applies eth-related command line flags to the config.
+/**
+SetEthConfig 函数
+应用 eth 的相关配置命令行参数去 设置配置
+ */
 func SetEthConfig(ctx *cli.Context, stack *node.Node, cfg *eth.Config) {
 	// Avoid conflicting network flags
+	/** 校验命令行对应参数的值 */
 	checkExclusive(ctx, DeveloperFlag, TestnetFlag, RinkebyFlag)
 	checkExclusive(ctx, LightServFlag, SyncModeFlag, "light")
 
+	/** 启动 keyStore 的钱包账户 */
+	// 获取AccountManager 中的第一个 keystore 实例
 	ks := stack.AccountManager().Backends(keystore.KeyStoreType)[0].(*keystore.KeyStore)
+
+	/** 设置 coinbase 信息 */
 	setEtherbase(ctx, ks, cfg)
+	// 设置 gas 价格预言机 选项
 	setGPO(ctx, &cfg.GPO)
+	// 设置 交易池选项
 	setTxPool(ctx, &cfg.TxPool)
+	// 设置 Ethash 共识选项
 	setEthash(ctx, cfg)
 
+	/** 设置 同步模式*/
+	// Name: "syncmode"
 	if ctx.GlobalIsSet(SyncModeFlag.Name) {
 		cfg.SyncMode = *GlobalTextMarshaler(ctx, SyncModeFlag.Name).(*downloader.SyncMode)
 	}
+	// Name: "lightserv"
 	if ctx.GlobalIsSet(LightServFlag.Name) {
 		cfg.LightServ = ctx.GlobalInt(LightServFlag.Name)
 	}
+	// 设置允许的 轻节点数目
+	// Name: "lightpeers"
 	if ctx.GlobalIsSet(LightPeersFlag.Name) {
 		cfg.LightPeers = ctx.GlobalInt(LightPeersFlag.Name)
 	}
+	// 设置 网络ID
+	// Name: "networkid"
 	if ctx.GlobalIsSet(NetworkIdFlag.Name) {
 		cfg.NetworkId = ctx.GlobalUint64(NetworkIdFlag.Name)
 	}
-
+	// Name: "cache" || Name: "cache.database"
 	if ctx.GlobalIsSet(CacheFlag.Name) || ctx.GlobalIsSet(CacheDatabaseFlag.Name) {
 		cfg.DatabaseCache = ctx.GlobalInt(CacheFlag.Name) * ctx.GlobalInt(CacheDatabaseFlag.Name) / 100
 	}
+	//
 	cfg.DatabaseHandles = makeDatabaseHandles()
 
+	/** 设置 节点的归档模式：gcmode */
+	// 是否归档模式，影响 写链时的策略：BlockChain.WriteBlockWithState() 中
 	if gcmode := ctx.GlobalString(GCModeFlag.Name); gcmode != "full" && gcmode != "archive" {
 		Fatalf("--%s must be either 'full' or 'archive'", GCModeFlag.Name)
 	}
 	cfg.NoPruning = ctx.GlobalString(GCModeFlag.Name) == "archive"
 
+	// Name: "cache" || Name: "cache.gc"
 	if ctx.GlobalIsSet(CacheFlag.Name) || ctx.GlobalIsSet(CacheGCFlag.Name) {
+		// TrieCache ...
 		cfg.TrieCache = ctx.GlobalInt(CacheFlag.Name) * ctx.GlobalInt(CacheGCFlag.Name) / 100
 	}
+	///////// TODO
+	/** 下面的两者的区别，我也不知道 */
+	// 设置 挖矿线程数
+	// Name: "minerthreads"
 	if ctx.GlobalIsSet(MinerLegacyThreadsFlag.Name) {
 		cfg.MinerThreads = ctx.GlobalInt(MinerLegacyThreadsFlag.Name)
 	}
+	// 设置挖矿线程数
+	// Name: "miner.threads"
 	if ctx.GlobalIsSet(MinerThreadsFlag.Name) {
 		cfg.MinerThreads = ctx.GlobalInt(MinerThreadsFlag.Name)
 	}
+	///////// TODO
+
+	// Name: "miner.notify"
 	if ctx.GlobalIsSet(MinerNotifyFlag.Name) {
 		cfg.MinerNotify = strings.Split(ctx.GlobalString(MinerNotifyFlag.Name), ",")
 	}
+
+	// Name: "docroot"
 	if ctx.GlobalIsSet(DocRootFlag.Name) {
 		cfg.DocRoot = ctx.GlobalString(DocRootFlag.Name)
 	}
+
+	// Name: "extradata"
 	if ctx.GlobalIsSet(MinerLegacyExtraDataFlag.Name) {
 		cfg.MinerExtraData = []byte(ctx.GlobalString(MinerLegacyExtraDataFlag.Name))
 	}
+	// Name: "miner.extradata"
 	if ctx.GlobalIsSet(MinerExtraDataFlag.Name) {
 		cfg.MinerExtraData = []byte(ctx.GlobalString(MinerExtraDataFlag.Name))
 	}
+
+	// Name: "gasprice"
 	if ctx.GlobalIsSet(MinerLegacyGasPriceFlag.Name) {
 		cfg.MinerGasPrice = GlobalBig(ctx, MinerLegacyGasPriceFlag.Name)
 	}
+	// Name: "miner.gasprice"
 	if ctx.GlobalIsSet(MinerGasPriceFlag.Name) {
 		cfg.MinerGasPrice = GlobalBig(ctx, MinerGasPriceFlag.Name)
 	}
+	// Name: "miner.recommit"
 	if ctx.GlobalIsSet(MinerRecommitIntervalFlag.Name) {
 		cfg.MinerRecommit = ctx.Duration(MinerRecommitIntervalFlag.Name)
 	}
+	// Name: "vmdebug"
 	if ctx.GlobalIsSet(VMEnableDebugFlag.Name) {
 		// TODO(fjl): force-enable this in --dev mode
 		cfg.EnablePreimageRecording = ctx.GlobalBool(VMEnableDebugFlag.Name)
@@ -1224,25 +1292,35 @@ func SetEthConfig(ctx *cli.Context, stack *node.Node, cfg *eth.Config) {
 
 	// Override any default configs for hard coded networks.
 	switch {
+	// 测试网模式
+	// Name: "testnet"
 	case ctx.GlobalBool(TestnetFlag.Name):
 		if !ctx.GlobalIsSet(NetworkIdFlag.Name) {
 			cfg.NetworkId = 3
 		}
 		cfg.Genesis = core.DefaultTestnetGenesisBlock()
+	// rinkeby 测试网模式
+	// Name: "rinkeby"
 	case ctx.GlobalBool(RinkebyFlag.Name):
 		if !ctx.GlobalIsSet(NetworkIdFlag.Name) {
 			cfg.NetworkId = 4
 		}
 		cfg.Genesis = core.DefaultRinkebyGenesisBlock()
+	// 如果是 开发模式
+	// Name: "dev"
 	case ctx.GlobalBool(DeveloperFlag.Name):
+		/** 如果没有 网络Id，则默认的网络Id为：1337 */
 		if !ctx.GlobalIsSet(NetworkIdFlag.Name) {
 			cfg.NetworkId = 1337
 		}
 		// Create new developer account or reuse existing one
+		// 创建新的开发者帐户或重用现有帐户
 		var (
 			developer accounts.Account
 			err       error
 		)
+		// 如果keystores 中有账户，则用第一个
+		// 否则，新建一个
 		if accs := ks.Accounts(); len(accs) > 0 {
 			developer = ks.Accounts()[0]
 		} else {
@@ -1251,26 +1329,40 @@ func SetEthConfig(ctx *cli.Context, stack *node.Node, cfg *eth.Config) {
 				Fatalf("Failed to create developer account: %v", err)
 			}
 		}
+		// 解锁账户
 		if err := ks.Unlock(developer, ""); err != nil {
 			Fatalf("Failed to unlock developer account: %v", err)
 		}
 		log.Info("Using developer account", "address", developer.Address)
 
+		// 构建开发模式下的 genesis 配置
+		// Name: "dev.period"
 		cfg.Genesis = core.DeveloperGenesisBlock(uint64(ctx.GlobalInt(DeveloperPeriodFlag.Name)), developer.Address)
+
+		// Name: "miner.gasprice" || Name: "gasprice"
 		if !ctx.GlobalIsSet(MinerGasPriceFlag.Name) && !ctx.GlobalIsSet(MinerLegacyGasPriceFlag.Name) {
 			cfg.MinerGasPrice = big.NewInt(1)
 		}
 	}
 	// TODO(fjl): move trie cache generations into config
+	// Name: "trie-cache-gens"
 	if gen := ctx.GlobalInt(TrieCacheGenFlag.Name); gen > 0 {
+		// 最大的 Trie 缓存 ？？
 		state.MaxTrieCacheGen = uint16(gen)
 	}
 }
 
 // SetDashboardConfig applies dashboard related command line flags to the config.
+/**
+SetDashboardConfig 函数
+应用 dashboard 的相关配置命令行参数去 设置配置
+ */
 func SetDashboardConfig(ctx *cli.Context, cfg *dashboard.Config) {
+	// Name: "dashboard.addr"
 	cfg.Host = ctx.GlobalString(DashboardAddrFlag.Name)
+	// Name: "dashboard.host"
 	cfg.Port = ctx.GlobalInt(DashboardPortFlag.Name)
+	// Name: "dashboard.refresh"
 	cfg.Refresh = ctx.GlobalDuration(DashboardRefreshFlag.Name)
 }
 
