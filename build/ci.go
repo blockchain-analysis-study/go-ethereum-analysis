@@ -18,10 +18,14 @@
 
 /*
 The ci command is called from Continuous Integration scripts.
+从Continuous Integration脚本调用ci命令
 
 Usage: go run build/ci.go <command> <command flags/arguments>
+用法：go run build / ci.go <command> <command flags / arguments>
 
 Available commands are:
+
+可用的命令是
 
    install    [ -arch architecture ] [ -cc compiler ] [ packages... ]                          -- builds packages and executables
    test       [ -coverage ] [ packages... ]                                                    -- runs the tests
@@ -89,6 +93,7 @@ var (
 	}
 
 	// A debian package is created for all executables listed here.
+	// 为此处列出的所有可执行文件创建debian软件包。
 	debExecutables = []debExecutable{
 		{
 			BinaryName:  "abigen",
@@ -169,6 +174,7 @@ func executablePath(name string) string {
 }
 
 func main() {
+	// 最终文件名元素和行号：d.go：23。 覆盖Llongfile
 	log.SetFlags(log.Lshortfile)
 
 	if _, err := os.Stat(filepath.Join("build", "ci.go")); os.IsNotExist(err) {

@@ -87,49 +87,76 @@ type CacheConfig struct {
 // included in the canonical one where as GetBlockByNumber always represents the
 // canonical chain.
 type BlockChain struct {
+
+	// 链 或者 网络 配置
 	chainConfig *params.ChainConfig // Chain & network configuration
+	// cache 配置
 	cacheConfig *CacheConfig        // Cache configuration for pruning
 
 	db     ethdb.Database // Low level persistent database to store final content in
 	// 优先级队列映射块编号以尝试gc
 	// 详细请参照：https://godoc.org/gopkg.in/karalabe/cookiejar.v2/collections/prque
 	triegc *prque.Prque   // Priority queue mapping block numbers to tries to gc
+
+	// 做 gc处理的时长计数 (主要针对 trie )
 	gcproc time.Duration  // Accumulates canonical block processing for trie dumping
 
+	/** 头链 即： header 组成的 chain */
 	hc            *HeaderChain
+
+	/** 各种订阅事件 */
 	rmLogsFeed    event.Feed
 	chainFeed     event.Feed
 	chainSideFeed event.Feed
 	chainHeadFeed event.Feed
 	logsFeed      event.Feed
+
+	/** 各种订阅 详情 */
 	scope         event.SubscriptionScope
 	genesisBlock  *types.Block
 
+	/** 各种锁 */
 	mu      sync.RWMutex // global mutex for locking chain operations
 	chainmu sync.RWMutex // blockchain insertion lock
 	procmu  sync.RWMutex // block processor lock
 
+	// 检查点计入新检查点
 	checkpoint       int          // checkpoint counts towards the new checkpoint
+	// 缓存当前最高区块
 	currentBlock     atomic.Value // Current head of the block chain
+	// 缓存当前 fast 模式下的最高区块
 	currentFastBlock atomic.Value // Current head of the fast-sync chain (may be above the block chain!)
 
+	/** 对 db 的一个封装，给state 用的， 底层的引用了 chain的 db 实例 */
 	stateCache   state.Database // State database to reuse between imports (contains state cache)
+
+	/** 各种 lru 缓存 */
 	bodyCache    *lru.Cache     // Cache for the most recent block bodies
 	bodyRLPCache *lru.Cache     // Cache for the most recent block bodies in RLP encoded format
 	blockCache   *lru.Cache     // Cache for the most recent entire blocks
 	futureBlocks *lru.Cache     // future blocks are blocks added for later processing
 
+	// 接收退出信号的通道
 	quit    chan struct{} // blockchain quit channel
+
+	// 表示链是否在跑的 标识位：必须以原子方式调用run
 	running int32         // running must be called atomically
-	// procInterrupt must be atomically called
+	// procInterrupt must be atomically called  必须以原子方式调用procInterrupt
 	procInterrupt int32          // interrupt signaler for block processing  用于块处理的中断信号器
+
+	// 链执行的信号量
 	wg            sync.WaitGroup // chain processing wait group for shutting down
 
+	// 共识引擎
 	engine    consensus.Engine
+	/** 校验器 和 执行器 */
 	processor Processor // block processor interface
 	validator Validator // block and state validator interface
+
+	// VM 配置
 	vmConfig  vm.Config
 
+	/** bad block 的 lru 缓存 */
 	badBlocks *lru.Cache // Bad block cache
 }
 
@@ -151,11 +178,11 @@ func NewBlockChain(db ethdb.Database, cacheConfig *CacheConfig, chainConfig *par
 		}
 	}
 	// 创建 lru 缓存
-	bodyCache, _ := lru.New(bodyCacheLimit)
-	bodyRLPCache, _ := lru.New(bodyCacheLimit)
+	bodyCache, _ := lru.New(bodyCacheLimit) // 256
+	bodyRLPCache, _ := lru.New(bodyCacheLimit) // 256
 	blockCache, _ := lru.New(blockCacheLimit)
-	futureBlocks, _ := lru.New(maxFutureBlocks)
-	badBlocks, _ := lru.New(badBlockLimit)
+	futureBlocks, _ := lru.New(maxFutureBlocks) // 256
+	badBlocks, _ := lru.New(badBlockLimit) // 10
 
 	/**  */
 	bc := &BlockChain{
@@ -171,13 +198,14 @@ func NewBlockChain(db ethdb.Database, cacheConfig *CacheConfig, chainConfig *par
 		stateCache:   state.NewDatabase(db),
 		// 一个接收退出信号的 chan
 		quit:         make(chan struct{}),
+		/** 各种缓存 */
 		bodyCache:    bodyCache,
 		bodyRLPCache: bodyRLPCache,
 		blockCache:   blockCache,
 		futureBlocks: futureBlocks,
-		engine:       engine,
-		vmConfig:     vmConfig,
-		badBlocks:    badBlocks,
+		engine:       engine, // 共识引擎
+		vmConfig:     vmConfig, // vm 配置
+		badBlocks:    badBlocks, // 缓存 bad block 的 (10个)
 	}
 
 	/** 创建一个 chain 的校验器 */
@@ -191,19 +219,26 @@ func NewBlockChain(db ethdb.Database, cacheConfig *CacheConfig, chainConfig *par
 	if err != nil {
 		return nil, err
 	}
+
+	/** 获取 genesis Block */
 	bc.genesisBlock = bc.GetBlockByNumber(0)
 	if bc.genesisBlock == nil {
 		return nil, ErrNoGenesis
 	}
+
+	/** 加载当前最高块的 state */
 	if err := bc.loadLastState(); err != nil {
 		return nil, err
 	}
 	// Check the current state of the block hashes and make sure that we do not have any of the bad blocks in our chain
+	// 检查块哈希的当前状态，并确保我们的链中没有任何坏块
 	for hash := range BadHashes {
 		if header := bc.GetHeaderByHash(hash); header != nil {
 			// get the canonical block corresponding to the offending header's number
+			// 获取与违规头部号码对应的规范块
 			headerByNumber := bc.GetHeaderByNumber(header.Number.Uint64())
 			// make sure the headerByNumber (if present) is in our current canonical chain
+			// 确保headerByNumber（如果存在）在我们当前的规范链中
 			if headerByNumber != nil && headerByNumber.Hash() == header.Hash() {
 				log.Error("Found bad hash, rewinding chain", "number", header.Number, "hash", header.ParentHash)
 				bc.SetHead(header.Number.Uint64() - 1)
@@ -212,7 +247,9 @@ func NewBlockChain(db ethdb.Database, cacheConfig *CacheConfig, chainConfig *par
 		}
 	}
 	// Take ownership of this particular state
+	// 获取这个特定状态的 所有权
 	go bc.update()
+	// 返回 bc 实例
 	return bc, nil
 }
 
@@ -714,17 +751,25 @@ func (bc *BlockChain) Stop() {
 	log.Info("Blockchain manager stopped")
 }
 
+// 处理 未来区块 (处理没有连续但过早接收到的块高靠后的区块)
 func (bc *BlockChain) procFutureBlocks() {
+	// 收集所有 未来快的临时切片
 	blocks := make([]*types.Block, 0, bc.futureBlocks.Len())
+
+	// 遍历出所有所有存储在 lru 中的 key
 	for _, hash := range bc.futureBlocks.Keys() {
+		// 根据 key 返回 value (即：block)
 		if block, exist := bc.futureBlocks.Peek(hash); exist {
 			blocks = append(blocks, block.(*types.Block))
 		}
 	}
 	if len(blocks) > 0 {
+		/** 按照 区块头进行排序 */
+		// 【注意】这里用上了奇技淫巧
 		types.BlockBy(types.Number).Sort(blocks)
 
 		// Insert one by one as chain insertion needs contiguous ancestry between blocks
+		// 逐个插入，因为链插入需要块之间的连续祖先
 		for i := range blocks {
 			bc.InsertChain(blocks[i : i+1])
 		}
@@ -1085,8 +1130,18 @@ func (bc *BlockChain) WriteBlockWithState(block *types.Block, receipts []*types.
 // wrong.
 //
 // After insertion is done, all accumulated events will be fired.
+/**
+InsertChain函数：
+尝试将给定批量的块插入到规范链中，
+否则创建一个fork。 如果返回错误，
+它将返回失败块的索引号以及描述错误的错误。
+
+插入完成后，将触发所有累积的事件。
+ */
 func (bc *BlockChain) InsertChain(chain types.Blocks) (int, error) {
+	// 把 一堆 block 集合 写入链
 	n, events, logs, err := bc.insertChain(chain)
+	// 广播 事件
 	bc.PostChainEvents(events, logs)
 	return n, err
 }
@@ -1094,13 +1149,25 @@ func (bc *BlockChain) InsertChain(chain types.Blocks) (int, error) {
 // insertChain will execute the actual chain insertion and event aggregation. The
 // only reason this method exists as a separate one is to make locking cleaner
 // with deferred statements.
+/**
+insertChain函数：
+将执行实际的链插入和事件聚合。 此方法作为单独方法存在的唯一原因是使用延迟语句使锁定更清晰。
+ */
 func (bc *BlockChain) insertChain(chain types.Blocks) (int, []interface{}, []*types.Log, error) {
 	// Sanity check that we have something meaningful to import
+	// 完整性检查我们有一些有意义的东西要导入
 	if len(chain) == 0 {
 		return 0, nil, nil, nil
 	}
 	// Do a sanity check that the provided chain is actually ordered and linked
+	// 一个完整性检查：所产生的链是否一条 有序且连续的
+	/** 从第二个 block 开始 */
 	for i := 1; i < len(chain); i++ {
+
+		/**
+		如果当前 block的 num != 上一个 block 的num 或者 当前 block 的hash != 上一个 block 的 hash
+		则，表示 需要 写链的链片段不是连续的
+		*/
 		if chain[i].NumberU64() != chain[i-1].NumberU64()+1 || chain[i].ParentHash() != chain[i-1].Hash() {
 			// Chain broke ancestry, log a message (programming error) and skip insertion
 			log.Error("Non contiguous block insert", "number", chain[i].Number(), "hash", chain[i].Hash(),
@@ -1110,7 +1177,10 @@ func (bc *BlockChain) insertChain(chain types.Blocks) (int, []interface{}, []*ty
 				chain[i-1].Hash().Bytes()[:4], i, chain[i].NumberU64(), chain[i].Hash().Bytes()[:4], chain[i].ParentHash().Bytes()[:4])
 		}
 	}
+
+
 	// Pre-checks passed, start the full block imports
+	// 在完成了 预校验之后，开始操作完整的写链
 	bc.wg.Add(1)
 	defer bc.wg.Done()
 
@@ -1120,57 +1190,87 @@ func (bc *BlockChain) insertChain(chain types.Blocks) (int, []interface{}, []*ty
 	// A queued approach to delivering events. This is generally
 	// faster than direct delivery and requires much less mutex
 	// acquiring.
+	/**
+	【注意】
+	提供事件的排队方法。
+	这通常比直接传递更快，并且需要更少的互斥量获取。
+	 */
 	var (
+		// 统计用的
 		stats         = insertStats{startTime: mclock.Now()}
+		// 事件 队列
 		events        = make([]interface{}, 0, len(chain))
+		//
 		lastCanon     *types.Block
+		//
 		coalescedLogs []*types.Log
 	)
 	// Start the parallel header verifier
+	// 启动并行标 header 验证程序
 	headers := make([]*types.Header, len(chain))
 	seals := make([]bool, len(chain))
 
+	// 收集 区块头 及初始化 标识位为：true
 	for i, block := range chain {
 		headers[i] = block.Header()
 		seals[i] = true
 	}
+
+	// 由 共识去校验 header
 	abort, results := bc.engine.VerifyHeaders(bc, headers, seals)
 	defer close(abort)
 
 	// Start a parallel signature recovery (signer will fluke on fork transition, minimal perf loss)
+	// 启动并行签名恢复（签名者将在fork转换时的出现问题，最小的性能损失）
 	senderCacher.recoverFromBlocks(types.MakeSigner(bc.chainConfig, chain[0].Number()), chain)
 
 	// Iterate over the blocks and insert when the verifier permits
+	// 迭代块并在验证者允许时插入
 	for i, block := range chain {
 		// If the chain is terminating, stop processing blocks
+		// 如果链正在终止，则停止处理块
 		if atomic.LoadInt32(&bc.procInterrupt) == 1 {
 			log.Debug("Premature abort during blocks processing")
 			break
 		}
 		// If the header is a banned one, straight out abort
+		// 如果标题是禁止标题，则直接中止
 		if BadHashes[block.Hash()] {
 			bc.reportBlock(block, nil, ErrBlacklistedHash)
 			return i, events, coalescedLogs, ErrBlacklistedHash
 		}
 		// Wait for the block's verification to complete
+		// 等待块的验证完成
 		bstart := time.Now()
 
 		err := <-results
 		if err == nil {
+			/** 初步校验 收到的块 */
 			err = bc.Validator().ValidateBody(block)
 		}
 		switch {
+		/** 如果是一个已知的块 */
 		case err == ErrKnownBlock:
 			// Block and state both already known. However if the current block is below
 			// this number we did a rollback and we should reimport it nonetheless.
+			/**
+			如果 Block 和 state 两者都已知。
+			但是，如果当前 block 低于此数字，
+			我们会进行回滚，但我们应该重新导入它。
+			 */
 			if bc.CurrentBlock().NumberU64() >= block.NumberU64() {
+				// 忽略掉这个块
 				stats.ignored++
 				continue
 			}
 
+		/** 如果是一个 未来块 */
 		case err == consensus.ErrFutureBlock:
 			// Allow up to MaxFuture second in the future blocks. If this limit is exceeded
 			// the chain is discarded and processed at a later time if given.
+			/**
+			在未来的块中允许最多MaxFuture。 如果超过此限制，则链被丢弃并在稍后处理（如果给出）。
+			 */
 			max := big.NewInt(time.Now().Unix() + maxTimeFutureBlocks)
 			if block.Time().Cmp(max) > 0 {
 				return i, events, coalescedLogs, fmt.Errorf("future block: %v > %v", block.Time(), max)
@@ -1179,14 +1279,20 @@ func (bc *BlockChain) insertChain(chain types.Blocks) (int, []interface{}, []*ty
 			stats.queued++
 			continue
 
+		/** unknown ancestor 未知祖先 && 祖先包含在未来块中 */
 		case err == consensus.ErrUnknownAncestor && bc.futureBlocks.Contains(block.ParentHash()):
+			// 将当前块 添加到未来块 集合中
 			bc.futureBlocks.Add(block.Hash(), block)
 			stats.queued++
 			continue
 
+		/** 祖先被修剪过 */
 		case err == consensus.ErrPrunedAncestor:
 			// Block competing with the canonical chain, store in the db, but don't process
 			// until the competitor TD goes above the canonical TD
+			/***
+			阻止与规范链竞争，存储在数据库中，但在竞争对手TD超出规范TD之前不进行处理
+			 */
 			currentBlock := bc.CurrentBlock()
 			localTd := bc.GetTd(currentBlock.Hash(), currentBlock.NumberU64())
 			externTd := new(big.Int).Add(bc.GetTd(block.ParentHash(), block.NumberU64()-1), block.Difficulty())
@@ -1259,6 +1365,10 @@ func (bc *BlockChain) insertChain(chain types.Blocks) (int, []interface{}, []*ty
 
 			coalescedLogs = append(coalescedLogs, logs...)
 			blockInsertTimer.UpdateSince(bstart)
+			/**
+			【注意】 追加 chain 事件
+			Block、blockHash、logs 组成 event
+			 */
 			events = append(events, ChainEvent{block, block.Hash(), logs})
 			lastCanon = block
 
@@ -1286,6 +1396,7 @@ func (bc *BlockChain) insertChain(chain types.Blocks) (int, []interface{}, []*ty
 }
 
 // insertStats tracks and reports on block insertion.
+// insertStats 跟踪和报告块插入。
 type insertStats struct {
 	queued, processed, ignored int
 	usedGas                    uint64
@@ -1299,6 +1410,11 @@ const statsReportLimit = 8 * time.Second
 
 // report prints statistics if some number of blocks have been processed
 // or more than a few seconds have passed since the last message.
+/**
+如果已经处理了一定数量的块
+或者自上一条消息以来已经过了几秒钟，
+则报告将打印统计信息。
+ */
 func (st *insertStats) report(chain []*types.Block, index int, cache common.StorageSize) {
 	// Fetch the timings for the batch
 	var (
@@ -1324,6 +1440,7 @@ func (st *insertStats) report(chain []*types.Block, index int, cache common.Stor
 		}
 		log.Info("Imported new chain segment", context...)
 
+		/** 重置新的 stats */
 		*st = insertStats{startTime: now, lastIndex: index + 1}
 	}
 }
@@ -1452,12 +1569,19 @@ func (bc *BlockChain) reorg(oldBlock, newBlock *types.Block) error {
 
 // PostChainEvents iterates over the events generated by a chain insertion and
 // posts them into the event feed.
+// PostChainEvents 函数
+// 迭代链插入生成的事件并将它们发布到事件源中。
 // TODO: Should not expose PostChainEvents. The chain events should be posted in WriteBlock.
+// :不应暴露PostChainEvents。 链事件应该在WriteBlock中发布。
 func (bc *BlockChain) PostChainEvents(events []interface{}, logs []*types.Log) {
 	// post event logs for further processing
+	// 发布事件日志以供进一步处理
 	if logs != nil {
+		// 发送订阅事件
 		bc.logsFeed.Send(logs)
 	}
+
+	// 发送订阅事件
 	for _, event := range events {
 		switch ev := event.(type) {
 		case ChainEvent:
@@ -1473,11 +1597,13 @@ func (bc *BlockChain) PostChainEvents(events []interface{}, logs []*types.Log) {
 }
 
 func (bc *BlockChain) update() {
+	// 每5秒钟定时器
 	futureTimer := time.NewTicker(5 * time.Second)
 	defer futureTimer.Stop()
 	for {
 		select {
 		case <-futureTimer.C:
+			// 处理 未来区块
 			bc.procFutureBlocks()
 		case <-bc.quit:
 			return

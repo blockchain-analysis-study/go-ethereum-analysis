@@ -12,16 +12,19 @@ GOBIN = $(shell pwd)/build/bin
 GO ?= latest
 
 geth:
+	# 先执行 build/env.sh 文件 再执行 go run build/ci.go 最后自行 install ./cmd/geth
 	build/env.sh go run build/ci.go install ./cmd/geth
 	@echo "Done building."
 	@echo "Run \"$(GOBIN)/geth\" to launch geth."
 
 swarm:
+	# 先执行 build/env.sh 文件 再执行 go run build/ci.go 最后自行 install ./cmd/swarm
 	build/env.sh go run build/ci.go install ./cmd/swarm
 	@echo "Done building."
 	@echo "Run \"$(GOBIN)/swarm\" to launch swarm."
 
 all:
+	# 先执行 build/env.sh 文件 再执行 go run build/ci.go 最后自行 install
 	build/env.sh go run build/ci.go install
 
 android:

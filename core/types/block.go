@@ -388,8 +388,10 @@ func (b *Block) Hash() common.Hash {
 	return v
 }
 
+
 type Blocks []*Block
 
+/** 【注意】这个是个 func 类型 */
 type BlockBy func(b1, b2 *Block) bool
 
 func (self BlockBy) Sort(blocks Blocks) {
@@ -400,6 +402,8 @@ func (self BlockBy) Sort(blocks Blocks) {
 	sort.Sort(bs)
 }
 
+/** 【注意】自定义 区块排序 */
+// 是一个 block集合 和 自定义 排序规则 func 的封装
 type blockSorter struct {
 	blocks Blocks
 	by     func(b1, b2 *Block) bool
@@ -411,4 +415,5 @@ func (self blockSorter) Swap(i, j int) {
 }
 func (self blockSorter) Less(i, j int) bool { return self.by(self.blocks[i], self.blocks[j]) }
 
+// 自定义的排序规则
 func Number(b1, b2 *Block) bool { return b1.header.Number.Cmp(b2.header.Number) < 0 }

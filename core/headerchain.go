@@ -74,40 +74,56 @@ type HeaderChain struct {
 创建一条由 head 组成的链
  */
 func NewHeaderChain(chainDb ethdb.Database, config *params.ChainConfig, engine consensus.Engine, procInterrupt func() bool) (*HeaderChain, error) {
-	headerCache, _ := lru.New(headerCacheLimit)
-	tdCache, _ := lru.New(tdCacheLimit)
-	numberCache, _ := lru.New(numberCacheLimit)
+	headerCache, _ := lru.New(headerCacheLimit) // 512
+	tdCache, _ := lru.New(tdCacheLimit) // 1024
+	numberCache, _ := lru.New(numberCacheLimit) // 2048
 
 	// Seed a fast but crypto originating random generator
+	// 快速的加密的种子始发随机发生器 (1<<63 - 1 == 9223372036854775807) 100兆 ？
 	seed, err := crand.Int(crand.Reader, big.NewInt(math.MaxInt64))
 	if err != nil {
 		return nil, err
 	}
 
+	/**
+	head 组成的链
+	 */
 	hc := &HeaderChain{
+		// chain 配置
 		config:        config,
+		// db (和 bc 实例引用同一个)
 		chainDb:       chainDb,
+		/** 各种缓存 */
 		headerCache:   headerCache,
 		tdCache:       tdCache,
 		numberCache:   numberCache,
+		// 一个回调函数 (返回 块处理是否中断信号标识位)
 		procInterrupt: procInterrupt,
+		// 一个求随机数的 rand 实例
 		rand:          mrand.New(mrand.NewSource(seed.Int64())),
+		// 共识引擎
 		engine:        engine,
 	}
 
+	// 获取 创世块的 header
 	hc.genesisHeader = hc.GetHeaderByNumber(0)
 	if hc.genesisHeader == nil {
 		return nil, ErrNoGenesis
 	}
 
+	// 先存储当前 header 为 genesisHeader
 	hc.currentHeader.Store(hc.genesisHeader)
+
+	/** 【注意】 这个是获取最高区块的header */
+	// 如果存在最高头，则替换之前存储的 当前 header 为 heightHeader
 	if head := rawdb.ReadHeadBlockHash(chainDb); head != (common.Hash{}) {
 		if chead := hc.GetHeaderByHash(head); chead != nil {
 			hc.currentHeader.Store(chead)
 		}
 	}
+	// 存储 当前headerHash
 	hc.currentHeaderHash = hc.CurrentHeader().Hash()
-
+	// 返回 hc 实例
 	return hc, nil
 }
 
