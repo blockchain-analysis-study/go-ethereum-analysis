@@ -669,6 +669,11 @@ func (ethash *Ethash) SetThreads(threads int) {
 // per second over the last minute.
 // Note the returned hashrate includes local hashrate, but also includes the total
 // hashrate of all remote miner.
+/**
+Hashrate 函数：
+实现了PoW，返回最后一分钟每秒搜索调用的测量速率。
+请注意，返回的哈希值包括本地哈希值，但也包括所有远程矿工的总哈希值。
+ */
 func (ethash *Ethash) Hashrate() float64 {
 	// Short circuit if we are run the ethash in normal/test mode.
 	if ethash.config.PowMode != ModeNormal && ethash.config.PowMode != ModeTest {

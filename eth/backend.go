@@ -133,6 +133,9 @@ func New(ctx *node.ServiceContext, config *Config) (*Ethereum, error) {
 
 	/**
 	构建一个 Ethereum 全节点服务 实例
+	其中，Ethereum 实现了 node.Service
+	及, miner.Backend
+
 	 */
 	eth := &Ethereum{
 		// 节点的配置
@@ -205,7 +208,11 @@ func New(ctx *node.ServiceContext, config *Config) (*Ethereum, error) {
 		return nil, err
 	}
 
+	/**
+	创建一个 miner 实例
+	 */
 	eth.miner = miner.New(eth, eth.chainConfig, eth.EventMux(), eth.engine, config.MinerRecommit)
+	// 设置 拓展项 ??
 	eth.miner.SetExtra(makeExtraData(config.MinerExtraData))
 
 	eth.APIBackend = &EthAPIBackend{eth, nil}
@@ -253,7 +260,7 @@ func New(ctx *node.ServiceContext, config *Config) (*Ethereum, error) {
 
 		}
 	}
-	fmt.Println()
+
 	return eth, nil
 }
 

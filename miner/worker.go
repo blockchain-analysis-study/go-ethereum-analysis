@@ -167,6 +167,7 @@ type worker struct {
 
 func newWorker(config *params.ChainConfig, engine consensus.Engine, eth Backend, mux *event.TypeMux, recommit time.Duration) *worker {
 	worker := &worker{
+		/** 这是 eth.chainConfig */
 		config:             config,
 		engine:             engine,
 		eth:                eth,
@@ -216,6 +217,8 @@ func (w *worker) setEtherbase(addr common.Address) {
 }
 
 // setExtra sets the content used to initialize the block extra field.
+// setExtra函数：
+// 设置用于初始化块额外字段的内容。
 func (w *worker) setExtra(extra []byte) {
 	w.mu.Lock()
 	defer w.mu.Unlock()
@@ -223,6 +226,8 @@ func (w *worker) setExtra(extra []byte) {
 }
 
 // setRecommitInterval updates the interval for miner sealing work recommitting.
+// setRecommitInterval 函数：
+// 更新矿工打包工作重新启动的间隔。
 func (w *worker) setRecommitInterval(interval time.Duration) {
 	w.resubmitIntervalCh <- interval
 }
