@@ -41,11 +41,17 @@ type Backend interface {
 
 // Miner creates blocks and searches for proof-of-work values.
 type Miner struct {
+	// 一个在初始化的时候 从外界传进来的  事件
 	mux      *event.TypeMux
+	// worker 实例(挖矿的真正工作者)
 	worker   *worker
+	// 矿工账户
 	coinbase common.Address
+	// 全局的 Ethereum 实例
 	eth      Backend
+	// 共识引擎
 	engine   consensus.Engine
+	// 接收退出信号的 Chan
 	exitCh   chan struct{}
 
 	// 可以开始表明我们是否可以开始采矿作业 1: 可以挖矿；  0: 不可以
