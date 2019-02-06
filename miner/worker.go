@@ -259,7 +259,10 @@ type worker struct {
 	snapshotState *state.StateDB
 
 	// atomic status counters
+	/** 原子状态计数器 */
+	// 指示共识引擎是否正在运行的指示符。
 	running int32 // The indicator whether the consensus engine is running or not.
+	// 自上次提交打包工作以来的新到达的交易次数。
 	newTxs  int32 // New arrival transaction count since last sealing work submitting.
 
 	// Test hooks
@@ -281,43 +284,70 @@ func newWorker(config *params.ChainConfig, engine consensus.Engine, eth Backend,
 	worker := &worker{
 		/** 这是 eth.chainConfig */
 		config:             config,
+		// 共识引擎
 		engine:             engine,
+		// 全局的 Ethereum 实例
 		eth:                eth,
+		// 事件 mux
 		mux:                mux,
+		// 全局的 chain 实例
 		chain:              eth.BlockChain(),
+
+		// 存放可能的 叔叔块
 		possibleUncles:     make(map[common.Hash]*types.Block),
+		// 返回一个 unconfirmedBlocks 结构，用于存放 未确认块
 		unconfirmed:        newUnconfirmedBlocks(eth.BlockChain(), miningLogAtDepth),
+
+		/** 处理 tx 的 chan 默认：4096 */
 		txsCh:              make(chan core.NewTxsEvent, txChanSize),
+		/** 处理 chainHead 的 chan 默认：10 */
 		chainHeadCh:        make(chan core.ChainHeadEvent, chainHeadChanSize),
+		/** 处理 chainSide 的 chan 默认：10 */
 		chainSideCh:        make(chan core.ChainSideEvent, chainSideChanSize),
+		// 处理 新工作请求的 chan
 		newWorkCh:          make(chan *newWorkReq),
+		// 处理 打包任务的 chan
 		taskCh:             make(chan *task),
+		// 处理 新的 block 完成打包结果的 chan
 		resultCh:           make(chan *task, resultQueueSize),
+		// 退出挖矿信号的 chan
 		exitCh:             make(chan struct{}),
+		// 开始 挖矿信号 的 chan
 		startCh:            make(chan struct{}, 1),
+		// 挖矿间隔调整 时间
 		resubmitIntervalCh: make(chan time.Duration),
+		// 挖矿间隔调整 实体
 		resubmitAdjustCh:   make(chan *intervalAdjust, resubmitAdjustChanSize),
 	}
 	// Subscribe NewTxsEvent for tx pool
+	// 从tx pool 订阅NewTxsEvent
 	worker.txsSub = eth.TxPool().SubscribeNewTxsEvent(worker.txsCh)
 	// Subscribe events for blockchain
+	// 从 chain 上 订阅 chainHeadEvent 和 chainSideEvent
 	worker.chainHeadSub = eth.BlockChain().SubscribeChainHeadEvent(worker.chainHeadCh)
 	worker.chainSideSub = eth.BlockChain().SubscribeChainSideEvent(worker.chainSideCh)
 
 	// Sanitize recommit interval if the user-specified one is too short.
+	// 如果用户指定的间隔太短，则清理重新发送间隔。
 	if recommit < minRecommitInterval {
 		log.Warn("Sanitizing miner recommit interval", "provided", recommit, "updated", minRecommitInterval)
 		recommit = minRecommitInterval
 	}
 
+	/**
+	【注意】
+	这四个 协程才是处理挖矿的重中之重
+	 */
 	go worker.mainLoop()
 	go worker.newWorkLoop(recommit)
 	go worker.resultLoop()
 	go worker.taskLoop()
 
 	// Submit first work to initialize pending state.
+	// 提交第一份工作以初始化待处理 state 。
 	worker.startCh <- struct{}{}
 
+	// 返回 worker 实例
 	return worker
 }
 

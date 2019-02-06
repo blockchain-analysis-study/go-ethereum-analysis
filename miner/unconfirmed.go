@@ -51,6 +51,7 @@ type unconfirmedBlocks struct {
 }
 
 // newUnconfirmedBlocks returns new data structure to track currently unconfirmed blocks.
+// newUnconfirmedBlocks 函数返回新的数据结构以跟踪当前未确认的块。
 func newUnconfirmedBlocks(chain headerRetriever, depth uint) *unconfirmedBlocks {
 	return &unconfirmedBlocks{
 		chain: chain,
