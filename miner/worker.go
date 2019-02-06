@@ -39,119 +39,223 @@ import (
 
 const (
 	// resultQueueSize is the size of channel listening to sealing result.
+	/** resultQueueSize是监听密封结果的通道大小 */
 	resultQueueSize = 10
 
 	// txChanSize is the size of channel listening to NewTxsEvent.
 	// The number is referenced from the size of tx pool.
+	/**
+	txChanSize是侦听NewTxsEvent的通道大小。
+	该数字是从tx池的大小引用的。
+	*/
 	txChanSize = 4096
 
 	// chainHeadChanSize is the size of channel listening to ChainHeadEvent.
+	/** chainHeadChanSize是侦听ChainHeadEvent的通道的大小。 */
 	chainHeadChanSize = 10
 
 	// chainSideChanSize is the size of channel listening to ChainSideEvent.
+	/**  chainSideChanSize是侦听ChainSideEvent的通道的大小。*/
 	chainSideChanSize = 10
 
 	// resubmitAdjustChanSize is the size of resubmitting interval adjustment channel.
+	/** resubmitAdjustChanSize是重新提交间隔调整通道的大小  */
 	resubmitAdjustChanSize = 10
 
 	// miningLogAtDepth is the number of confirmations before logging successful mining.
+	/** miningLogAtDepth是记录成功挖掘之前的确认数。 */
 	miningLogAtDepth = 5
 
 	// minRecommitInterval is the minimal time interval to recreate the mining block with
 	// any newly arrived transactions.
+	/**
+	minRecommitInterval 是使用任何新到达的事务重新创建挖掘块的最小时间间隔。
+	*/
 	minRecommitInterval = 1 * time.Second
 
 	// maxRecommitInterval is the maximum time interval to recreate the mining block with
 	// any newly arrived transactions.
+	/**
+	maxRecommitInterval是使用任何新到达的事务重新创建挖掘块的最大时间间隔。
+	 */
 	maxRecommitInterval = 15 * time.Second
 
 	// intervalAdjustRatio is the impact a single interval adjustment has on sealing work
 	// resubmitting interval.
+	/**
+	intervalAdjustRatio是单个间隔调整对密封工作重新提交间隔的影响。
+	 */
 	intervalAdjustRatio = 0.1
 
 	// intervalAdjustBias is applied during the new resubmit interval calculation in favor of
 	// increasing upper limit or decreasing lower limit so that the limit can be reachable.
+	/**
+	在新的重新提交间隔计算期间应用intervalAdjustBias，有利于增加上限或减少下限，以便可以访问限制。
+	 */
 	intervalAdjustBias = 200 * 1000.0 * 1000.0
 )
 
 // environment is the worker's current environment and holds all of the current state information.
+/**
+environment是 worker 的当前环境并保存所有当前state信息。
+ */
 type environment struct {
+	/** 当前签名者 */
 	signer types.Signer
 
+	/** 在此处应用 state 更改 */
 	state     *state.StateDB // apply state changes here
+	/** 祖先集（用于检查叔叔父有效性） */
 	ancestors mapset.Set     // ancestor set (used for checking uncle parent validity)
+	/** 家庭集（用于检查叔叔无效） */
 	family    mapset.Set     // family set (used for checking uncle invalidity)
+	/** 叔叔集 */
 	uncles    mapset.Set     // uncle set
+	/** tx在循环中计数 */
 	tcount    int            // tx count in cycle
+	/** 用于包装tx的可用 gas */
 	gasPool   *core.GasPool  // available gas used to pack transactions
 
+	/** 当前正在打包的 block header */
 	header   *types.Header
+	/** 当前正在打包的 block 的tx 集 */
 	txs      []*types.Transaction
+	/** 当前正在打包的 block 的收据集 */
 	receipts []*types.Receipt
 }
 
 // task contains all information for consensus engine sealing and result submitting.
+/**
+task 包含共识引擎 打包 和结果提交的所有信息。
+ */
 type task struct {
+	// 收据集
 	receipts  []*types.Receipt
+	// 当前 state
 	state     *state.StateDB
+	// 当前block
 	block     *types.Block
+	// 当前打包的 时间戳
 	createdAt time.Time
 }
 
 const (
+	/**
+	三个 标识位
+	 */
+
 	commitInterruptNone int32 = iota
 	commitInterruptNewHead
 	commitInterruptResubmit
 )
 
 // newWorkReq represents a request for new sealing work submitting with relative interrupt notifier.
+// newWorkReq 表示使用相对中断通知程序提交新密封工作的请求
 type newWorkReq struct {
+	// 打断标识
 	interrupt *int32
+	// 非空标识
 	noempty   bool
 }
 
 // intervalAdjust represents a resubmitting interval adjustment.
+/**
+intervalAdjust 表示重新提交间隔调整。
+ */
 type intervalAdjust struct {
+	// 比率
 	ratio float64
+	// 是否增加标识
 	inc   bool
 }
 
 // worker is the main object which takes care of submitting new work to consensus engine
 // and gathering the sealing result.
+/**
+worker 是负责向共识引擎提交新工作的主要对象
+并收集密封效果。
+ */
 type worker struct {
+	/** 这是 eth.chainConfig */
 	config *params.ChainConfig
+	// 共识引擎
 	engine consensus.Engine
+	// 全局的 Ethereum 实例
 	eth    Backend
+	// 全局的 chain 实例
 	chain  *core.BlockChain
 
 	// Subscriptions
+	/** 各类订阅事件相关 */
+	// 事件 (已经过时，后续可能都用 feed) 引用了 Ethereum 实例的
 	mux          *event.TypeMux
+	/** tx */
+	// 接收 tx 事件结构的 chan
 	txsCh        chan core.NewTxsEvent
+	// 订阅 tx 事件结构的 sub
 	txsSub       event.Subscription
+
+	/** chainHead */
+	// 接收 chainHead 事件结构的 chan
 	chainHeadCh  chan core.ChainHeadEvent
+	// 订阅 chainHead 事件结构的 sub
 	chainHeadSub event.Subscription
+
+	/** chainSide */
+	// 接收 chainSide 事件结构的 chan
 	chainSideCh  chan core.ChainSideEvent
+	// 订阅 chainHead 事件结构的 sub
 	chainSideSub event.Subscription
 
 	// Channels
+	/** 各类任务相关的 chan  */
+	// 处理 一个新的 工作信号请求 的 chan
+	// 在 go newWorkLoop() 中写入
+	// 在 go mainLoop() 中读取
 	newWorkCh          chan *newWorkReq
+
+	// 处理一个 作业任务 task 的 chan
+	// 在 go mainLoop() 中，在 commitNewWork 在 commit 中被写入
+	// 在 go taskLoop() 中，被读取
 	taskCh             chan *task
+
+	// 处理一个 出块结果的 chan
+	// 在 seal 中被写入
+	// 在 worker.close() 及 go resultLoop() 中被接收
 	resultCh           chan *task
+
+	// 处理一个 挖矿开始信号的 chan
+	// 在 start() 及 newWorker() 中写入
+	// 在 go newWorkLoop 中被读取
 	startCh            chan struct{}
+	// 处理一个 挖矿退出的信号的 chan
 	exitCh             chan struct{}
+
+	// 一个接收调整出块间隔的 chan
 	resubmitIntervalCh chan time.Duration
+	// 一个接收 出块调整 实体的 chan
 	resubmitAdjustCh   chan *intervalAdjust
 
+	/** 当前运行周期的环境 */
 	current        *environment                 // An environment for current running cycle.
+	/** 一组侧块作为可能的叔叔块。 */
 	possibleUncles map[common.Hash]*types.Block // A set of side blocks as the possible uncle blocks.
+	/** 一组本地挖掘的块正在等待规范性确认。 */
 	unconfirmed    *unconfirmedBlocks           // A set of locally mined blocks pending canonicalness confirmations.
 
+	/** 读写锁用于保护coinbase和额外的字段 */
 	mu       sync.RWMutex // The lock used to protect the coinbase and extra fields
+	/** 矿工地址 */
 	coinbase common.Address
+	/** 拓展字段 (将会被填充到 block 的extra 字段中) */
 	extra    []byte
 
+	/** 读写锁用于保护块快照和 state 快照 */
 	snapshotMu    sync.RWMutex // The lock used to protect the block snapshot and state snapshot
+
+	// block 的快照
 	snapshotBlock *types.Block
+	// state 的快照
 	snapshotState *state.StateDB
 
 	// atomic status counters
@@ -159,12 +263,20 @@ type worker struct {
 	newTxs  int32 // New arrival transaction count since last sealing work submitting.
 
 	// Test hooks
+	/** 一些测试相关的钩子 func 下面四个方法，目前只有在test中有被赋值 而已*/
+	// 接收新打包任务时调用的方法。
 	newTaskHook  func(*task)                        // Method to call upon receiving a new sealing task.
+	// 决定是否跳过打包动作的方法。
 	skipSealHook func(*task) bool                   // Method to decide whether skipping the sealing.
+	// 在推送完整打包任务之前调用的方法
 	fullTaskHook func()                             // Method to call before pushing the full sealing task.
+	// 调用更新重新提交间隔的方法。
 	resubmitHook func(time.Duration, time.Duration) // Method to call upon updating resubmitting interval.
 }
 
+/**
+初始化一个 新的 worker 实例
+ */
 func newWorker(config *params.ChainConfig, engine consensus.Engine, eth Backend, mux *event.TypeMux, recommit time.Duration) *worker {
 	worker := &worker{
 		/** 这是 eth.chainConfig */
@@ -210,6 +322,7 @@ func newWorker(config *params.ChainConfig, engine consensus.Engine, eth Backend,
 }
 
 // setEtherbase sets the etherbase used to initialize the block coinbase field.
+// 设置 coinbase
 func (w *worker) setEtherbase(addr common.Address) {
 	w.mu.Lock()
 	defer w.mu.Unlock()
@@ -244,6 +357,7 @@ func (w *worker) pending() (*types.Block, *state.StateDB) {
 }
 
 // pendingBlock returns pending block.
+// 返回正在 pending 的 block
 func (w *worker) pendingBlock() *types.Block {
 	// return a snapshot to avoid contention on currentMu mutex
 	w.snapshotMu.RLock()
@@ -252,17 +366,20 @@ func (w *worker) pendingBlock() *types.Block {
 }
 
 // start sets the running status as 1 and triggers new work submitting.
+// 开始设置 挖矿信号
 func (w *worker) start() {
 	atomic.StoreInt32(&w.running, 1)
 	w.startCh <- struct{}{}
 }
 
 // stop sets the running status as 0.
+// 将 挖矿表示我设置为 0
 func (w *worker) stop() {
 	atomic.StoreInt32(&w.running, 0)
 }
 
 // isRunning returns an indicator whether worker is running or not.
+// 是否在挖矿标识位
 func (w *worker) isRunning() bool {
 	return atomic.LoadInt32(&w.running) == 1
 }
