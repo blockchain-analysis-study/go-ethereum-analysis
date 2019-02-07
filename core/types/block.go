@@ -103,6 +103,7 @@ func (h *Header) Hash() common.Hash {
 }
 
 // HashNoNonce returns the hash which is used as input for the proof-of-work search.
+// HashNoNonce 函数：返回用作 pow 搜索的输入的 Hash。
 func (h *Header) HashNoNonce() common.Hash {
 	return rlpHash([]interface{}{
 		h.ParentHash,

@@ -335,21 +335,35 @@ type TransactionsByPriceAndNonce struct {
 //
 // Note, the input map is reowned so the caller should not interact any more with
 // if after providing it to the constructor.
+/**
+NewTransactionsByPriceAndNonce 函数
+创建一个tx集，可以以nonce-honor方式检索价格排序的 tx 。
+
+请注意，输入映射是 reowned，因此调用者不应再与之交互
+如果在提供给构造函数之后。
+ */
 func NewTransactionsByPriceAndNonce(signer Signer, txs map[common.Address]Transactions) *TransactionsByPriceAndNonce {
 	// Initialize a price based heap with the head transactions
+	// 初始化一个 根据price最为堆排的tx最小堆
 	heads := make(TxByPrice, 0, len(txs))
 	for from, accTxs := range txs {
+		/** 将 每个账户的tx集中的 第一个tx收集起来，用于做最小堆排序 */
 		heads = append(heads, accTxs[0])
 		// Ensure the sender address is from the signer
+		// 确保 form是当前tx的签名者
 		acc, _ := Sender(signer, accTxs[0])
+		// 移除掉当前 账户的 tx机中的第一个 tx
 		txs[acc] = accTxs[1:]
+		/** 如果 当前账户的第一个 tx 解出来的from 及当前账户不相等，则为非法交易，直接删除 txs 中该账户相关的所有 tx集 */
 		if from != acc {
 			delete(txs, from)
 		}
 	}
+	// 初始化 最小堆
 	heap.Init(&heads)
 
 	// Assemble and return the transaction set
+	// 组装机返回一个 tx 集
 	return &TransactionsByPriceAndNonce{
 		txs:    txs,
 		heads:  heads,
