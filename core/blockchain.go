@@ -671,6 +671,12 @@ func (bc *BlockChain) GetReceiptsByHash(hash common.Hash) types.Receipts {
 
 // GetBlocksFromHash returns the block corresponding to hash and up to n-1 ancestors.
 // [deprecated by eth/62]
+/**
+GetBlocksFromHash 函数
+返回与哈希对应的块和最多n-1个祖先。
+
+[由eth / 62弃用]
+ */
 func (bc *BlockChain) GetBlocksFromHash(hash common.Hash, n int) (blocks []*types.Block) {
 	number := bc.hc.GetBlockNumber(hash)
 	if number == nil {

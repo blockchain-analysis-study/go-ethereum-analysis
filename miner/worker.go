@@ -144,9 +144,9 @@ const (
 	三个 标识位
 	 */
 
-	commitInterruptNone int32 = iota
-	commitInterruptNewHead
-	commitInterruptResubmit
+	commitInterruptNone int32 = iota   	// 表示 任何都不是
+	commitInterruptNewHead				// 表示 一个新的 head 事件到达而需要中断当前 pack 的标识位
+	commitInterruptResubmit				// 表示 一个重新提交 worker pack 的标识位
 )
 
 // newWorkReq represents a request for new sealing work submitting with relative interrupt notifier.
@@ -836,48 +836,69 @@ func (w *worker) resultLoop() {
 		select {
 		case result := <-w.resultCh:
 			// Short circuit when receiving empty result.
+			// 当接收到一个 空结果时，直接返回
 			if result == nil {
 				continue
 			}
 			// Short circuit when receiving duplicate result caused by resubmitting.
+			// 当由于重复提交而接收到相同的结果时，直接返回
 			block := result.block
 			if w.chain.HasBlock(block.Hash(), block.NumberU64()) {
 				continue
 			}
 			// Update the block hash in all logs since it is now available and not when the
 			// receipt/log of individual transactions were created.
+			/**
+			更新所有日志中的块哈希，因为它现在可用，而不是在创建单个 tx 的接收/日志时。
+			 */
+			 // 遍历收据
 			for _, r := range result.receipts {
+				// 遍历收据中的所有 日志
 				for _, l := range r.Logs {
 					l.BlockHash = block.Hash()
 				}
 			}
+			// 遍历当前 state 的所有日志
 			for _, log := range result.state.Logs() {
 				log.BlockHash = block.Hash()
 			}
 			// Commit block and state to database.
+			/** 打包节点直接 写链 */
 			stat, err := w.chain.WriteBlockWithState(block, result.receipts, result.state)
 			if err != nil {
 				log.Error("Failed writing block to chain", "err", err)
 				continue
 			}
 			// Broadcast the block and announce chain insertion event
+			// 广播块并 通知 链插入事件
 			w.mux.Post(core.NewMinedBlockEvent{Block: block})
 			var (
+				// 一个事件 切片
 				events []interface{}
+				// state 的所有 日志
 				logs   = result.state.Logs()
 			)
+			// 判断写链的结果状态
 			switch stat {
+
+			//
 			case core.CanonStatTy:
 				events = append(events, core.ChainEvent{Block: block, Hash: block.Hash(), Logs: logs})
 				events = append(events, core.ChainHeadEvent{Block: block})
+
+			//
 			case core.SideStatTy:
 				events = append(events, core.ChainSideEvent{Block: block})
 			}
+
+			// 广播 事件及日志
 			w.chain.PostChainEvents(events, logs)
 
 			// Insert the block into the set of pending ones to resultLoop for confirmations
+			// 将块插入到 pending 的一组中以resultLoop进行确认
 			w.unconfirmed.Insert(block.NumberU64(), block.Hash())
 
+		// 当接收到一个 退出信号
 		case <-w.exitCh:
 			return
 		}
@@ -885,31 +906,55 @@ func (w *worker) resultLoop() {
 }
 
 // makeCurrent creates a new environment for the current cycle.
+// makeCurrent 函数：
+// 为当前打包周期创建一个新上下文环境。
 func (w *worker) makeCurrent(parent *types.Block, header *types.Header) error {
+
+	// 获取 chain 上的最新 state
 	state, err := w.chain.StateAt(parent.Root())
 	if err != nil {
 		return err
 	}
+
+	/***
+	这个吊东西超级重要
+	当前打包的上下文
+	 */
 	env := &environment{
+		// 签名器
 		signer:    types.NewEIP155Signer(w.config.ChainID),
+		// 当前 state
 		state:     state,
+		// 创建一个用于保存祖先的集
 		ancestors: mapset.NewSet(),
+		// 创建一个用于保存 确认的家谱区块的集
 		family:    mapset.NewSet(),
+		// 创建一个叔叔区块的集
 		uncles:    mapset.NewSet(),
+		// 当前预先处理好的header
 		header:    header,
 	}
 
 	// when 08 is processed ancestors contain 07 (quick block)
+	// 例如： 当处理 08 时，祖先包含 07 (这时候需要快速 阻止)
+	// 获取当前 区块 7个祖先
 	for _, ancestor := range w.chain.GetBlocksFromHash(parent.Hash(), 7) {
+		// 获取 某个祖先的叔叔
 		for _, uncle := range ancestor.Uncles() {
+			// 全部追加到 家族中
 			env.family.Add(uncle.Hash())
 		}
+		// 追加到 家族中
 		env.family.Add(ancestor.Hash())
+		// 追加到 祖先集中
 		env.ancestors.Add(ancestor.Hash())
 	}
 
 	// Keep track of transactions which return errors so they can be removed
+	// 跟踪返回错误的 tx，以便删除它们
 	env.tcount = 0
+
+	// 设置 当前 打包的上下文环境
 	w.current = env
 	return nil
 }
@@ -937,11 +982,17 @@ func (w *worker) commitUncle(env *environment, uncle *types.Header) error {
 
 // updateSnapshot updates pending snapshot block and state.
 // Note this function assumes the current variable is thread safe.
+/**
+updateSnapshot 函数
+更新 pending 的快照块和 state。
+请注意，此函数假定当前变量是线程安全的。
+ */
 func (w *worker) updateSnapshot() {
 	w.snapshotMu.Lock()
 	defer w.snapshotMu.Unlock()
 
 	var uncles []*types.Header
+	// 收集所有可能的uncle 块
 	w.current.uncles.Each(func(item interface{}) bool {
 		hash, ok := item.(common.Hash)
 		if !ok {
@@ -955,6 +1006,9 @@ func (w *worker) updateSnapshot() {
 		return false
 	})
 
+	/**
+	创建一个 快找块
+	 */
 	w.snapshotBlock = types.NewBlock(
 		w.current.header,
 		w.current.txs,
@@ -962,33 +1016,53 @@ func (w *worker) updateSnapshot() {
 		w.current.receipts,
 	)
 
+	// 设置当前的 state 快照
 	w.snapshotState = w.current.state.Copy()
 }
 
+/**
+执行 交易
+ */
 func (w *worker) commitTransaction(tx *types.Transaction, coinbase common.Address) ([]*types.Log, error) {
 	snap := w.current.state.Snapshot()
 
+	/**
+	执行 单笔 交易
+	 */
 	receipt, _, err := core.ApplyTransaction(w.config, w.chain, &coinbase, w.current.gasPool, w.current.state, w.current.header, tx, &w.current.header.GasUsed, vm.Config{})
 	if err != nil {
+		// 回滚快照
 		w.current.state.RevertToSnapshot(snap)
 		return nil, err
 	}
+	// 收集当前被执行过了的 交易
 	w.current.txs = append(w.current.txs, tx)
+	// 收集当前交易执行产生的 收据
 	w.current.receipts = append(w.current.receipts, receipt)
 
+	// 返回 收据中的 所有日志信息
 	return receipt.Logs, nil
 }
 
+/**
+执行 一批交易
+ */
 func (w *worker) commitTransactions(txs *types.TransactionsByPriceAndNonce, coinbase common.Address, interrupt *int32) bool {
 	// Short circuit if current is nil
+	// 如果当前 打包上下文为nil 则直接退出
 	if w.current == nil {
 		return true
 	}
 
+	// 设置 GasPool
 	if w.current.gasPool == nil {
+		// 预先设置 gasPool == header 中的gasLimit
+		// 由于所有的是 core.GasPool 的指针，所以随着 tx的执行
+		// core.GasPool 也会一直的变化，即 w.current.gasPool 也会一直的变化
 		w.current.gasPool = new(core.GasPool).AddGas(w.current.header.GasLimit)
 	}
 
+	// 合并的日志 ？？
 	var coalescedLogs []*types.Log
 
 	for {
@@ -998,26 +1072,48 @@ func (w *worker) commitTransactions(txs *types.TransactionsByPriceAndNonce, coin
 		// (3) worker recreate the mining block with any newly arrived transactions, the interrupt signal is 2.
 		// For the first two cases, the semi-finished work will be discarded.
 		// For the third case, the semi-finished work will be submitted to the consensus engine.
+
+		/**
+		在以下三种情况下，我们将中断 tx 的执行。
+		（1）新的头块事件到达，中断信号为1
+		（2）worker 启动或重启，中断信号为1
+		（3）worker用任何新到的 tx 重新创建 打包块，中断信号为2。
+
+		对于前两种情况，半成品将被丢弃。
+		对于第三种情况，半成品将被提交给共识引擎。
+		 */
 		if interrupt != nil && atomic.LoadInt32(interrupt) != commitInterruptNone {
 			// Notify resubmit loop to increase resubmitting interval due to too frequent commits.
+			// 由于过于频繁的提交，通知重新提交循环以增加重新提交间隔。
+			// 如果 interval (中断信号) 为 2
 			if atomic.LoadInt32(interrupt) == commitInterruptResubmit {
+				// ratio: 比率
+				// (当前块所有的 gasLimit - 打包block 时的所消耗gas) / 当前块所有的 gasLimit
 				ratio := float64(w.current.header.GasLimit-w.current.gasPool.Gas()) / float64(w.current.header.GasLimit)
+				// 如果生下来的 gas 比率为 < 0.1 则，应该为 0.1
 				if ratio < 0.1 {
 					ratio = 0.1
 				}
+
+				// 发送一个 调整信号
 				w.resubmitAdjustCh <- &intervalAdjust{
 					ratio: ratio,
 					inc:   true,
 				}
 			}
+
+			/** 返回 当前中断信号是否为 1 */
 			return atomic.LoadInt32(interrupt) == commitInterruptNewHead
 		}
 		// If we don't have enough gas for any further transactions then we're done
+		// 如果我们没有足够的 gas 进行任何进一步的tx，那么我们就算 完了当前函数的执行,
+		// 即： block 执行终止了
 		if w.current.gasPool.Gas() < params.TxGas {
 			log.Trace("Not enough gas for further transactions", "have", w.current.gasPool, "want", params.TxGas)
 			break
 		}
 		// Retrieve the next transaction and abort if all done
+		// 检索下一个 tx 并在完成所有操作后中止
 		tx := txs.Peek()
 		if tx == nil {
 			break
@@ -1026,9 +1122,19 @@ func (w *worker) commitTransactions(txs *types.TransactionsByPriceAndNonce, coin
 		// during transaction acceptance is the transaction pool.
 		//
 		// We use the eip155 signer regardless of the current hf.
+
+		/**
+		这里可能会被忽略错误。 该 error 已经在 tx在 txpool 期间已被检查了。
+
+		我们不论当前 hf 如何，都使用 eip155 签名者。
+		 */
 		from, _ := types.Sender(w.current.signer, tx)
 		// Check whether the tx is replay protected. If we're not in the EIP155 hf
 		// phase, start ignoring the sender until we do.
+		/**
+		检查tx是否重播受保护。 如果我们不在EIP155 hf阶段，请开始忽略发送方，直到我们这样做。
+		 */
+		 // 如果 tx 是受保护的 && 当前块高处于 eip155 条件的块高
 		if tx.Protected() && !w.config.IsEIP155(w.current.header.Number) {
 			log.Trace("Ignoring reply protected transaction", "hash", tx.Hash(), "eip155", w.config.EIP155Block)
 
@@ -1036,27 +1142,35 @@ func (w *worker) commitTransactions(txs *types.TransactionsByPriceAndNonce, coin
 			continue
 		}
 		// Start executing the transaction
+		// 填充当前 state 的 txHash (thash 字段) 及bhash字段 及txIndex 字段
 		w.current.state.Prepare(tx.Hash(), common.Hash{}, w.current.tcount)
 
+		// 执行单笔 tx
 		logs, err := w.commitTransaction(tx, coinbase)
+
+		/* 判断 tx 的执行err */
 		switch err {
 		case core.ErrGasLimitReached:
 			// Pop the current out-of-gas transaction without shifting in the next from the account
+			// 弹出(剔除)当前的 out-of-gas 的tx，而不会从账户中转移下一个
 			log.Trace("Gas limit exceeded for current block", "sender", from)
 			txs.Pop()
 
 		case core.ErrNonceTooLow:
 			// New head notification data race between the transaction pool and miner, shift
+			// 如果交易池和矿工之间的新头通知存在 数据竞争，则翻页
 			log.Trace("Skipping transaction with low nonce", "sender", from, "nonce", tx.Nonce())
 			txs.Shift()
 
 		case core.ErrNonceTooHigh:
 			// Reorg notification data race between the transaction pool and miner, skip account =
+			// 如果在tx pool 及 miner 之间存在重组 通知有数据竞争， 则跳过当前 账户的所有 tx
 			log.Trace("Skipping account with hight nonce", "sender", from, "nonce", tx.Nonce())
 			txs.Pop()
 
 		case nil:
 			// Everything ok, collect the logs and shift in the next transaction from the same account
+			// 所有的东西都 OK的话，则收集日志并从同一帐户转移下一个交易
 			coalescedLogs = append(coalescedLogs, logs...)
 			w.current.tcount++
 			txs.Shift()
@@ -1064,6 +1178,9 @@ func (w *worker) commitTransactions(txs *types.TransactionsByPriceAndNonce, coin
 		default:
 			// Strange error, discard the transaction and get the next in line (note, the
 			// nonce-too-high clause will prevent us from executing in vain).
+			/**
+			奇怪的错误，丢弃事务并获得下一个（注意，nonce-too-high子句将阻止我们徒劳地执行）。
+			 */
 			log.Debug("Transaction failed, account skipped", "hash", tx.Hash(), "err", err)
 			txs.Shift()
 		}
@@ -1073,10 +1190,19 @@ func (w *worker) commitTransactions(txs *types.TransactionsByPriceAndNonce, coin
 		// We don't push the pendingLogsEvent while we are mining. The reason is that
 		// when we are mining, the worker will regenerate a mining block every 3 seconds.
 		// In order to avoid pushing the repeated pendingLog, we disable the pending log pushing.
-
+		/**
+		我们在挖掘时不会推送pendingLogsEvent。
+		原因是当我们开采时，工人将每3秒钟再生一次采矿区。
+		为了避免推送重复的pendingLog，我们禁用 pending的日志推送。
+		 */
 		// make a copy, the state caches the logs and these logs get "upgraded" from pending to mined
 		// logs by filling in the block hash when the block was mined by the local miner. This can
 		// cause a race condition if a log was "upgraded" before the PendingLogsEvent is processed.
+		/**
+		在发生 copy 时，state缓存日志，并且当前块由本地矿工挖掘时，
+		通过填充块 hash，这些日志从 pending 的日志“升级”到已挖掘的日志。
+		如果在处理PendingLogsEvent之前“升级”了日志，则会导致竞争条件。
+		 */
 		cpy := make([]*types.Log, len(coalescedLogs))
 		for i, l := range coalescedLogs {
 			cpy[i] = new(types.Log)
@@ -1086,6 +1212,9 @@ func (w *worker) commitTransactions(txs *types.TransactionsByPriceAndNonce, coin
 	}
 	// Notify resubmit loop to decrease resubmitting interval if current interval is larger
 	// than the user-specified one.
+	/**
+	如果当前间隔大于用户指定的间隔，则通知重新提交 loop 以减少重新提交间隔。
+	 */
 	if interrupt != nil {
 		w.resubmitAdjustCh <- &intervalAdjust{inc: false}
 	}

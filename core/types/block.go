@@ -68,20 +68,37 @@ func (n *BlockNonce) UnmarshalText(input []byte) error {
 
 // Header represents a block header in the Ethereum blockchain.
 type Header struct {
+	// 上一个 block 的 header Hash
 	ParentHash  common.Hash    `json:"parentHash"       gencodec:"required"`
+	// uncle 的 Header Hash
 	UncleHash   common.Hash    `json:"sha3Uncles"       gencodec:"required"`
+	// 挖出当前 block 额矿工账户地址
 	Coinbase    common.Address `json:"miner"            gencodec:"required"`
+	// 和当前 block 相对应的 state 的root
 	Root        common.Hash    `json:"stateRoot"        gencodec:"required"`
+	// 当前block 所包含的所有 tx 的markle trie 的 root
 	TxHash      common.Hash    `json:"transactionsRoot" gencodec:"required"`
+	// 当前block 的收据树的 root (收据由 执行块中 tx时得到的logs组成)
 	ReceiptHash common.Hash    `json:"receiptsRoot"     gencodec:"required"`
+	// 当前块的布隆过滤器(同上, 由 执行块中 tx时得到的logs组成)
 	Bloom       Bloom          `json:"logsBloom"        gencodec:"required"`
+	// 挖出当前 block 时所用的 难度值
 	Difficulty  *big.Int       `json:"difficulty"       gencodec:"required"`
+	// 当前 块高
 	Number      *big.Int       `json:"number"           gencodec:"required"`
+	// 当前 block 的 gas 消耗允许上限 (动态的自调整的, 主要由上一个块决定 ？？)
 	GasLimit    uint64         `json:"gasLimit"         gencodec:"required"`
+	// 当前block的所有 tx所消耗的总 gas
 	GasUsed     uint64         `json:"gasUsed"          gencodec:"required"`
+	// 当前block 的出块时间戳
 	Time        *big.Int       `json:"timestamp"        gencodec:"required"`
+	// 一些拓展字段 (一般由启动miner时，命令行指定某些内容)
 	Extra       []byte         `json:"extraData"        gencodec:"required"`
+
+
+	// 由 共识引擎，求出目标值时得到的一个摘要数，用来和 Nonce 一起做校验用
 	MixDigest   common.Hash    `json:"mixHash"          gencodec:"required"`
+	// 由 共识引擎，求出目标值时得到的一个随机数，用来和 MixDigest 一起做校验用
 	Nonce       BlockNonce     `json:"nonce"            gencodec:"required"`
 }
 

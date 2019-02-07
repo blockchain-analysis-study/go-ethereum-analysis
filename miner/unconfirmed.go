@@ -46,6 +46,8 @@ type unconfirmedBlock struct {
 type unconfirmedBlocks struct {
 	chain  headerRetriever // Blockchain to verify canonical status through
 	depth  uint            // Depth after which to discard previous blocks
+
+	// 一个环形链表
 	blocks *ring.Ring      // Block infos to allow canonical chain cross checks
 	lock   sync.RWMutex    // Protects the fields from concurrent access
 }
