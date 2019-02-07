@@ -775,7 +775,7 @@ func (w *worker) taskLoop() {
 		// 一个加收 停止信号的 chan
 		stopCh chan struct{}
 
-		// 上一个 块的 hash
+		// 不完整 块的 hash
 		prev   common.Hash
 	)
 
