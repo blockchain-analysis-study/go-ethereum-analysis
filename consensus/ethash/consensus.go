@@ -287,6 +287,10 @@ func (ethash *Ethash) verifyHeader(chain consensus.ChainReader, header, parent *
 // CalcDifficulty is the difficulty adjustment algorithm. It returns
 // the difficulty that a new block should have when created at time
 // given the parent block's time and difficulty.
+/**
+CalcDifficulty 函数：
+是难度调整算法。 它返回了一个新块在给定父块的时间和难度时创建时应该具有的难度。
+ */
 func (ethash *Ethash) CalcDifficulty(chain consensus.ChainReader, time uint64, parent *types.Header) *big.Int {
 	return CalcDifficulty(chain.Config(), time, parent)
 }
@@ -294,14 +298,31 @@ func (ethash *Ethash) CalcDifficulty(chain consensus.ChainReader, time uint64, p
 // CalcDifficulty is the difficulty adjustment algorithm. It returns
 // the difficulty that a new block should have when created at time
 // given the parent block's time and difficulty.
+/**
+CalcDifficulty 函数：
+是难度调整算法。 它返回了一个新块在给定父块的时间和难度时创建时应该具有的难度。
+
+在最早发布的发展计划中，以太坊有四个里程碑阶段；这四个阶段分别是：
+Frontier（前沿），Homestead（家园），Metropolis（大都会），Serenity（宁静）。
+以太坊目前处于第三阶段——Metropolis的Byzantium（拜占庭）版本
+Metropolis又被分成了两个阶段：Byzantium和Constantinople （君士坦丁堡）
+
+ */
 func CalcDifficulty(config *params.ChainConfig, time uint64, parent *types.Header) *big.Int {
 	next := new(big.Int).Add(parent.Number, big1)
+
+	/**
+	根据 当前出块时间 和 上一个块的难度 计算 当前块的难度
+	 */
 	switch {
+	// 是否拜占庭分叉
 	case config.IsByzantium(next):
 		return calcDifficultyByzantium(time, parent)
+	// 是否家园版本
 	case config.IsHomestead(next):
 		return calcDifficultyHomestead(time, parent)
 	default:
+		// 默认都走 前沿版本
 		return calcDifficultyFrontier(time, parent)
 	}
 }
@@ -532,11 +553,19 @@ func (ethash *Ethash) verifySeal(chain consensus.ChainReader, header *types.Head
 
 // Prepare implements consensus.Engine, initializing the difficulty field of a
 // header to conform to the ethash protocol. The changes are done inline.
+/**
+准备实现共识。
+初始化 header 的难度 difficulty 字段以符合ethash协议。 更改是内联完成的。
+ */
 func (ethash *Ethash) Prepare(chain consensus.ChainReader, header *types.Header) error {
 	parent := chain.GetHeader(header.ParentHash, header.Number.Uint64()-1)
 	if parent == nil {
 		return consensus.ErrUnknownAncestor
 	}
+
+	/**
+	 难度的计算
+	 */
 	header.Difficulty = ethash.CalcDifficulty(chain, header.Time.Uint64(), parent)
 	return nil
 }

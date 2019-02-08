@@ -106,6 +106,11 @@ func (v *BlockValidator) ValidateState(block, parent *types.Block, statedb *stat
 
 // CalcGasLimit computes the gas limit of the next block after parent.
 // This is miner strategy, not consensus protocol.
+/**
+CalcGasLimit 函数：
+根据parent计算出当前区块的 gas 允许限制。
+这是矿工策略，而不是共识协议。
+ */
 func CalcGasLimit(parent *types.Block) uint64 {
 	// contrib = (parentGasUsed * 3 / 2) / 1024
 	contrib := (parent.GasUsed() + parent.GasUsed()/2) / params.GasLimitBoundDivisor
@@ -119,6 +124,11 @@ func CalcGasLimit(parent *types.Block) uint64 {
 		increase it, otherwise lower it (or leave it unchanged if it's right
 		at that usage) the amount increased/decreased depends on how far away
 		from parentGasLimit * (2/3) parentGasUsed is.
+
+	策略：block-to-mine的gasLimit是根据父区块的gasUsed值设置的。
+	如果parentGasUsed > parentGasLimit *（2/3），那么我们增加它，
+	否则降低它（或者如果它在该用法上正确则保持不变）
+	增加/减少的数量取决于与parentGasLimit *（2/3）和 parentGasUsed的 差值是多少。
 	*/
 	limit := parent.GasLimit() - decay + contrib
 	if limit < params.MinGasLimit {
@@ -126,6 +136,10 @@ func CalcGasLimit(parent *types.Block) uint64 {
 	}
 	// however, if we're now below the target (TargetGasLimit) we increase the
 	// limit as much as we can (parentGasLimit / 1024 -1)
+	/**
+	但是，如果我们现在低于目标（TargetGasLimit），
+	我们会尽可能多地增加限制（parentGasLimit / 1024 -1）
+	 */
 	if limit < params.TargetGasLimit {
 		limit = parent.GasLimit() + decay
 		if limit > params.TargetGasLimit {

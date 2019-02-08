@@ -344,7 +344,11 @@ func newWorker(config *params.ChainConfig, engine consensus.Engine, eth Backend,
 
 	/** 最开始的 协程，监听 start 信号，写入 newWorkerReq  */
 	go worker.newWorkLoop(recommit)
+
+	/** 接收 seal 完成打包之后的 block */
 	go worker.resultLoop()
+
+	/** 接收 w.commit 过来的 task 实例； w.commit 可能在 mainLoop 被调用 */
 	go worker.taskLoop()
 
 	// Submit first work to initialize pending state.
@@ -380,8 +384,10 @@ func (w *worker) setRecommitInterval(interval time.Duration) {
 }
 
 // pending returns the pending state and corresponding block.
+// pending返回挂起状态和相应的块。
 func (w *worker) pending() (*types.Block, *state.StateDB) {
 	// return a snapshot to avoid contention on currentMu mutex
+	// 返回快照以避免在currentMu互斥锁上发生争用
 	w.snapshotMu.RLock()
 	defer w.snapshotMu.RUnlock()
 	if w.snapshotState == nil {
@@ -394,6 +400,7 @@ func (w *worker) pending() (*types.Block, *state.StateDB) {
 // 返回正在 pending 的 block
 func (w *worker) pendingBlock() *types.Block {
 	// return a snapshot to avoid contention on currentMu mutex
+	// 返回一个快照块
 	w.snapshotMu.RLock()
 	defer w.snapshotMu.RUnlock()
 	return w.snapshotBlock
@@ -420,9 +427,15 @@ func (w *worker) isRunning() bool {
 
 // close terminates all background threads maintained by the worker and cleans up buffered channels.
 // Note the worker does not support being closed multiple times.
+/**
+close 函数：
+终止 worker 维护的所有后台线程并清理缓冲的通道。
+请注意，worker 不支持多次关闭。
+ */
 func (w *worker) close() {
 	close(w.exitCh)
 	// Clean up buffered channels
+	// 清理缓冲的通道
 	for empty := false; !empty; {
 		select {
 		case <-w.resultCh:
@@ -1233,28 +1246,52 @@ func (w *worker) commitNewWork(interrupt *int32, noempty bool) {
 	defer w.mu.RUnlock()
 
 	tstart := time.Now()
+
+	// 获取当前最高块
 	parent := w.chain.CurrentBlock()
 
 	tstamp := tstart.Unix()
+
+	// 如果最高块的出块时间戳比当前时间大；
+	// 也就是 当前节点的服务器时间慢了
 	if parent.Time().Cmp(new(big.Int).SetInt64(tstamp)) >= 0 {
+
+		// 这时候，默认去当前打包时间为上一个块的出块时间 + 1
 		tstamp = parent.Time().Int64() + 1
 	}
 	// this will ensure we're not going off too far in the future
+	// 这将确保我们未来不会走得太远
+
+	// 再次确保下 求出来的tstamp 是否大于 当前时间+1
 	if now := time.Now().Unix(); tstamp > now+1 {
+		// 如果是的话，则需要让程序等待到 tstamp 时间点
 		wait := time.Duration(tstamp-now) * time.Second
 		log.Info("Mining too far in the future", "wait", common.PrettyDuration(wait))
 		time.Sleep(wait)
 	}
 
+	// 最高块的块高
 	num := parent.Number()
+
+	/** 构造一个当前块的不完整 头部 */
 	header := &types.Header{
+
+		// 上一个块的Hash
 		ParentHash: parent.Hash(),
+		// 当前快的块高
 		Number:     num.Add(num, common.Big1),
+		/**
+		根据上一个块 计算出 当前快的 gas 最高限制  gasLimit
+		 */
 		GasLimit:   core.CalcGasLimit(parent),
+		// 将命令行设置到 miner/worker中的 extra 字段设置到 header 中
 		Extra:      w.extra,
+
+		// 设置当前的出块时间
 		Time:       big.NewInt(tstamp),
 	}
 	// Only set the coinbase if our consensus engine is running (avoid spurious block rewards)
+	// 如果我们的共识引擎正在运行，则仅设置coinbase（避免虚假块奖励）
 	if w.isRunning() {
 		if w.coinbase == (common.Address{}) {
 			log.Error("Refusing to mine without etherbase")
@@ -1262,76 +1299,103 @@ func (w *worker) commitNewWork(interrupt *int32, noempty bool) {
 		}
 		header.Coinbase = w.coinbase
 	}
+
+	// 执行 共识中重要的三个方法之一 Prepare
+	// 主要是对 header中的难度字段的计算
 	if err := w.engine.Prepare(w.chain, header); err != nil {
 		log.Error("Failed to prepare header for mining", "err", err)
 		return
 	}
 	// If we are care about TheDAO hard-fork check whether to override the extra-data or not
+	// 如果我们关心TheDAO硬叉检查是否覆盖额外数据 (不用理会 硬分叉)
 	if daoBlock := w.config.DAOForkBlock; daoBlock != nil {
 		// Check whether the block is among the fork extra-override range
+		// 检查块是否在fork extra-override范围之内
 		limit := new(big.Int).Add(daoBlock, params.DAOForkExtraRange)
 		if header.Number.Cmp(daoBlock) >= 0 && header.Number.Cmp(limit) < 0 {
 			// Depending whether we support or oppose the fork, override differently
+			// 根据我们是否支持或反对分叉，不同地覆盖
 			if w.config.DAOForkSupport {
 				header.Extra = common.CopyBytes(params.DAOForkBlockExtra)
 			} else if bytes.Equal(header.Extra, params.DAOForkBlockExtra) {
+				// 如果矿工反对，不要让它使用保留的额外数据
 				header.Extra = []byte{} // If miner opposes, don't let it use the reserved extra-data
 			}
 		}
 	}
 	// Could potentially happen if starting to mine in an odd state.
+	// 如果开始以奇怪 state 开采，可能会发生各种问题。
+	/** 创建一个当前 打包周期的环境上下文 */
 	err := w.makeCurrent(parent, header)
 	if err != nil {
 		log.Error("Failed to create mining context", "err", err)
 		return
 	}
 	// Create the current work task and check any fork transitions needed
+	// 创建当前工作任务并检查所需的任何fork转换 (硬分叉相关，不必理会)
 	env := w.current
 	if w.config.DAOForkSupport && w.config.DAOForkBlock != nil && w.config.DAOForkBlock.Cmp(header.Number) == 0 {
 		misc.ApplyDAOHardFork(env.state)
 	}
 
 	// compute uncles for the new block.
+	// 用于计算新块的叔叔集。
 	var (
 		uncles    []*types.Header
 		badUncles []common.Hash
 	)
+	// 遍历 所有可能的叔叔块
 	for hash, uncle := range w.possibleUncles {
+
+		// 如果已经收集了两个叔叔，则结束 for
 		if len(uncles) == 2 {
 			break
 		}
+
+		// 将该叔叔块，添加到叔叔集中
 		if err := w.commitUncle(env, uncle.Header()); err != nil {
 			log.Trace("Bad uncle found and will be removed", "hash", hash)
 			log.Trace(fmt.Sprint(uncle))
 
+			// 如果出了问题，那么这个是有问题的叔叔块，则追加到有问题的叔叔集中
 			badUncles = append(badUncles, hash)
 		} else {
 			log.Debug("Committing new uncle to block", "hash", hash)
 			uncles = append(uncles, uncle.Header())
 		}
 	}
+
+	// 将有问题的叔叔，从可能的叔叔集中删除
 	for _, hash := range badUncles {
 		delete(w.possibleUncles, hash)
 	}
 
+	// 如果 不为空标识位为 false
 	if !noempty {
 		// Create an empty block based on temporary copied state for sealing in advance without waiting block
 		// execution finished.
+		/**
+		基于临时复制的 state 创建空块以提前进行密封，而无需等待块执行完成。
+		 */
 		w.commit(uncles, nil, false, tstart)
 	}
 
 	// Fill the block with all available pending transactions.
+	// 使用所有可用的 pending tx 填充 block。
 	pending, err := w.eth.TxPool().Pending()
 	if err != nil {
 		log.Error("Failed to fetch pending transactions", "err", err)
 		return
 	}
 	// Short circuit if there is no available pending transactions
+	// 如果没有可用的 pending tx，则 结束
 	if len(pending) == 0 {
+		// 记录下 快照
 		w.updateSnapshot()
 		return
 	}
 	// Split the pending transactions into locals and remotes
+	// 将 pending tx 拆分为 本地 和 远程
 	localTxs, remoteTxs := make(map[common.Address]types.Transactions), pending
 	for _, account := range w.eth.TxPool().Locals() {
 		if txs := remoteTxs[account]; len(txs) > 0 {
@@ -1339,12 +1403,14 @@ func (w *worker) commitNewWork(interrupt *int32, noempty bool) {
 			localTxs[account] = txs
 		}
 	}
+	// 如果有本地的 tx，则执行
 	if len(localTxs) > 0 {
 		txs := types.NewTransactionsByPriceAndNonce(w.current.signer, localTxs)
 		if w.commitTransactions(txs, w.coinbase, interrupt) {
 			return
 		}
 	}
+	// 如果有 远程的 tx， 则执行
 	if len(remoteTxs) > 0 {
 		txs := types.NewTransactionsByPriceAndNonce(w.current.signer, remoteTxs)
 		if w.commitTransactions(txs, w.coinbase, interrupt) {
@@ -1362,24 +1428,40 @@ commit 函数是在执行完block中的所有 tx 后state得以修改后才会�
  */
 func (w *worker) commit(uncles []*types.Header, interval func(), update bool, start time.Time) error {
 	// Deep copy receipts here to avoid interaction between different tasks.
+	// 此处 深拷贝 收据以避免不同任务之间的交互。
 	receipts := make([]*types.Receipt, len(w.current.receipts))
 	for i, l := range w.current.receipts {
 		receipts[i] = new(types.Receipt)
+
+		// 使用了 值复制 (然而 不能算是完整的 值复制，因为 receipt结构中还有其他字段指针的)
 		*receipts[i] = *l
 	}
+
+	/***
+	来一次， state 的 拷贝
+	 */
 	s := w.current.state.Copy()
+	// 求实时的 根，填充 header 的root 字段
 	block, err := w.engine.Finalize(w.chain, w.current.header, s, w.current.txs, uncles, w.current.receipts)
 	if err != nil {
 		return err
 	}
+
+	// 如果正在挖矿
 	if w.isRunning() {
+		// 不必理会的一个 调整函数 (钩子)
 		if interval != nil {
 			interval()
 		}
+
+		// 构建一个task，发送至 tsakCh
 		select {
 		case w.taskCh <- &task{receipts: receipts, state: s, block: block, createdAt: time.Now()}:
+
+			// 翻页 未确定块集
 			w.unconfirmed.Shift(block.NumberU64() - 1)
 
+			// 计算下挖矿所需的手续费？？
 			feesWei := new(big.Int)
 			for i, tx := range block.Transactions() {
 				feesWei.Add(feesWei, new(big.Int).Mul(new(big.Int).SetUint64(receipts[i].GasUsed), tx.GasPrice()))
@@ -1389,12 +1471,17 @@ func (w *worker) commit(uncles []*types.Header, interval func(), update bool, st
 			log.Info("Commit new mining work", "number", block.Number(), "uncles", len(uncles), "txs", w.current.tcount,
 				"gas", block.GasUsed(), "fees", feesEth, "elapsed", common.PrettyDuration(time.Since(start)))
 
+		// 接收到 退出信号
 		case <-w.exitCh:
 			log.Info("Worker has exited")
 		}
 	}
+
+	// 更新下 快照信息
 	if update {
 		w.updateSnapshot()
 	}
+
+	// 结束函数调用
 	return nil
 }
