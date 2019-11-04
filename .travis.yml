@@ -1,5 +1,5 @@
 language: go
-go_import_path: github.com/ethereum/go-ethereum
+go_import_path: github.com/ethereum/github.com/go-ethereum-analysis
 sudo: false
 matrix:
   include:

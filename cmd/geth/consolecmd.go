@@ -1,18 +1,18 @@
-// Copyright 2016 The go-ethereum Authors
-// This file is part of go-ethereum.
+// Copyright 2016 The github.com/go-ethereum-analysis Authors
+// This file is part of github.com/go-ethereum-analysis.
 //
-// go-ethereum is free software: you can redistribute it and/or modify
+// github.com/go-ethereum-analysis is free software: you can redistribute it and/or modify
 // it under the terms of the GNU General Public License as published by
 // the Free Software Foundation, either version 3 of the License, or
 // (at your option) any later version.
 //
-// go-ethereum is distributed in the hope that it will be useful,
+// github.com/go-ethereum-analysis is distributed in the hope that it will be useful,
 // but WITHOUT ANY WARRANTY; without even the implied warranty of
 // MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
 // GNU General Public License for more details.
 //
 // You should have received a copy of the GNU General Public License
-// along with go-ethereum. If not, see <http://www.gnu.org/licenses/>.
+// along with github.com/go-ethereum-analysis. If not, see <http://www.gnu.org/licenses/>.
 
 package main
 
@@ -24,10 +24,10 @@ import (
 	"strings"
 	"syscall"
 
-	"go-ethereum/cmd/utils"
-	"go-ethereum/console"
-	"go-ethereum/node"
-	"go-ethereum/rpc"
+	"github.com/go-ethereum-analysis/cmd/utils"
+	"github.com/go-ethereum-analysis/console"
+	"github.com/go-ethereum-analysis/node"
+	"github.com/go-ethereum-analysis/rpc"
 	"gopkg.in/urfave/cli.v1"
 )
 
@@ -43,7 +43,7 @@ var (
 		Description: `
 The Geth console is an interactive shell for the JavaScript runtime environment
 which exposes a node admin interface as well as the Ðapp JavaScript API.
-See https://go-ethereum/wiki/JavaScript-Console.`,
+See https://github.com/go-ethereum-analysis/wiki/JavaScript-Console.`,
 	}
 
 	attachCommand = cli.Command{
@@ -56,7 +56,7 @@ See https://go-ethereum/wiki/JavaScript-Console.`,
 		Description: `
 The Geth console is an interactive shell for the JavaScript runtime environment
 which exposes a node admin interface as well as the Ðapp JavaScript API.
-See https://go-ethereum/wiki/JavaScript-Console.
+See https://github.com/go-ethereum-analysis/wiki/JavaScript-Console.
 This command allows to open a console on a running geth node.`,
 	}
 
@@ -69,7 +69,7 @@ This command allows to open a console on a running geth node.`,
 		Category:  "CONSOLE COMMANDS",
 		Description: `
 The JavaScript VM exposes a node admin interface as well as the Ðapp
-JavaScript API. See https://go-ethereum/wiki/JavaScript-Console`,
+JavaScript API. See https://github.com/go-ethereum-analysis/wiki/JavaScript-Console`,
 	}
 )
 

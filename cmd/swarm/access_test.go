@@ -1,18 +1,18 @@
-// Copyright 2018 The go-ethereum Authors
-// This file is part of go-ethereum.
+// Copyright 2018 The github.com/go-ethereum-analysis Authors
+// This file is part of github.com/go-ethereum-analysis.
 //
-// go-ethereum is free software: you can redistribute it and/or modify
+// github.com/go-ethereum-analysis is free software: you can redistribute it and/or modify
 // it under the terms of the GNU General Public License as published by
 // the Free Software Foundation, either version 3 of the License, or
 // (at your option) any later version.
 //
-// go-ethereum is distributed in the hope that it will be useful,
+// github.com/go-ethereum-analysis is distributed in the hope that it will be useful,
 // but WITHOUT ANY WARRANTY; without even the implied warranty of
 // MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
 // GNU General Public License for more details.
 //
 // You should have received a copy of the GNU General Public License
-// along with go-ethereum. If not, see <http://www.gnu.org/licenses/>.
+// along with github.com/go-ethereum-analysis. If not, see <http://www.gnu.org/licenses/>.
 package main
 
 import (
@@ -30,11 +30,11 @@ import (
 	"testing"
 	"time"
 
-	"go-ethereum/crypto"
-	"go-ethereum/crypto/sha3"
-	"go-ethereum/log"
-	"go-ethereum/swarm/api"
-	swarm "go-ethereum/swarm/api/client"
+	"github.com/go-ethereum-analysis/crypto"
+	"github.com/go-ethereum-analysis/crypto/sha3"
+	"github.com/go-ethereum-analysis/log"
+	"github.com/go-ethereum-analysis/swarm/api"
+	swarm "github.com/go-ethereum-analysis/swarm/api/client"
 )
 
 // TestAccessPassword tests for the correct creation of an ACT manifest protected by a password.

@@ -1,20 +1,20 @@
-// Copyright 2015 The go-ethereum Authors
-// This file is part of go-ethereum.
+// Copyright 2015 The github.com/go-ethereum-analysis Authors
+// This file is part of github.com/go-ethereum-analysis.
 //
-// go-ethereum is free software: you can redistribute it and/or modify
+// github.com/go-ethereum-analysis is free software: you can redistribute it and/or modify
 // it under the terms of the GNU General Public License as published by
 // the Free Software Foundation, either version 3 of the License, or
 // (at your option) any later version.
 //
-// go-ethereum is distributed in the hope that it will be useful,
+// github.com/go-ethereum-analysis is distributed in the hope that it will be useful,
 // but WITHOUT ANY WARRANTY; without even the implied warranty of
 // MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
 // GNU General Public License for more details.
 //
 // You should have received a copy of the GNU General Public License
-// along with go-ethereum. If not, see <http://www.gnu.org/licenses/>.
+// along with github.com/go-ethereum-analysis. If not, see <http://www.gnu.org/licenses/>.
 
-// Package utils contains internal helper functions for go-ethereum commands.
+// Package utils contains internal helper functions for github.com/go-ethereum-analysis commands.
 package utils
 
 import (
@@ -28,35 +28,35 @@ import (
 	"strings"
 	"time"
 
-	"go-ethereum/accounts"
-	"go-ethereum/accounts/keystore"
-	"go-ethereum/common"
-	"go-ethereum/common/fdlimit"
-	"go-ethereum/consensus"
-	"go-ethereum/consensus/clique"
-	"go-ethereum/consensus/ethash"
-	"go-ethereum/core"
-	"go-ethereum/core/state"
-	"go-ethereum/core/vm"
-	"go-ethereum/crypto"
-	"go-ethereum/dashboard"
-	"go-ethereum/eth"
-	"go-ethereum/eth/downloader"
-	"go-ethereum/eth/gasprice"
-	"go-ethereum/ethdb"
-	"go-ethereum/ethstats"
-	"go-ethereum/les"
-	"go-ethereum/log"
-	"go-ethereum/metrics"
-	"go-ethereum/metrics/influxdb"
-	"go-ethereum/node"
-	"go-ethereum/p2p"
-	"go-ethereum/p2p/discover"
-	"go-ethereum/p2p/discv5"
-	"go-ethereum/p2p/nat"
-	"go-ethereum/p2p/netutil"
-	"go-ethereum/params"
-	whisper "go-ethereum/whisper/whisperv6"
+	"github.com/go-ethereum-analysis/accounts"
+	"github.com/go-ethereum-analysis/accounts/keystore"
+	"github.com/go-ethereum-analysis/common"
+	"github.com/go-ethereum-analysis/common/fdlimit"
+	"github.com/go-ethereum-analysis/consensus"
+	"github.com/go-ethereum-analysis/consensus/clique"
+	"github.com/go-ethereum-analysis/consensus/ethash"
+	"github.com/go-ethereum-analysis/core"
+	"github.com/go-ethereum-analysis/core/state"
+	"github.com/go-ethereum-analysis/core/vm"
+	"github.com/go-ethereum-analysis/crypto"
+	"github.com/go-ethereum-analysis/dashboard"
+	"github.com/go-ethereum-analysis/eth"
+	"github.com/go-ethereum-analysis/eth/downloader"
+	"github.com/go-ethereum-analysis/eth/gasprice"
+	"github.com/go-ethereum-analysis/ethdb"
+	"github.com/go-ethereum-analysis/ethstats"
+	"github.com/go-ethereum-analysis/les"
+	"github.com/go-ethereum-analysis/log"
+	"github.com/go-ethereum-analysis/metrics"
+	"github.com/go-ethereum-analysis/metrics/influxdb"
+	"github.com/go-ethereum-analysis/node"
+	"github.com/go-ethereum-analysis/p2p"
+	"github.com/go-ethereum-analysis/p2p/discover"
+	"github.com/go-ethereum-analysis/p2p/discv5"
+	"github.com/go-ethereum-analysis/p2p/nat"
+	"github.com/go-ethereum-analysis/p2p/netutil"
+	"github.com/go-ethereum-analysis/params"
+	whisper "github.com/go-ethereum-analysis/whisper/whisperv6"
 	"gopkg.in/urfave/cli.v1"
 )
 

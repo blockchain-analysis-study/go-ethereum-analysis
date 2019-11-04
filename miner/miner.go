@@ -1,18 +1,18 @@
-// Copyright 2014 The go-ethereum Authors
-// This file is part of the go-ethereum library.
+// Copyright 2014 The github.com/go-ethereum-analysis Authors
+// This file is part of the github.com/go-ethereum-analysis library.
 //
-// The go-ethereum library is free software: you can redistribute it and/or modify
+// The github.com/go-ethereum-analysis library is free software: you can redistribute it and/or modify
 // it under the terms of the GNU Lesser General Public License as published by
 // the Free Software Foundation, either version 3 of the License, or
 // (at your option) any later version.
 //
-// The go-ethereum library is distributed in the hope that it will be useful,
+// The github.com/go-ethereum-analysis library is distributed in the hope that it will be useful,
 // but WITHOUT ANY WARRANTY; without even the implied warranty of
 // MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
 // GNU Lesser General Public License for more details.
 //
 // You should have received a copy of the GNU Lesser General Public License
-// along with the go-ethereum library. If not, see <http://www.gnu.org/licenses/>.
+// along with the github.com/go-ethereum-analysis library. If not, see <http://www.gnu.org/licenses/>.
 
 // Package miner implements Ethereum block creation and mining.
 package miner
@@ -22,15 +22,15 @@ import (
 	"sync/atomic"
 	"time"
 
-	"go-ethereum/common"
-	"go-ethereum/consensus"
-	"go-ethereum/core"
-	"go-ethereum/core/state"
-	"go-ethereum/core/types"
-	"go-ethereum/eth/downloader"
-	"go-ethereum/event"
-	"go-ethereum/log"
-	"go-ethereum/params"
+	"github.com/go-ethereum-analysis/common"
+	"github.com/go-ethereum-analysis/consensus"
+	"github.com/go-ethereum-analysis/core"
+	"github.com/go-ethereum-analysis/core/state"
+	"github.com/go-ethereum-analysis/core/types"
+	"github.com/go-ethereum-analysis/eth/downloader"
+	"github.com/go-ethereum-analysis/event"
+	"github.com/go-ethereum-analysis/log"
+	"github.com/go-ethereum-analysis/params"
 )
 
 // Backend wraps all methods required for mining.

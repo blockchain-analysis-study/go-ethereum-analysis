@@ -9,17 +9,17 @@ import (
 	"testing"
 	"time"
 
-	"go-ethereum/common/hexutil"
-	"go-ethereum/crypto"
-	"go-ethereum/log"
-	"go-ethereum/node"
-	"go-ethereum/p2p/discover"
-	"go-ethereum/p2p/simulations"
-	"go-ethereum/p2p/simulations/adapters"
-	"go-ethereum/swarm/network"
-	"go-ethereum/swarm/pss"
-	"go-ethereum/swarm/state"
-	whisper "go-ethereum/whisper/whisperv5"
+	"github.com/go-ethereum-analysis/common/hexutil"
+	"github.com/go-ethereum-analysis/crypto"
+	"github.com/go-ethereum-analysis/log"
+	"github.com/go-ethereum-analysis/node"
+	"github.com/go-ethereum-analysis/p2p/discover"
+	"github.com/go-ethereum-analysis/p2p/simulations"
+	"github.com/go-ethereum-analysis/p2p/simulations/adapters"
+	"github.com/go-ethereum-analysis/swarm/network"
+	"github.com/go-ethereum-analysis/swarm/pss"
+	"github.com/go-ethereum-analysis/swarm/state"
+	whisper "github.com/go-ethereum-analysis/whisper/whisperv5"
 )
 
 var (

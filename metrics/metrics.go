@@ -11,7 +11,7 @@ import (
 	"strings"
 	"time"
 
-	"go-ethereum/log"
+	"github.com/go-ethereum-analysis/log"
 )
 
 // Enabled is checked by the constructor functions for all of the

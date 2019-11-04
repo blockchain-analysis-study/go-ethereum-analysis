@@ -1,18 +1,18 @@
-// Copyright 2014 The go-ethereum Authors
-// This file is part of go-ethereum.
+// Copyright 2014 The github.com/go-ethereum-analysis Authors
+// This file is part of github.com/go-ethereum-analysis.
 //
-// go-ethereum is free software: you can redistribute it and/or modify
+// github.com/go-ethereum-analysis is free software: you can redistribute it and/or modify
 // it under the terms of the GNU General Public License as published by
 // the Free Software Foundation, either version 3 of the License, or
 // (at your option) any later version.
 //
-// go-ethereum is distributed in the hope that it will be useful,
+// github.com/go-ethereum-analysis is distributed in the hope that it will be useful,
 // but WITHOUT ANY WARRANTY; without even the implied warranty of
 // MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
 // GNU General Public License for more details.
 //
 // You should have received a copy of the GNU General Public License
-// along with go-ethereum. If not, see <http://www.gnu.org/licenses/>.
+// along with github.com/go-ethereum-analysis. If not, see <http://www.gnu.org/licenses/>.
 
 // geth is the official command-line client for Ethereum.
 package main
@@ -29,16 +29,16 @@ import (
 	"time"
 
 	"github.com/elastic/gosigar"
-	"go-ethereum/accounts"
-	"go-ethereum/accounts/keystore"
-	"go-ethereum/cmd/utils"
-	"go-ethereum/console"
-	"go-ethereum/eth"
-	"go-ethereum/ethclient"
-	"go-ethereum/internal/debug"
-	"go-ethereum/log"
-	"go-ethereum/metrics"
-	"go-ethereum/node"
+	"github.com/go-ethereum-analysis/accounts"
+	"github.com/go-ethereum-analysis/accounts/keystore"
+	"github.com/go-ethereum-analysis/cmd/utils"
+	"github.com/go-ethereum-analysis/console"
+	"github.com/go-ethereum-analysis/eth"
+	"github.com/go-ethereum-analysis/ethclient"
+	"github.com/go-ethereum-analysis/internal/debug"
+	"github.com/go-ethereum-analysis/log"
+	"github.com/go-ethereum-analysis/metrics"
+	"github.com/go-ethereum-analysis/node"
 	"gopkg.in/urfave/cli.v1"
 )
 
@@ -50,7 +50,7 @@ var (
 	// Git SHA1 commit hash of the release (set via linker flags)
 	gitCommit = ""
 	// The app that holds all commands and flags.
-	app = utils.NewApp(gitCommit, "the go-ethereum command line interface")
+	app = utils.NewApp(gitCommit, "the github.com/go-ethereum-analysis command line interface")
 	// flags that configure the node
 	nodeFlags = []cli.Flag{
 		utils.IdentityFlag,
@@ -166,7 +166,7 @@ func init() {
 	// 向 app 实例注册 geth 函数
 	app.Action = geth
 	app.HideVersion = true // we have a command to print the version
-	app.Copyright = "Copyright 2013-2018 The go-ethereum Authors"
+	app.Copyright = "Copyright 2013-2018 The github.com/go-ethereum-analysis Authors"
 	app.Commands = []cli.Command{
 		// See chaincmd.go:
 		initCommand,

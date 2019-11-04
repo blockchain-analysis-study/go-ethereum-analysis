@@ -1,18 +1,18 @@
-// Copyright 2014 The go-ethereum Authors
-// This file is part of the go-ethereum library.
+// Copyright 2014 The github.com/go-ethereum-analysis Authors
+// This file is part of the github.com/go-ethereum-analysis library.
 //
-// The go-ethereum library is free software: you can redistribute it and/or modify
+// The github.com/go-ethereum-analysis library is free software: you can redistribute it and/or modify
 // it under the terms of the GNU Lesser General Public License as published by
 // the Free Software Foundation, either version 3 of the License, or
 // (at your option) any later version.
 //
-// The go-ethereum library is distributed in the hope that it will be useful,
+// The github.com/go-ethereum-analysis library is distributed in the hope that it will be useful,
 // but WITHOUT ANY WARRANTY; without even the implied warranty of
 // MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
 // GNU Lesser General Public License for more details.
 //
 // You should have received a copy of the GNU Lesser General Public License
-// along with the go-ethereum library. If not, see <http://www.gnu.org/licenses/>.
+// along with the github.com/go-ethereum-analysis library. If not, see <http://www.gnu.org/licenses/>.
 
 // Package core implements the Ethereum consensus protocol.
 package core
@@ -27,21 +27,21 @@ import (
 	"sync/atomic"
 	"time"
 
-	"go-ethereum/common"
-	"go-ethereum/common/mclock"
-	"go-ethereum/consensus"
-	"go-ethereum/core/rawdb"
-	"go-ethereum/core/state"
-	"go-ethereum/core/types"
-	"go-ethereum/core/vm"
-	"go-ethereum/crypto"
-	"go-ethereum/ethdb"
-	"go-ethereum/event"
-	"go-ethereum/log"
-	"go-ethereum/metrics"
-	"go-ethereum/params"
-	"go-ethereum/rlp"
-	"go-ethereum/trie"
+	"github.com/go-ethereum-analysis/common"
+	"github.com/go-ethereum-analysis/common/mclock"
+	"github.com/go-ethereum-analysis/consensus"
+	"github.com/go-ethereum-analysis/core/rawdb"
+	"github.com/go-ethereum-analysis/core/state"
+	"github.com/go-ethereum-analysis/core/types"
+	"github.com/go-ethereum-analysis/core/vm"
+	"github.com/go-ethereum-analysis/crypto"
+	"github.com/go-ethereum-analysis/ethdb"
+	"github.com/go-ethereum-analysis/event"
+	"github.com/go-ethereum-analysis/log"
+	"github.com/go-ethereum-analysis/metrics"
+	"github.com/go-ethereum-analysis/params"
+	"github.com/go-ethereum-analysis/rlp"
+	"github.com/go-ethereum-analysis/trie"
 	"github.com/hashicorp/golang-lru"
 	"gopkg.in/karalabe/cookiejar.v2/collections/prque"
 )

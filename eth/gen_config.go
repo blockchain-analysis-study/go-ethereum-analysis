@@ -6,12 +6,12 @@ import (
 	"math/big"
 	"time"
 
-	"go-ethereum/common"
-	"go-ethereum/common/hexutil"
-	"go-ethereum/consensus/ethash"
-	"go-ethereum/core"
-	"go-ethereum/eth/downloader"
-	"go-ethereum/eth/gasprice"
+	"github.com/go-ethereum-analysis/common"
+	"github.com/go-ethereum-analysis/common/hexutil"
+	"github.com/go-ethereum-analysis/consensus/ethash"
+	"github.com/go-ethereum-analysis/core"
+	"github.com/go-ethereum-analysis/eth/downloader"
+	"github.com/go-ethereum-analysis/eth/gasprice"
 )
 
 var _ = (*configMarshaling)(nil)

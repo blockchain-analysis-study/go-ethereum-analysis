@@ -5,8 +5,8 @@ import (
 	"io/ioutil"
 	"strings"
 
-	"go-ethereum/accounts/keystore"
-	"go-ethereum/cmd/utils"
+	"github.com/go-ethereum-analysis/accounts/keystore"
+	"github.com/go-ethereum-analysis/cmd/utils"
 	"gopkg.in/urfave/cli.v1"
 )
 

@@ -1,20 +1,20 @@
-// Copyright 2014 The go-ethereum Authors
-// This file is part of go-ethereum.
+// Copyright 2014 The github.com/go-ethereum-analysis Authors
+// This file is part of github.com/go-ethereum-analysis.
 //
-// go-ethereum is free software: you can redistribute it and/or modify
+// github.com/go-ethereum-analysis is free software: you can redistribute it and/or modify
 // it under the terms of the GNU General Public License as published by
 // the Free Software Foundation, either version 3 of the License, or
 // (at your option) any later version.
 //
-// go-ethereum is distributed in the hope that it will be useful,
+// github.com/go-ethereum-analysis is distributed in the hope that it will be useful,
 // but WITHOUT ANY WARRANTY; without even the implied warranty of
 // MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
 // GNU General Public License for more details.
 //
 // You should have received a copy of the GNU General Public License
-// along with go-ethereum. If not, see <http://www.gnu.org/licenses/>.
+// along with github.com/go-ethereum-analysis. If not, see <http://www.gnu.org/licenses/>.
 
-// Package utils contains internal helper functions for go-ethereum commands.
+// Package utils contains internal helper functions for github.com/go-ethereum-analysis commands.
 package utils
 
 import (
@@ -27,16 +27,16 @@ import (
 	"strings"
 	"syscall"
 
-	"go-ethereum/common"
-	"go-ethereum/core"
-	"go-ethereum/core/rawdb"
-	"go-ethereum/core/types"
-	"go-ethereum/crypto"
-	"go-ethereum/ethdb"
-	"go-ethereum/internal/debug"
-	"go-ethereum/log"
-	"go-ethereum/node"
-	"go-ethereum/rlp"
+	"github.com/go-ethereum-analysis/common"
+	"github.com/go-ethereum-analysis/core"
+	"github.com/go-ethereum-analysis/core/rawdb"
+	"github.com/go-ethereum-analysis/core/types"
+	"github.com/go-ethereum-analysis/crypto"
+	"github.com/go-ethereum-analysis/ethdb"
+	"github.com/go-ethereum-analysis/internal/debug"
+	"github.com/go-ethereum-analysis/log"
+	"github.com/go-ethereum-analysis/node"
+	"github.com/go-ethereum-analysis/rlp"
 )
 
 const (

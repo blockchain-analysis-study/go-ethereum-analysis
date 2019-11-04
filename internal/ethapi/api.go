@@ -1,18 +1,18 @@
-// Copyright 2015 The go-ethereum Authors
-// This file is part of the go-ethereum library.
+// Copyright 2015 The github.com/go-ethereum-analysis Authors
+// This file is part of the github.com/go-ethereum-analysis library.
 //
-// The go-ethereum library is free software: you can redistribute it and/or modify
+// The github.com/go-ethereum-analysis library is free software: you can redistribute it and/or modify
 // it under the terms of the GNU Lesser General Public License as published by
 // the Free Software Foundation, either version 3 of the License, or
 // (at your option) any later version.
 //
-// The go-ethereum library is distributed in the hope that it will be useful,
+// The github.com/go-ethereum-analysis library is distributed in the hope that it will be useful,
 // but WITHOUT ANY WARRANTY; without even the implied warranty of
 // MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
 // GNU Lesser General Public License for more details.
 //
 // You should have received a copy of the GNU Lesser General Public License
-// along with the go-ethereum library. If not, see <http://www.gnu.org/licenses/>.
+// along with the github.com/go-ethereum-analysis library. If not, see <http://www.gnu.org/licenses/>.
 
 package ethapi
 
@@ -26,22 +26,22 @@ import (
 	"time"
 
 	"github.com/davecgh/go-spew/spew"
-	"go-ethereum/accounts"
-	"go-ethereum/accounts/keystore"
-	"go-ethereum/common"
-	"go-ethereum/common/hexutil"
-	"go-ethereum/common/math"
-	"go-ethereum/consensus/ethash"
-	"go-ethereum/core"
-	"go-ethereum/core/rawdb"
-	"go-ethereum/core/types"
-	"go-ethereum/core/vm"
-	"go-ethereum/crypto"
-	"go-ethereum/log"
-	"go-ethereum/p2p"
-	"go-ethereum/params"
-	"go-ethereum/rlp"
-	"go-ethereum/rpc"
+	"github.com/go-ethereum-analysis/accounts"
+	"github.com/go-ethereum-analysis/accounts/keystore"
+	"github.com/go-ethereum-analysis/common"
+	"github.com/go-ethereum-analysis/common/hexutil"
+	"github.com/go-ethereum-analysis/common/math"
+	"github.com/go-ethereum-analysis/consensus/ethash"
+	"github.com/go-ethereum-analysis/core"
+	"github.com/go-ethereum-analysis/core/rawdb"
+	"github.com/go-ethereum-analysis/core/types"
+	"github.com/go-ethereum-analysis/core/vm"
+	"github.com/go-ethereum-analysis/crypto"
+	"github.com/go-ethereum-analysis/log"
+	"github.com/go-ethereum-analysis/p2p"
+	"github.com/go-ethereum-analysis/params"
+	"github.com/go-ethereum-analysis/rlp"
+	"github.com/go-ethereum-analysis/rpc"
 	"github.com/syndtr/goleveldb/leveldb"
 	"github.com/syndtr/goleveldb/leveldb/util"
 )
@@ -424,7 +424,7 @@ func signHash(data []byte) []byte {
 //
 // The key used to calculate the signature is decrypted with the given password.
 //
-// https://go-ethereum/wiki/Management-APIs#personal_sign
+// https://github.com/go-ethereum-analysis/wiki/Management-APIs#personal_sign
 func (s *PrivateAccountAPI) Sign(ctx context.Context, data hexutil.Bytes, addr common.Address, passwd string) (hexutil.Bytes, error) {
 	// Look up the wallet containing the requested signer
 	account := accounts.Account{Address: addr}
@@ -451,7 +451,7 @@ func (s *PrivateAccountAPI) Sign(ctx context.Context, data hexutil.Bytes, addr c
 // Note, the signature must conform to the secp256k1 curve R, S and V values, where
 // the V value must be be 27 or 28 for legacy reasons.
 //
-// https://go-ethereum/wiki/Management-APIs#personal_ecRecover
+// https://github.com/go-ethereum-analysis/wiki/Management-APIs#personal_ecRecover
 func (s *PrivateAccountAPI) EcRecover(ctx context.Context, data, sig hexutil.Bytes) (common.Address, error) {
 	if len(sig) != 65 {
 		return common.Address{}, fmt.Errorf("signature must be 65 bytes long")

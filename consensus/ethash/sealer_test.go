@@ -9,8 +9,8 @@ import (
 	"testing"
 	"time"
 
-	"go-ethereum/common"
-	"go-ethereum/core/types"
+	"github.com/go-ethereum-analysis/common"
+	"github.com/go-ethereum-analysis/core/types"
 )
 
 // Tests whether remote HTTP servers are correctly notified of new work.

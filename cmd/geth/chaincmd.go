@@ -1,18 +1,18 @@
-// Copyright 2015 The go-ethereum Authors
-// This file is part of go-ethereum.
+// Copyright 2015 The github.com/go-ethereum-analysis Authors
+// This file is part of github.com/go-ethereum-analysis.
 //
-// go-ethereum is free software: you can redistribute it and/or modify
+// github.com/go-ethereum-analysis is free software: you can redistribute it and/or modify
 // it under the terms of the GNU General Public License as published by
 // the Free Software Foundation, either version 3 of the License, or
 // (at your option) any later version.
 //
-// go-ethereum is distributed in the hope that it will be useful,
+// github.com/go-ethereum-analysis is distributed in the hope that it will be useful,
 // but WITHOUT ANY WARRANTY; without even the implied warranty of
 // MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
 // GNU General Public License for more details.
 //
 // You should have received a copy of the GNU General Public License
-// along with go-ethereum. If not, see <http://www.gnu.org/licenses/>.
+// along with github.com/go-ethereum-analysis. If not, see <http://www.gnu.org/licenses/>.
 
 package main
 
@@ -25,17 +25,17 @@ import (
 	"sync/atomic"
 	"time"
 
-	"go-ethereum/cmd/utils"
-	"go-ethereum/common"
-	"go-ethereum/console"
-	"go-ethereum/core"
-	"go-ethereum/core/state"
-	"go-ethereum/core/types"
-	"go-ethereum/eth/downloader"
-	"go-ethereum/ethdb"
-	"go-ethereum/event"
-	"go-ethereum/log"
-	"go-ethereum/trie"
+	"github.com/go-ethereum-analysis/cmd/utils"
+	"github.com/go-ethereum-analysis/common"
+	"github.com/go-ethereum-analysis/console"
+	"github.com/go-ethereum-analysis/core"
+	"github.com/go-ethereum-analysis/core/state"
+	"github.com/go-ethereum-analysis/core/types"
+	"github.com/go-ethereum-analysis/eth/downloader"
+	"github.com/go-ethereum-analysis/ethdb"
+	"github.com/go-ethereum-analysis/event"
+	"github.com/go-ethereum-analysis/log"
+	"github.com/go-ethereum-analysis/trie"
 	"github.com/syndtr/goleveldb/leveldb/util"
 	"gopkg.in/urfave/cli.v1"
 )

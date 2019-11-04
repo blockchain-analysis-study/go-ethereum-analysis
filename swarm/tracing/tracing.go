@@ -6,7 +6,7 @@ import (
 	"strings"
 	"time"
 
-	"go-ethereum/log"
+	"github.com/go-ethereum-analysis/log"
 	jaeger "github.com/uber/jaeger-client-go"
 	jaegercfg "github.com/uber/jaeger-client-go/config"
 	jaegerlog "github.com/uber/jaeger-client-go/log"

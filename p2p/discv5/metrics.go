@@ -1,6 +1,6 @@
 package discv5
 
-import "go-ethereum/metrics"
+import "github.com/go-ethereum-analysis/metrics"
 
 var (
 	ingressTrafficMeter = metrics.NewRegisteredMeter("discv5/InboundTraffic", nil)

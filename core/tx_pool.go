@@ -1,18 +1,18 @@
-// Copyright 2014 The go-ethereum Authors
-// This file is part of the go-ethereum library.
+// Copyright 2014 The github.com/go-ethereum-analysis Authors
+// This file is part of the github.com/go-ethereum-analysis library.
 //
-// The go-ethereum library is free software: you can redistribute it and/or modify
+// The github.com/go-ethereum-analysis library is free software: you can redistribute it and/or modify
 // it under the terms of the GNU Lesser General Public License as published by
 // the Free Software Foundation, either version 3 of the License, or
 // (at your option) any later version.
 //
-// The go-ethereum library is distributed in the hope that it will be useful,
+// The github.com/go-ethereum-analysis library is distributed in the hope that it will be useful,
 // but WITHOUT ANY WARRANTY; without even the implied warranty of
 // MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
 // GNU Lesser General Public License for more details.
 //
 // You should have received a copy of the GNU Lesser General Public License
-// along with the go-ethereum library. If not, see <http://www.gnu.org/licenses/>.
+// along with the github.com/go-ethereum-analysis library. If not, see <http://www.gnu.org/licenses/>.
 
 package core
 
@@ -25,13 +25,13 @@ import (
 	"sync"
 	"time"
 
-	"go-ethereum/common"
-	"go-ethereum/core/state"
-	"go-ethereum/core/types"
-	"go-ethereum/event"
-	"go-ethereum/log"
-	"go-ethereum/metrics"
-	"go-ethereum/params"
+	"github.com/go-ethereum-analysis/common"
+	"github.com/go-ethereum-analysis/core/state"
+	"github.com/go-ethereum-analysis/core/types"
+	"github.com/go-ethereum-analysis/event"
+	"github.com/go-ethereum-analysis/log"
+	"github.com/go-ethereum-analysis/metrics"
+	"github.com/go-ethereum-analysis/params"
 	"gopkg.in/karalabe/cookiejar.v2/collections/prque"
 )
 
@@ -149,8 +149,45 @@ var DefaultTxPoolConfig = TxPoolConfig{
 	PriceLimit: 1,
 	PriceBump:  10,
 
+
+	// 控制 txpool 大小的4个参数
+	/**
+	TODO: 缓冲区溢出（交易超过阈值）的三种情况：
+
+	a) all溢出， Count(all) > GlobalSlots + GlobalQueue
+	b) pending溢出, Count(pending) > GlobalSlots
+	c) queue溢出, Count(queue) > GlobalQueue
+
+	todo: 第一种情况起因一般是有新的交易入池，
+	todo: 后两种情况起因除了新交易入池外，还有可能是删除交易或交易替换引起的两者之间的动态调整
+
+	TODO: 对应的处理策略：
+
+	1) all溢出。新交易如果是Unpriced，拒绝；否则删除旧交易，插入新交易
+	2) pending溢出。建立一个关于账户交易数的优先队列，对超过交易数限额AccountSlots的账户进行惩罚，按照图5所示策略剔除交易，降低交易池负载
+	3) queue溢出。删除滞留在queue中最旧的交易。
+
+	首先，建立一个超限额账户的优先队列；取出交易最多的两个账户（第一多和第二多），从交易第一多的账户开始删除交易，直到与第二多相等，
+	如果pending仍溢出，从优先队列中取出下一个账户（第三多），重复前面的过程。
+	最后，如果优先队列为空，pending仍溢出，那么按照账户的取出顺序，每次删除一笔交易，直到pending内交易量小于GlobalSlots阈值
+
+	TODO: 交易过滤
+
+	超时过滤
+	gas最大过滤，GasLimit
+	gasPrice过滤
+	Local白名单
+
+
+	TODO: local交易会被登记入pool.locals，类似一个白名单，`添加交易的时候不对gasPrice进行检查`。缓冲区执行交易剔除相关策略时，不删除在pools.locals中登记账户的交易
+
+	使用本地命令行,且有keystore 在本地的账户发起的tx,即为 local txs
+	 */
+
+	// todo: 前两个与pending缓冲区有关
 	AccountSlots: 16,
 	GlobalSlots:  4096,
+	// todo:  后两个用来限制queue缓冲区大小
 	AccountQueue: 64,
 	GlobalQueue:  1024,
 
@@ -206,6 +243,13 @@ type TxPool struct {
 	locals  *accountSet // Set of local transaction to exempt from eviction rules
 	// 日志本地事务备份到磁盘
 	journal *txJournal  // Journal of local transaction to back up to disk
+
+
+	/**
+	TODO
+	pending中的交易可被立即处理并打包，
+	queue中的交易是nonce-gap交易，当nonce-gap消除后，会被迁移到pending缓存中
+	 */
 
 	// 当前所有可以被执行的 tx
 	pending map[common.Address]*txList   // All currently processable transactions
@@ -287,18 +331,37 @@ func (pool *TxPool) loop() {
 	// 启动统计报告和非法交易移除的代码
 	var prevPending, prevQueued, prevStales int
 
+
 	/**
+	TODO
+	事件处理
+	交易池在符合条件下，会处理以下事件：
+
+	report：统计交易池中pending和queue中交易数量（default 8s）
+	evict：交易失效检查事件（1min），从queue中剔除3个小时前的交易，（类似挂单，超时删除）
+	journal：本地交易日志（缓存pending和queue队列中属于本地的交易，白名单交易，默认存储于transactions.rlp)
+	chainHeadEvent：收到新块后交易池的处理，调用reset
+	*/
+
+
+
+
+	/**
+	TODO
 	每 8 秒钟定时器 (统计报告)
 	 */
 	report := time.NewTicker(statsReportInterval)
 	defer report.Stop()
 
 	/**
-	1 分钟定时器 (移除 非法区块)
+	TODO
+	1 分钟定时器 (移除 非法区块) evict: 逐出
+	从queue中剔除3个小时前的交易
 	 */
 	evict := time.NewTicker(evictionInterval)
 	defer evict.Stop()
 	/**
+	TODO
 	默认为 1 h 定时器 (刷入磁盘)
 	 */
 	journal := time.NewTicker(pool.config.Rejournal)
@@ -311,6 +374,8 @@ func (pool *TxPool) loop() {
 	// Keep waiting for and reacting to the various events
 	for {
 		select {
+
+		// TODO
 		// Handle ChainHeadEvent
 		// 处理 ChainHeadEvent
 		case ev := <-pool.chainHeadCh:
@@ -406,6 +471,8 @@ reset 函数：
 func (pool *TxPool) reset(oldHead, newHead *types.Header) {
 	// If we're reorging an old state, reinject all dropped transactions
 	// 如果我们要 重组 旧状态，请重新注入所有被丢弃的 tx
+	//
+	// 这个是新旧 tx集中额差集
 	var reinject types.Transactions
 
 	// 条件为：
@@ -437,7 +504,7 @@ func (pool *TxPool) reset(oldHead, newHead *types.Header) {
 			 */
 			// 如果旧的最高块 > 新的最高块
 			// 则，说明链 往前重组
-			// 需要将该 就有块的所有 tx收集到 丢弃集
+			// 需要将该旧块的所有 tx收集到 丢弃集
 			for rem.NumberU64() > add.NumberU64() {
 				discarded = append(discarded, rem.Transactions()...)
 				// 往前找下一个旧有块
@@ -461,7 +528,7 @@ func (pool *TxPool) reset(oldHead, newHead *types.Header) {
 
 			// 最终不管是往前找还是往后找
 			// 代码到了这一步 rem 和 add 的块高已经为一样了
-			// 如果 块高一样但是Hash 不一样，
+			// TODO 如果 块高一样但是Hash 不一样，
 			// 则，双方都继续往前找
 			// 直到找到 块高和 Hash都一样为止
 			for rem.Hash() != add.Hash() {
@@ -499,7 +566,7 @@ func (pool *TxPool) reset(oldHead, newHead *types.Header) {
 	pool.currentMaxGas = newHead.GasLimit
 
 	// Inject any transactions discarded due to reorgs
-	// 注入因reorgs而丢弃的任何事务
+	// 注入因reorgs而丢弃的任何 txs
 	// 重新注入 因为 重组而丢弃的tx (也就是之前 的 reinject中的 tx)
 	log.Debug("Reinjecting stale transactions", "count", len(reinject))
 	/**
@@ -675,15 +742,23 @@ func (pool *TxPool) local() map[common.Address]types.Transactions {
 // rules and adheres to some heuristic limits of the local node (price and size).
 func (pool *TxPool) validateTx(tx *types.Transaction, local bool) error {
 	// Heuristic limit, reject transactions over 32KB to prevent DOS attacks
+	//
+	// 启发式限制，拒绝超过32KB的事务以防止DOS攻击
 	if tx.Size() > 32*1024 {
 		return ErrOversizedData
 	}
 	// Transactions can't be negative. This may never happen using RLP decoded
 	// transactions but may occur if you create a transaction using the RPC.
+	//
+	// 交易不能为负。 使用RLP解码的事务可能永远不会发生这种情况，
+	// 但是如果您使用RPC创建事务，则可能会发生这种情况。
+	//
 	if tx.Value().Sign() < 0 {
 		return ErrNegativeValue
 	}
 	// Ensure the transaction doesn't exceed the current block limit gas.
+	//
+	// 确保交易不超过当前的限制气体限额。
 	if pool.currentMaxGas < tx.Gas() {
 		return ErrGasLimit
 	}
@@ -736,6 +811,16 @@ add函数：
 如果新添加的事务被标记为本地，
 则其发送帐户将被列入白名单，
 从而防止由于价格限制而将任何关联的 tx 从池中删除。
+
+TODO :
+交易的来源包括p2p广播和本地节点rpc接收。当txpool接收到交易后，会对每笔交易进行一连串严格的检查
+
+余额
+nonce
+交易Gas
+签名
+交易大小
+交易value，等等
  */
 func (pool *TxPool) add(tx *types.Transaction, local bool) (bool, error) {
 	// If the transaction is already known, discard it
@@ -841,9 +926,12 @@ func (pool *TxPool) add(tx *types.Transaction, local bool) (bool, error) {
 /**
 enqueueTx函数：
 将新 tx插入到非可执行tx队列 queue中。
+
+todo:  Pending —> Queue
  */
 func (pool *TxPool) enqueueTx(hash common.Hash, tx *types.Transaction) (bool, error) {
 	// Try to insert the transaction into the future queue
+	//
 	// 尝试的添加tx到 future queue中
 	from, _ := types.Sender(pool.signer, tx) // already validated
 	if pool.queue[from] == nil {
@@ -899,6 +987,8 @@ promoteTx函数：
 将一个tx添加到pending队列中，并返回它是否 新插入的 还是覆盖了就有的 标识位。
 
 注意，此方法假定 池锁是一直被持有状态的！
+
+todo:  Queue —> Pending
  */
 func (pool *TxPool) promoteTx(addr common.Address, hash common.Hash, tx *types.Transaction) bool {
 	// Try to insert the transaction into the pending queue
@@ -946,6 +1036,11 @@ func (pool *TxPool) AddLocal(tx *types.Transaction) error {
 // AddRemote enqueues a single transaction into the pool if it is valid. If the
 // sender is not among the locally tracked ones, full pricing constraints will
 // apply.
+//
+// 添加 [单个] 远端 tx
+// 即: p2p 广播过来的 tx
+// 如果有效，AddRemote会将单个事务排队入池。 如果sender不在本地跟踪的发件人之内，则将适用全部价格限制。
+// 即: 远端交易是需要校验 gasPrice 的
 func (pool *TxPool) AddRemote(tx *types.Transaction) error {
 	return pool.addTx(tx, false)
 }
@@ -960,6 +1055,8 @@ func (pool *TxPool) AddLocals(txs []*types.Transaction) []error {
 // AddRemotes enqueues a batch of transactions into the pool if they are valid.
 // If the senders are not among the locally tracked ones, full pricing constraints
 // will apply.
+//
+// 逻辑 和  `AddRemote` 一样
 func (pool *TxPool) AddRemotes(txs []*types.Transaction) []error {
 	return pool.addTxs(txs, false)
 }
@@ -974,8 +1071,9 @@ func (pool *TxPool) addTx(tx *types.Transaction, local bool) error {
 	defer pool.mu.Unlock()
 
 	// Try to inject the transaction and update any state
+	//
 	// 尝试去把当前tx 注入到pool中，并且更新相关状态信息 【对tx的校验在这个方法中哦】
-	// replace 表示 pending/queue 中是否有相同nonce值的旧有 tx被新的tx覆盖
+	// todo replace 表示 pending/queue 中是否有相同nonce值的旧有 tx被新的tx覆盖
 	replace, err := pool.add(tx, local)
 	if err != nil {
 		return err
@@ -1052,7 +1150,8 @@ func (pool *TxPool) Get(hash common.Hash) *types.Transaction {
 // removeTx removes a single transaction from the queue, moving all subsequent
 // transactions back to the future queue.
 // removeTx函数：
-// 从queue中删除单个tx，将所有连串的tx移回到 future queue 中。
+// 从 pending 队列中删除单个tx，将所有连串的tx移回到 future queue 中。
+// todo 将pending中的nonce-gap 的tx 从pending移除到 queue中
 func (pool *TxPool) removeTx(hash common.Hash, outofbound bool) {
 	// Fetch the transaction we wish to delete
 	// 获取我们要删除的交易 （从all中获取）
@@ -1398,8 +1497,8 @@ func (pool *TxPool) promoteExecutables(accounts []common.Address) {
 /**
 demoteUnexecutables 函数：
 【这个是和 promoteExecutables 函数对立的一个函数】
-从池可执行/挂起队列中删除无效和已被处理的tx，
-并且任何变为不可执行的后续事务都将移回到 future queue 中。
+从池 executable/ pending队列中删除无效和已被处理的tx，
+并且任何变为不可执行的后续事务都将移回到 future queue [就是 queue中] 中。
  */
 func (pool *TxPool) demoteUnexecutables() {
 	// Iterate over all accounts and demote any non-executable transactions

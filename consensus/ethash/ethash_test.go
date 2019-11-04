@@ -1,18 +1,18 @@
-// Copyright 2017 The go-ethereum Authors
-// This file is part of the go-ethereum library.
+// Copyright 2017 The github.com/go-ethereum-analysis Authors
+// This file is part of the github.com/go-ethereum-analysis library.
 //
-// The go-ethereum library is free software: you can redistribute it and/or modify
+// The github.com/go-ethereum-analysis library is free software: you can redistribute it and/or modify
 // it under the terms of the GNU Lesser General Public License as published by
 // the Free Software Foundation, either version 3 of the License, or
 // (at your option) any later version.
 //
-// The go-ethereum library is distributed in the hope that it will be useful,
+// The github.com/go-ethereum-analysis library is distributed in the hope that it will be useful,
 // but WITHOUT ANY WARRANTY; without even the implied warranty of
 // MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
 // GNU Lesser General Public License for more details.
 //
 // You should have received a copy of the GNU Lesser General Public License
-// along with the go-ethereum library. If not, see <http://www.gnu.org/licenses/>.
+// along with the github.com/go-ethereum-analysis library. If not, see <http://www.gnu.org/licenses/>.
 
 package ethash
 
@@ -25,9 +25,9 @@ import (
 	"testing"
 	"time"
 
-	"go-ethereum/common"
-	"go-ethereum/common/hexutil"
-	"go-ethereum/core/types"
+	"github.com/go-ethereum-analysis/common"
+	"github.com/go-ethereum-analysis/common/hexutil"
+	"github.com/go-ethereum-analysis/core/types"
 )
 
 // Tests that ethash works correctly in test mode.
@@ -49,7 +49,7 @@ func TestTestMode(t *testing.T) {
 }
 
 // This test checks that cache lru logic doesn't crash under load.
-// It reproduces https://go-ethereum/issues/14943
+// It reproduces https://github.com/go-ethereum-analysis/issues/14943
 func TestCacheFileEvict(t *testing.T) {
 	tmpdir, err := ioutil.TempDir("", "ethash-test")
 	if err != nil {
