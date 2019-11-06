@@ -111,6 +111,7 @@ type Config struct {
 
 	// Gas Price Oracle options
 	// Gas 价格的预言机 选项
+	// `预言机` 的作用只是给出 可以设置的 gasPrice 的建议
 	GPO gasprice.Config
 
 	// Enables tracking of SHA3 preimages in the VM

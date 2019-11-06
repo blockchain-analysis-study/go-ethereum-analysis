@@ -204,6 +204,9 @@ func New(ctx *node.ServiceContext, config *Config) (*Ethereum, error) {
 	}
 	eth.txPool = core.NewTxPool(config.TxPool, eth.chainConfig, eth.blockchain)
 
+	/**
+	协议管理器, 主要管理同步之类的
+	 */
 	if eth.protocolManager, err = NewProtocolManager(eth.chainConfig, config.SyncMode, config.NetworkId, eth.eventMux, eth.txPool, eth.engine, eth.blockchain, chainDb); err != nil {
 		return nil, err
 	}
@@ -216,50 +219,55 @@ func New(ctx *node.ServiceContext, config *Config) (*Ethereum, error) {
 	eth.miner.SetExtra(makeExtraData(config.MinerExtraData))
 
 	eth.APIBackend = &EthAPIBackend{eth, nil}
-	gpoParams := config.GPO
+	gpoParams := config.GPO // 获取 `gas 预言机`的配置项
 	if gpoParams.Default == nil {
 		gpoParams.Default = config.MinerGasPrice
 	}
+
+	/**
+	以太坊节点的`预言机`, 主要做gas的估价
+	通过 rpc 接口调用  eth.GasPrice() 查询当前建议设置的 gasPrice 时,实时返回的建议价
+	 */
 	eth.APIBackend.gpo = gasprice.NewOracle(eth.APIBackend, gpoParams)
-	/** 添加调试日志 */
-	blockChain := eth.blockchain
-	genesis := blockChain.Genesis()
-	if genesis.NumberU64() != blockChain.CurrentBlock().NumberU64() {
-
-		currentBlock := blockChain.CurrentBlock()
-		var currBlockNumber uint64
-		var currBlockHash common.Hash
-
-		currBlockNumber = blockChain.CurrentBlock().NumberU64()
-		currBlockHash = blockChain.CurrentBlock().Hash()
-
-		count := 0
-		blockArr := make([]*types.Block, 0)
-		for {
-			if currBlockNumber == genesis.NumberU64() /*|| count == 40*/ {
-				break
-			}
-			/** 添加的调试信息 */
-			stateRoot := blockChain.GetBlock(currBlockHash, currBlockNumber).Root()
-			state, err := blockChain.StateAt(stateRoot)
-			log.Info("启动调试 stateDB:", "currBlockNumber", currBlockNumber, "currBlockHash", currBlockHash, "stateRoot", stateRoot.String())
-			if nil != err {
-				log.Error("启动调试 stateDB:", "err", err)
-				log.Error("启动时调试 stateDB:", "state", state)
-			}
-			parentNum := currBlockNumber - 1
-
-
-			parentHash := currentBlock.ParentHash()
-			blockArr = append(blockArr, currentBlock)
-
-			currBlockNumber = parentNum
-			currBlockHash = parentHash
-			currentBlock = blockChain.GetBlock(currBlockHash, currBlockNumber)
-			count ++
-
-		}
-	}
+	///** 添加调试日志 */
+	//blockChain := eth.blockchain
+	//genesis := blockChain.Genesis()
+	//if genesis.NumberU64() != blockChain.CurrentBlock().NumberU64() {
+	//
+	//	currentBlock := blockChain.CurrentBlock()
+	//	var currBlockNumber uint64
+	//	var currBlockHash common.Hash
+	//
+	//	currBlockNumber = blockChain.CurrentBlock().NumberU64()
+	//	currBlockHash = blockChain.CurrentBlock().Hash()
+	//
+	//	count := 0
+	//	blockArr := make([]*types.Block, 0)
+	//	for {
+	//		if currBlockNumber == genesis.NumberU64() /*|| count == 40*/ {
+	//			break
+	//		}
+	//		/** 添加的调试信息 */
+	//		stateRoot := blockChain.GetBlock(currBlockHash, currBlockNumber).Root()
+	//		state, err := blockChain.StateAt(stateRoot)
+	//		log.Info("启动调试 stateDB:", "currBlockNumber", currBlockNumber, "currBlockHash", currBlockHash, "stateRoot", stateRoot.String())
+	//		if nil != err {
+	//			log.Error("启动调试 stateDB:", "err", err)
+	//			log.Error("启动时调试 stateDB:", "state", state)
+	//		}
+	//		parentNum := currBlockNumber - 1
+	//
+	//
+	//		parentHash := currentBlock.ParentHash()
+	//		blockArr = append(blockArr, currentBlock)
+	//
+	//		currBlockNumber = parentNum
+	//		currBlockHash = parentHash
+	//		currentBlock = blockChain.GetBlock(currBlockHash, currBlockNumber)
+	//		count ++
+	//
+	//	}
+	//}
 
 	return eth, nil
 }

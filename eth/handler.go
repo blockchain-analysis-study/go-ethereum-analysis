@@ -98,8 +98,12 @@ type ProtocolManager struct {
 
 // NewProtocolManager returns a new Ethereum sub protocol manager. The Ethereum sub protocol manages peers capable
 // with the Ethereum network.
+//
+// NewProtocolManager返回一个新的以太坊子协议管理器。 以太坊子协议管理具有以太坊网络功能的peers。
 func NewProtocolManager(config *params.ChainConfig, mode downloader.SyncMode, networkID uint64, mux *event.TypeMux, txpool txPool, engine consensus.Engine, blockchain *core.BlockChain, chaindb ethdb.Database) (*ProtocolManager, error) {
 	// Create the protocol manager with the base fields
+	//
+	// 创建 协议管理器及其一些基础字段
 	manager := &ProtocolManager{
 		networkID:   networkID,
 		eventMux:    mux,
@@ -113,6 +117,7 @@ func NewProtocolManager(config *params.ChainConfig, mode downloader.SyncMode, ne
 		quitSync:    make(chan struct{}),
 	}
 	// Figure out whether to allow fast sync or not
+	// 找出是否允许快速同步
 	if mode == downloader.FastSync && blockchain.CurrentBlock().NumberU64() > 0 {
 		log.Warn("Blockchain not empty, fast sync disabled")
 		mode = downloader.FullSync
@@ -124,15 +129,24 @@ func NewProtocolManager(config *params.ChainConfig, mode downloader.SyncMode, ne
 	manager.SubProtocols = make([]p2p.Protocol, 0, len(ProtocolVersions))
 	for i, version := range ProtocolVersions {
 		// Skip protocol version if incompatible with the mode of operation
+		// 从eth63开始不支持快速同步？
 		if mode == downloader.FastSync && version < eth63 {
 			continue
 		}
 		// Compatible; initialise the sub-protocol
 		version := version // Closure for the run
+
+		/**
+		这里添加了几个回调 函数
+
+		将 node 相关操作 对应的封装到 protocol 实例中
+		 */
 		manager.SubProtocols = append(manager.SubProtocols, p2p.Protocol{
 			Name:    ProtocolName,
 			Version: version,
 			Length:  ProtocolLengths[i],
+
+			// 我是 回调函数 (生成一个 node 实例)
 			Run: func(p *p2p.Peer, rw p2p.MsgReadWriter) error {
 				peer := manager.newPeer(int(version), p, rw)
 				select {
@@ -144,9 +158,13 @@ func NewProtocolManager(config *params.ChainConfig, mode downloader.SyncMode, ne
 					return p2p.DiscQuitting
 				}
 			},
+
+			// 我是 回调函数 (返回 node 的某些信息)
 			NodeInfo: func() interface{} {
 				return manager.NodeInfo()
 			},
+
+			// 我是 回调函数 (返回 node 的真实链接实例)
 			PeerInfo: func(id discover.NodeID) interface{} {
 				if p := manager.peers.Peer(fmt.Sprintf("%x", id[:8])); p != nil {
 					return p.Info()
@@ -158,15 +176,25 @@ func NewProtocolManager(config *params.ChainConfig, mode downloader.SyncMode, ne
 	if len(manager.SubProtocols) == 0 {
 		return nil, errIncompatibleConfig
 	}
+
+	/**
+	初始化一个 downloader 实例
+	 */
 	// Construct the different synchronisation mechanisms
 	manager.downloader = downloader.New(mode, chaindb, manager.eventMux, blockchain, nil, manager.removePeer)
 
+
+	// 一个 校验器函数
 	validator := func(header *types.Header) error {
 		return engine.VerifyHeader(blockchain, header, true)
 	}
+
+	// 一个返回链上最高块 函数
 	heighter := func() uint64 {
 		return blockchain.CurrentBlock().NumberU64()
 	}
+
+	// 一个往链上插入新区块的函数
 	inserter := func(blocks types.Blocks) (int, error) {
 		// If fast sync is running, deny importing weird blocks
 		if atomic.LoadUint32(&manager.fastSync) == 1 {
@@ -176,6 +204,10 @@ func NewProtocolManager(config *params.ChainConfig, mode downloader.SyncMode, ne
 		atomic.StoreUint32(&manager.acceptTxs, 1) // Mark initial sync done on any fetcher import
 		return manager.blockchain.InsertChain(blocks)
 	}
+
+	/**
+	初始化一个 fetcher 实例
+	 */
 	manager.fetcher = fetcher.New(blockchain.GetBlockByHash, validator, manager.BroadcastBlock, heighter, inserter, manager.removePeer)
 
 	return manager, nil
