@@ -200,6 +200,8 @@ func (f *Fetcher) Notify(peer string, hash common.Hash, number uint64, time time
 		fetchHeader: headerFetcher,
 		fetchBodies: bodyFetcher,
 	}
+
+	// 每一次调用 Notify 方法的时候假设 <-f.quit 满足的话，则有可能还是会将 block 黄渤出去的，具体查看 select的使用
 	select {
 	case f.notify <- block:
 		return nil

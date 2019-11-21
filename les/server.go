@@ -94,6 +94,8 @@ func NewLesServer(eth *eth.Ethereum, config *eth.Config) (*LesServer, error) {
 	}
 
 	srv.chtIndexer.Start(eth.BlockChain())
+
+	/** TODO  只有是开启了支持轻节点连接 Server 端的全节点，才会对 pm.server 赋值 */
 	pm.server = srv
 
 	srv.defParams = &flowcontrol.ServerParams{

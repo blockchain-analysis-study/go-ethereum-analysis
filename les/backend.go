@@ -99,9 +99,15 @@ func New(ctx *node.ServiceContext, config *eth.Config) (*LightEthereum, error) {
 	}
 	log.Info("Initialised chain configuration", "config", chainConfig)
 
+	// 实例化一个节点的set
 	peers := newPeerSet()
+
+	// 退出信号 chan
 	quitSync := make(chan struct{})
 
+	/**
+	创建轻节点实例
+	 */
 	leth := &LightEthereum{
 		lesCommons: lesCommons{
 			chainDb: chainDb,

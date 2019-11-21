@@ -109,12 +109,14 @@ type txPool interface {
 }
 
 // statusData is the network packet for the status message.
+//
+// statusData是状态消息的网络数据包。
 type statusData struct {
-	ProtocolVersion uint32
-	NetworkId       uint64
-	TD              *big.Int
-	CurrentBlock    common.Hash
-	GenesisBlock    common.Hash
+	ProtocolVersion uint32  // 协议的版本
+	NetworkId       uint64  // 当前本地节点网络的Id
+	TD              *big.Int // 当前本地节点的最新难度值
+	CurrentBlock    common.Hash // 当前本地节点链上最高块的Hash
+	GenesisBlock    common.Hash // 当前本地节点的创世块Hash
 }
 
 // newBlockHashesData is the network packet for the block announcements.

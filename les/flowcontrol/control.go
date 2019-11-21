@@ -26,10 +26,13 @@ import (
 
 const fcTimeConst = time.Millisecond
 
+// 握手时的重要参数
 type ServerParams struct {
 	BufLimit, MinRecharge uint64
 }
 
+
+// 这是实现一个 轻节点链接的 client端 (就是一个轻节点)
 type ClientNode struct {
 	params   *ServerParams
 	bufValue uint64
@@ -93,6 +96,7 @@ func (peer *ClientNode) RequestProcessed(cost uint64) (bv, realCost uint64) {
 	return peer.bufValue, rcost
 }
 
+// 这是实现一个轻节点链接的 Server端 (一个全节点)
 type ServerNode struct {
 	bufEstimate uint64
 	lastTime    mclock.AbsTime
@@ -124,8 +128,17 @@ func (peer *ServerNode) recalcBLE(time mclock.AbsTime) {
 }
 
 // safetyMargin is added to the flow control waiting time when estimated buffer value is low
+//
+// 当估计的缓冲区值较低时，将safetyMargin添加到流控制等待时间
 const safetyMargin = time.Millisecond
 
+
+//握手时声明的3个参数为：
+//
+// Buffer Limit
+// Maximum Request Cost table
+// Minimum Rate of Recharge
+//
 func (peer *ServerNode) canSend(maxCost uint64) (time.Duration, float64) {
 	peer.recalcBLE(mclock.Now())
 	maxCost += uint64(safetyMargin) * peer.params.MinRecharge / uint64(fcTimeConst)
@@ -141,6 +154,11 @@ func (peer *ServerNode) canSend(maxCost uint64) (time.Duration, float64) {
 // CanSend returns the minimum waiting time required before sending a request
 // with the given maximum estimated cost. Second return value is the relative
 // estimated buffer level after sending the request (divided by BufLimit).
+//
+//
+// CanSend
+// 返回以给定的最大估计成本发送请求之前所需的最短等待时间。
+// 第二个返回值是发送请求后的相对估计缓冲区级别（由BufLimit划分）。
 func (peer *ServerNode) CanSend(maxCost uint64) (time.Duration, float64) {
 	peer.lock.RLock()
 	defer peer.lock.RUnlock()

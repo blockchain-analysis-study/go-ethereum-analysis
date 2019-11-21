@@ -73,8 +73,10 @@ type propEvent struct {
 }
 
 type peer struct {
+	// 表示 远端该节点的Id
 	id string
 
+	// 继承 p2p.Peer实例
 	*p2p.Peer
 	rw p2p.MsgReadWriter
 
@@ -85,8 +87,8 @@ type peer struct {
 	td   *big.Int
 	lock sync.RWMutex
 
-	knownTxs    mapset.Set                // Set of transaction hashes known to be known by this peer
-	knownBlocks mapset.Set                // Set of block hashes known to be known by this peer
+	knownTxs    mapset.Set                // Set of transaction hashes known to be known by this peer  该节点的某些已知的TxHash
+	knownBlocks mapset.Set                // Set of block hashes known to be known by this peer  该节点的某些已知的blockHash
 	queuedTxs   chan []*types.Transaction // Queue of transactions to broadcast to the peer
 	queuedProps chan *propEvent           // Queue of blocks to broadcast to the peer
 	queuedAnns  chan *types.Block         // Queue of blocks to announce to the peer
@@ -175,11 +177,17 @@ func (p *peer) SetHead(hash common.Hash, td *big.Int) {
 
 // MarkBlock marks a block as known for the peer, ensuring that the block will
 // never be propagated to this particular peer.
+//
+// MarkBlock将一个block标记为该peer的已知，以确保该block永远不会传播到该特定peer。
 func (p *peer) MarkBlock(hash common.Hash) {
 	// If we reached the memory allowance, drop a previously known block hash
+	// 如果达到内存允许量，则删除以前已知的块哈希
+	// 每个peer 的结构中只会存该peer 已知的 maxKnownBlocks 个Hash
 	for p.knownBlocks.Cardinality() >= maxKnownBlocks {
+		// 清空该 Set (看源码可知道，底层是一个map的实现，Pop函数使用了 for 清空所有元素)
 		p.knownBlocks.Pop()
 	}
+	// 往该Set中添加
 	p.knownBlocks.Add(hash)
 }
 
@@ -329,13 +337,17 @@ func (p *peer) RequestReceipts(hashes []common.Hash) error {
 
 // Handshake executes the eth protocol handshake, negotiating version number,
 // network IDs, difficulties, head and genesis blocks.
+//
+// 握手执行eth协议握手，协议version，网络ID，当前本地节点的链上最新难度值，当前本地节点的链上最高块head和当前本地节点的创世块。
 func (p *peer) Handshake(network uint64, td *big.Int, head common.Hash, genesis common.Hash) error {
 	// Send out own handshake in a new thread
 	errc := make(chan error, 2)
-	var status statusData // safe to read after two values have been received from errc
+	var status statusData // safe to read after two values have been received from errc   从errc接收到两个值后可以安全读取
 
 	go func() {
+		// 这里发送一个 ok 消息给远端peer
 		errc <- p2p.Send(p.rw, StatusMsg, &statusData{
+			// 填入对端peer的version
 			ProtocolVersion: uint32(p.version),
 			NetworkId:       network,
 			TD:              td,
@@ -362,6 +374,8 @@ func (p *peer) Handshake(network uint64, td *big.Int, head common.Hash, genesis 
 	return nil
 }
 
+
+// 本地节点读取对端peer 发来的消息
 func (p *peer) readStatus(network uint64, status *statusData, genesis common.Hash) (err error) {
 	msg, err := p.rw.ReadMsg()
 	if err != nil {

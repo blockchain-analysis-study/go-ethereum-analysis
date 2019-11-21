@@ -27,7 +27,13 @@ import (
 // requestDistributor implements a mechanism that distributes requests to
 // suitable peers, obeying flow control rules and prioritizing them in creation
 // order (even when a resend is necessary).
+/**
+requestDistributor
+实现了一种将请求分发到合适的peer的机制，
+服从流控制规则并按创建顺序对它们进行优先级排序（即使需要重新发送）。
+ */
 type requestDistributor struct {
+	// 一个队列
 	reqQueue         *list.List
 	lastReqOrder     uint64
 	peers            map[distPeer]struct{}
@@ -42,6 +48,15 @@ type requestDistributor struct {
 // with the given upper estimated cost or the estimated remaining relative buffer
 // value after sending such a request (in which case the request can be sent
 // immediately). At least one of these values is always zero.
+//
+//
+/**
+distPeer是请求分发器的 LES服务器peer 接口。
+waitBefore在发送具有给定的较高估计成本的请求之前返回必需的等待时间，
+或者在发送此类请求之后返回估计的剩余相对缓冲区估计值
+（在这种情况下，可以立即发送请求）。 这些值中的至少一个始终为零。
+
+ */
 type distPeer interface {
 	waitBefore(uint64) (time.Duration, float64)
 	canQueue() bool
@@ -56,6 +71,22 @@ type distPeer interface {
 // does the actual sending. Request order should be preserved but the callback itself should not
 // block until it is sent because other peers might still be able to receive requests while
 // one of them is blocking. Instead, the returned function is put in the peer's send queue.
+//
+//
+/**
+distReq是分发服务器使用的请求抽象。 它基于三个回调函数：
+
+- getCost 返回将请求发送到给定peer的开销的上限
+
+- canSend 告知服务器peer是否适合处理请求
+
+- request 准备将请求发送到给定的peer，并返回执行实际发送的功能。
+
+应保留请求顺序，但回调请求本身必须等到发送后再阻塞，
+因为其他peer可能仍能在其中一个阻塞时接收请求。
+而是将返回的函数放在peer的发送队列中。
+
+ */
 type distReq struct {
 	getCost func(distPeer) uint64
 	canSend func(distPeer) bool
@@ -67,14 +98,20 @@ type distReq struct {
 }
 
 // newRequestDistributor creates a new request distributor
+// 创建一个 请求分发器
 func newRequestDistributor(peers *peerSet, stopChn chan struct{}) *requestDistributor {
 	d := &requestDistributor{
+		// 初始化请求的队列
 		reqQueue: list.New(),
+		// loop 信号chan
 		loopChn:  make(chan struct{}, 2),
+		// 退出信号 chan
 		stopChn:  stopChn,
+		// 缓存对端peer实例的 map
 		peers:    make(map[distPeer]struct{}),
 	}
 	if peers != nil {
+		// 逐个注册 peers中的 peer 到 请求分发器中
 		peers.notify(d)
 	}
 	go d.loop()
@@ -82,6 +119,7 @@ func newRequestDistributor(peers *peerSet, stopChn chan struct{}) *requestDistri
 }
 
 // registerPeer implements peerSetNotify
+// 将所有某个时刻的 peerSet中的所有peer 注册到自己
 func (d *requestDistributor) registerPeer(p *peer) {
 	d.peerLock.Lock()
 	d.peers[p] = struct{}{}
@@ -89,6 +127,7 @@ func (d *requestDistributor) registerPeer(p *peer) {
 }
 
 // unregisterPeer implements peerSetNotify
+// 移除 peer
 func (d *requestDistributor) unregisterPeer(p *peer) {
 	d.peerLock.Lock()
 	delete(d.peers, p)
@@ -110,17 +149,27 @@ const distMaxWait = time.Millisecond * 10
 func (d *requestDistributor) loop() {
 	for {
 		select {
+
+		// 是否接收到 退出信号
 		case <-d.stopChn:
 			d.lock.Lock()
+
+			// 返回 队列中记录的 next 元素
 			elem := d.reqQueue.Front()
+
+			// 清空 队列中的 元素
 			for elem != nil {
 				close(elem.Value.(*distReq).sentChn)
 				elem = elem.Next()
 			}
 			d.lock.Unlock()
 			return
+
+		// 接收到 loop 信号
 		case <-d.loopChn:
 			d.lock.Lock()
+
+			// 先初始化 标识位 `loopNextSent`
 			d.loopNextSent = false
 		loop:
 			for {
@@ -171,8 +220,13 @@ func (sp selectPeerItem) Weight() int64 {
 
 // nextRequest returns the next possible request from any peer, along with the
 // associated peer and necessary waiting time
+//
+// nextRequest从任何peer返回下一个可能的请求，以及关联的peer和必要的等待时间
 func (d *requestDistributor) nextRequest() (distPeer, *distReq, time.Duration) {
+
+	// 初始化一个 有待 请求分发器检查的 les服务 peer的map
 	checkedPeers := make(map[distPeer]struct{})
+	// 从分发器的 peers缓存队列中取出next元素
 	elem := d.reqQueue.Front()
 	var (
 		bestPeer distPeer
@@ -185,11 +239,19 @@ func (d *requestDistributor) nextRequest() (distPeer, *distReq, time.Duration) {
 	defer d.peerLock.RUnlock()
 
 	for (len(d.peers) > 0 || elem == d.reqQueue.Front()) && elem != nil {
+
+		// 获取 元素中对应的  req (请求， 可能是否个方法的调用干什么的) 实例
 		req := elem.Value.(*distReq)
+
+		// 是否可以发送请求了(即： 可以有资源处理请求了)
 		canSend := false
+
+		// 遍历所有peer
 		for peer := range d.peers {
+			// 去重 且 告知服务器peer是否适合处理请求
 			if _, ok := checkedPeers[peer]; !ok && peer.canQueue() && req.canSend(peer) {
 				canSend = true
+				// 返回将请求发送到给定peer的开销的上限
 				cost := req.getCost(peer)
 				wait, bufRemain := peer.waitBefore(cost)
 				if wait == 0 {

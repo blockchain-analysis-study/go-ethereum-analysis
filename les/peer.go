@@ -49,6 +49,7 @@ const (
 	announceTypeSigned
 )
 
+// light 模式下的节点实例
 type peer struct {
 	*p2p.Peer
 	pubKey *ecdsa.PublicKey
@@ -363,6 +364,8 @@ func (m keyValueMap) get(key string, val interface{}) error {
 	return rlp.DecodeBytes(enc, val)
 }
 
+
+// 处理 P2P 的 Send和Receive 列表
 func (p *peer) sendReceiveHandshake(sendList keyValueList) (keyValueList, error) {
 	// Send out own handshake in a new thread
 	errc := make(chan error, 1)
@@ -393,10 +396,24 @@ func (p *peer) sendReceiveHandshake(sendList keyValueList) (keyValueList, error)
 
 // Handshake executes the les protocol handshake, negotiating version number,
 // network IDs, difficulties, head and genesis blocks.
+/**
+握手执行les协议握手，协议版本号，网络ID，困难，头部和创世块块。
+ */
 func (p *peer) Handshake(td *big.Int, head common.Hash, headNum uint64, genesis common.Hash, server *LesServer) error {
 	p.lock.Lock()
 	defer p.lock.Unlock()
 
+	// TODO 握手时声明的3个参数为：
+	//
+	// todo 在server(全节点)对client(轻节点)提供服务，在双方建立连接握手时，server会声名3个流量控制参数，如果在服务过程中，client不遵守协议，client将会被终止服务。
+	//
+	// Buffer Limit
+	// Maximum Request Cost table
+	// Minimum Rate of Recharge
+	//
+
+
+	// 收集 各种握手时的参数
 	var send keyValueList
 	send = send.add("protocolVersion", uint64(p.version))
 	send = send.add("networkId", p.network)
@@ -409,15 +426,19 @@ func (p *peer) Handshake(td *big.Int, head common.Hash, headNum uint64, genesis 
 		send = send.add("serveChainSince", uint64(0))
 		send = send.add("serveStateSince", uint64(0))
 		send = send.add("txRelay", nil)
-		send = send.add("flowControl/BL", server.defParams.BufLimit)
-		send = send.add("flowControl/MRR", server.defParams.MinRecharge)
+		send = send.add("flowControl/BL", server.defParams.BufLimit)    // 握手的 Buffer Limit
+		send = send.add("flowControl/MRR", server.defParams.MinRecharge)// 握手时 Minimum Rate of Recharge
 		list := server.fcCostStats.getCurrentList()
-		send = send.add("flowControl/MRC", list)
+		send = send.add("flowControl/MRC", list)   // 握手时的 Maximum Request Cost table
 		p.fcCosts = list.decode()
 	} else {
 		p.requestAnnounceType = announceTypeSimple // set to default until "very light" client mode is implemented
 		send = send.add("announceType", p.requestAnnounceType)
 	}
+
+	/**
+	TODO 这里处理 p2p 的 send/receive
+	 */
 	recvList, err := p.sendReceiveHandshake(send)
 	if err != nil {
 		return err
@@ -428,6 +449,7 @@ func (p *peer) Handshake(td *big.Int, head common.Hash, headNum uint64, genesis 
 	var rVersion, rNetwork, rNum uint64
 	var rTd *big.Int
 
+	// 获取必须的对端响应回来的p2p信息
 	if err := recv.get("protocolVersion", &rVersion); err != nil {
 		return err
 	}
@@ -447,6 +469,7 @@ func (p *peer) Handshake(td *big.Int, head common.Hash, headNum uint64, genesis 
 		return err
 	}
 
+	// 做一下必须的几个参数的合法性校验
 	if rGenesis != genesis {
 		return errResp(ErrGenesisBlockMismatch, "%x (!= %x)", rGenesis[:8], genesis[:8])
 	}
@@ -456,6 +479,10 @@ func (p *peer) Handshake(td *big.Int, head common.Hash, headNum uint64, genesis 
 	if int(rVersion) != p.version {
 		return errResp(ErrProtocolVersionMismatch, "%d (!= %d)", rVersion, p.version)
 	}
+
+
+	// 根据条件 选择性的获取 参数
+	// todo 如果当前本地节点是 server
 	if server != nil {
 		// until we have a proper peer connectivity API, allow LES connection to other servers
 		/*if recv.get("serveStateSince", nil) == nil {
@@ -464,6 +491,7 @@ func (p *peer) Handshake(td *big.Int, head common.Hash, headNum uint64, genesis 
 		if recv.get("announceType", &p.announceType) != nil {
 			p.announceType = announceTypeSimple
 		}
+		// 则，确认对端节点实例 p 是 client
 		p.fcClient = flowcontrol.NewClientNode(server.fcManager, server.defParams)
 	} else {
 		if recv.get("serveChainSince", nil) != nil {
@@ -476,21 +504,23 @@ func (p *peer) Handshake(td *big.Int, head common.Hash, headNum uint64, genesis 
 			return errResp(ErrUselessPeer, "peer cannot relay transactions")
 		}
 		params := &flowcontrol.ServerParams{}
-		if err := recv.get("flowControl/BL", &params.BufLimit); err != nil {
+		if err := recv.get("flowControl/BL", &params.BufLimit); err != nil { // 轻节点握手中重要参数之一
 			return err
 		}
-		if err := recv.get("flowControl/MRR", &params.MinRecharge); err != nil {
+		if err := recv.get("flowControl/MRR", &params.MinRecharge); err != nil { // 轻节点握手中重要参数之二
 			return err
 		}
 		var MRC RequestCostList
-		if err := recv.get("flowControl/MRC", &MRC); err != nil {
+		if err := recv.get("flowControl/MRC", &MRC); err != nil { // 轻节点握手中重要参数之三
 			return err
 		}
 		p.fcServerParams = params
+		// 否则，确认对端节点实例 p 是 server
 		p.fcServer = flowcontrol.NewServerNode(params)
 		p.fcCosts = MRC.decode()
 	}
 
+	// 组装对端节点的 block的当前 head信息
 	p.headInfo = &announceData{Td: rTd, Hash: rHash, Number: rNum}
 	return nil
 }
@@ -504,6 +534,9 @@ func (p *peer) String() string {
 
 // peerSetNotify is a callback interface to notify services about added or
 // removed peers
+/**
+peerSetNotify是一个回调接口，用于通知服务有关已添加或已删除的peer
+ */
 type peerSetNotify interface {
 	registerPeer(*peer)
 	unregisterPeer(*peer)
@@ -514,6 +547,7 @@ type peerSetNotify interface {
 type peerSet struct {
 	peers      map[string]*peer
 	lock       sync.RWMutex
+	// 记录所有发过 notify 通知给 peerSet中的peer 的 notify实例
 	notifyList []peerSetNotify
 	closed     bool
 }
@@ -526,16 +560,31 @@ func newPeerSet() *peerSet {
 }
 
 // notify adds a service to be notified about added or removed peers
+/**
+notify
+添加一项服务，以通知有关已添加或已删除的peer
+ */
 func (ps *peerSet) notify(n peerSetNotify) {
 	ps.lock.Lock()
 	ps.notifyList = append(ps.notifyList, n)
+
+	// 初始化一个 peer 的切片， 长度等于 peerSet的长度
 	peers := make([]*peer, 0, len(ps.peers))
+
+	// 逐个将peerSet中的peer添加到 该切片中，以便下面 for 调用
+	// 为什么需要先加到 切片中再for 切片，而不是直接for peerSet ？
+	// 因为 peerSet 无时不刻都可能有新的peer加进来，而n.registerPeer的调用时间可能很久，
+	// 逐个调用的话还需要在 lock 中做，就会导致这个lock 会很长
+	// 但是在lock中直接做 append 耗时很快
+	// todo 还有一种好的写法是，在lock中启用 goroutine 调用 n.registerPeer
+	// (相当于取了个 peerSet 的快照)
 	for _, p := range ps.peers {
 		peers = append(peers, p)
 	}
 	ps.lock.Unlock()
 
 	for _, p := range peers {
+		// 调用 Notify实例 逐个注册 peerSet中的 peer
 		n.registerPeer(p)
 	}
 }

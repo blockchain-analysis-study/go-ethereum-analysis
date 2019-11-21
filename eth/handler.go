@@ -72,7 +72,7 @@ type ProtocolManager struct {
 	txpool      txPool
 	blockchain  *core.BlockChain
 	chainconfig *params.ChainConfig
-	maxPeers    int
+	maxPeers    int  //本地节点做大允许连接的远端节点数目
 
 	downloader *downloader.Downloader
 	fetcher    *fetcher.Fetcher
@@ -280,21 +280,30 @@ func (pm *ProtocolManager) newPeer(pv int, p *p2p.Peer, rw p2p.MsgReadWriter) *p
 
 // handle is the callback invoked to manage the life cycle of an eth peer. When
 // this function terminates, the peer is disconnected.
+/**
+handle是用于管理eth对等方 (远端peer) 生命周期的回调。 此功能终止时，对等方(当前本地节点和远点节点)断开连接。
+
+todo 入参数一个远点peer 的封装
+ */
 func (pm *ProtocolManager) handle(p *peer) error {
 	// Ignore maxPeers if this is a trusted peer
+	// 如果该远端节点是一个可信任的节点的话，则忽略掉pm的set中的大小
 	if pm.peers.Len() >= pm.maxPeers && !p.Peer.Info().Network.Trusted {
+		// 否则，表示发现了太多的节点了
 		return p2p.DiscTooManyPeers
 	}
 	p.Log().Debug("Ethereum peer connected", "name", p.Name())
 
 	// Execute the Ethereum handshake
 	var (
-		genesis = pm.blockchain.Genesis()
-		head    = pm.blockchain.CurrentHeader()
-		hash    = head.Hash()
-		number  = head.Number.Uint64()
-		td      = pm.blockchain.GetTd(hash, number)
+		genesis = pm.blockchain.Genesis()			// 创世块
+		head    = pm.blockchain.CurrentHeader()		// 当前链上最高块header
+		hash    = head.Hash()						// 当前最高块的Hash
+		number  = head.Number.Uint64()				// 当前最高块的Number
+		td      = pm.blockchain.GetTd(hash, number) // 当前链上的最新难度值
 	)
+
+	// 处理当前本地节点和 该远点节点p的破p消息
 	if err := p.Handshake(pm.networkID, td, hash, genesis.Hash()); err != nil {
 		p.Log().Debug("Ethereum handshake failed", "err", err)
 		return err
@@ -347,6 +356,10 @@ func (pm *ProtocolManager) handle(p *peer) error {
 
 // handleMsg is invoked whenever an inbound message is received from a remote
 // peer. The remote connection is torn down upon returning any error.
+/**
+TODO 超级重要的一个方法
+每当从远程peer收到入站消息时，都会调用handleMsg。 返回任何错误后，远程连接将被断开。
+ */
 func (pm *ProtocolManager) handleMsg(p *peer) error {
 	// Read the next message from the remote peer, and ensure it's fully consumed
 	msg, err := p.rw.ReadMsg()
@@ -643,13 +656,27 @@ func (pm *ProtocolManager) handleMsg(p *peer) error {
 			log.Debug("Failed to deliver receipts", "err", err)
 		}
 
+
+	/**
+	这里接受与一个 新的blocks的Hash消息
+	多个block的Hash 哦
+	远端的该peer 发过来的 一些列BlockHash
+	 */
 	case msg.Code == NewBlockHashesMsg:
+
+		// 这个是封装了多个Hash 和number 的结构
 		var announces newBlockHashesData
+
+		// 从接收到的消息体中解析出多个 Hash 和number
 		if err := msg.Decode(&announces); err != nil {
 			return errResp(ErrDecode, "%v: %v", msg, err)
 		}
 		// Mark the hashes as present at the remote node
+		//
+		// 标识 这些从当前远端节点发过来的 Hash
 		for _, block := range announces {
+
+			// 在该远端节点实例的相关容器中 记录标识 下这些block的Hash (为了去重用)
 			p.MarkBlock(block.Hash)
 		}
 		// Schedule all the unknown hashes for retrieval

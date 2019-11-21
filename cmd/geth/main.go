@@ -343,6 +343,11 @@ func startNode(ctx *cli.Context, stack *node.Node) {
 	}()
 	// Start auxiliary services if enabled
 	if ctx.GlobalBool(utils.MiningEnabledFlag.Name) || ctx.GlobalBool(utils.DeveloperFlag.Name) {
+		/**
+		在正常模式下(开启 mine) 或者 开发模式下
+		如果是 --syncmode light
+		则，不支持 (轻节点不支持 挖矿和开发模式)
+		 */
 		// Mining only makes sense if a full Ethereum node is running
 		if ctx.GlobalString(utils.SyncModeFlag.Name) == "light" {
 			utils.Fatalf("Light clients do not support mining")

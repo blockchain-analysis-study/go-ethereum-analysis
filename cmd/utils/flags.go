@@ -1375,7 +1375,7 @@ func RegisterEthService(stack *node.Node, cfg *eth.Config) {
 	// 判断当前需要的 同步模式
 	if cfg.SyncMode == downloader.LightSync {
 
-		/** 注册轻节点的 eth 服务 */
+		/** 注册轻节点的 eth 服务  */ // 轻节点只能看作是全节点的  client ; 启动时添加: --syncmode light
 		err = stack.Register(func(ctx *node.ServiceContext) (node.Service, error) {
 			/** 创建一个 轻节点的 服务 */
 			return les.New(ctx, cfg)
@@ -1390,7 +1390,9 @@ func RegisterEthService(stack *node.Node, cfg *eth.Config) {
 
 			// 当 全节点不为空， 且允许具备轻节点服务时
 			if fullNode != nil && cfg.LightServ > 0 {
-				/** 创建一个 轻节点实例 */
+				//  启动时添加: --lightpeers 4 --lightserv 10
+				//  lightpeers指字最大支持的轻节点链接数，lightserv指字为轻节点服务的最大时间比例
+				/** 创建一个 轻节点Server实例 */  // 这个模式是指: 当前 全节点支持和轻节点链接(该全节点为轻节点的 Server 端)
 				ls, _ := les.NewLesServer(fullNode, cfg)
 
 				// 添加到全节点中

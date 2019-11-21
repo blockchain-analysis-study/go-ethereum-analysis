@@ -97,7 +97,7 @@ type ProtocolManager struct {
 	blockchain  BlockChain
 	chainDb     ethdb.Database
 	odr         *LesOdr
-	server      *LesServer
+	server      *LesServer  // todo TODO  只有是开启了支持轻节点连接 Server 端的全节点，才会对 pm.server 赋值
 	serverPool  *serverPool
 	clientPool  *freeClientPool
 	lesTopic    discv5.Topic
@@ -241,6 +241,9 @@ func (pm *ProtocolManager) newPeer(pv int, nv uint64, p *p2p.Peer, rw p2p.MsgRea
 func (pm *ProtocolManager) handle(p *peer) error {
 	// Ignore maxPeers if this is a trusted peer
 	// In server mode we try to check into the client pool after handshake
+	//
+	// 如果是 light 模式 且 和对端的链接数越界 且对端不是可信任节点的话，
+	// 则，直接返回错误
 	if pm.lightSync && pm.peers.Len() >= pm.maxPeers && !p.Peer.Info().Network.Trusted {
 		return p2p.DiscTooManyPeers
 	}
@@ -255,6 +258,11 @@ func (pm *ProtocolManager) handle(p *peer) error {
 		number  = head.Number.Uint64()
 		td      = pm.blockchain.GetTd(hash, number)
 	)
+
+
+	/**
+	TODO 处理 轻节点和全节点 握手
+	 */
 	if err := p.Handshake(td, hash, number, genesis.Hash(), pm.server); err != nil {
 		p.Log().Debug("Light Ethereum handshake failed", "err", err)
 		return err
@@ -276,6 +284,7 @@ func (pm *ProtocolManager) handle(p *peer) error {
 		rw.Init(p.version)
 	}
 	// Register the peer locally
+	// 握手成功则，在当前节点的 peerSet 中注册一个对端节点的实例
 	if err := pm.peers.Register(p); err != nil {
 		p.Log().Error("Light Ethereum peer registration failed", "err", err)
 		return err

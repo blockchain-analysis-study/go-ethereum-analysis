@@ -100,7 +100,10 @@ type PeerEvent struct {
 
 // Peer represents a connected remote node.
 type Peer struct {
+	// 一个和远端该节点的链接实例
 	rw      *conn
+
+	//
 	running map[string]*protoRW
 	log     log.Logger
 	created mclock.AbsTime
@@ -424,7 +427,7 @@ type PeerInfo struct {
 		LocalAddress  string `json:"localAddress"`  // Local endpoint of the TCP data connection
 		RemoteAddress string `json:"remoteAddress"` // Remote endpoint of the TCP data connection
 		Inbound       bool   `json:"inbound"`
-		Trusted       bool   `json:"trusted"`
+		Trusted       bool   `json:"trusted"`  // 节点的信任标识
 		Static        bool   `json:"static"`
 	} `json:"network"`
 	Protocols map[string]interface{} `json:"protocols"` // Sub-protocol specific metadata fields
