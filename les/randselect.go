@@ -29,6 +29,8 @@ type wrsItem interface {
 }
 
 // weightedRandomSelect is capable of weighted random selection from a set of items
+//
+// weightedRandomSelect能够从一组项目中进行加权随机选择
 type weightedRandomSelect struct {
 	root *wrsNode
 	idx  map[wrsItem]int
@@ -41,6 +43,8 @@ func newWeightedRandomSelect() *weightedRandomSelect {
 
 // update updates an item's weight, adds it if it was non-existent or removes it if
 // the new weight is zero. Note that explicitly updating decreasing weights is not necessary.
+//
+// update: 将更新项目的权重，如果不存在则将其添加，如果新权重为零，则将其删除。 请注意，无需显式更新减小的权重。
 func (w *weightedRandomSelect) update(item wrsItem) {
 	w.setWeight(item, item.Weight())
 }
@@ -76,17 +80,31 @@ func (w *weightedRandomSelect) setWeight(item wrsItem, weight int64) {
 // current weight. If the weight of the chosen element has been decreased since the
 // last stored value, returns it with a newWeight/oldWeight chance, otherwise just
 // updates its weight and selects another one
+//
+/**
+choose: 从集合中随机选择一个项目，其机会与其当前重量成正比。
+如果自上次存储的值以来所选元素的权重已减小，
+则以newWeight / oldWeight机会返回它，
+否则只需更新其权重并选择另一个
+ */
 func (w *weightedRandomSelect) choose() wrsItem {
 	for {
 		if w.root.sumWeight == 0 {
 			return nil
 		}
+		// 现根据 trei上所有item 的总权重,随机出一个值
 		val := rand.Int63n(w.root.sumWeight)
+		// 返回一个第一个满足条件的 item 和 某个权重
 		choice, lastWeight := w.root.choose(val)
+		// 或全部Item自己的权重
 		weight := choice.Weight()
+		// 对比一下权重
 		if weight != lastWeight {
+			// 重置权重
 			w.setWeight(choice, weight)
 		}
+
+		// 如果满足条件则,直接返回 item
 		if weight >= lastWeight || rand.Int63n(lastWeight) < weight {
 			return choice
 		}
@@ -156,6 +174,8 @@ func (n *wrsNode) setWeight(idx int, weight int64) int64 {
 }
 
 // choose recursively selects an item from the tree and returns it along with its weight
+//
+// choose: 从trie中递归地选择一个项目，并将其连同其权重一起返回
 func (n *wrsNode) choose(val int64) (wrsItem, int64) {
 	for i, w := range n.weights {
 		if val < w {

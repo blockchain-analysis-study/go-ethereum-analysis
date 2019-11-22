@@ -101,7 +101,9 @@ type ProtocolManager struct {
 	serverPool  *serverPool
 	clientPool  *freeClientPool
 	lesTopic    discv5.Topic
+	// 请求分发器
 	reqDist     *requestDistributor
+	// 猎犬(请求分发器的更上一层)
 	retriever   *retrieveManager
 
 	downloader *downloader.Downloader
@@ -143,16 +145,18 @@ func NewProtocolManager(chainConfig *params.ChainConfig, lightSync bool, network
 		noMorePeers: make(chan struct{}),
 	}
 	if odr != nil {
-		manager.retriever = odr.retriever
-		manager.reqDist = odr.retriever.dist
+		manager.retriever = odr.retriever    // 请求分发器
+		manager.reqDist = odr.retriever.dist // 猎犬 (请求分发器更上一层)
 	}
 
+	// 获取 removePeerFunc 的指针
 	removePeer := manager.removePeer
 	if disableClientRemovePeer {
 		removePeer = func(id string) {}
 	}
 
 	if lightSync {
+		/** TODO 大头 light 模式的 download 相关*/
 		manager.downloader = downloader.New(downloader.LightSync, chainDb, manager.eventMux, nil, blockchain, removePeer)
 		manager.peers.notify((*downloaderPeerNotify)(manager))
 		manager.fetcher = newLightFetcher(manager)
@@ -1183,6 +1187,7 @@ func (pm *ProtocolManager) txStatus(hashes []common.Hash) []txStatus {
 }
 
 // downloaderPeerNotify implements peerSetNotify
+// peerSetNotify 的一个实现
 type downloaderPeerNotify ProtocolManager
 
 type peerConnection struct {

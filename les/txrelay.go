@@ -24,23 +24,32 @@ import (
 )
 
 type ltrInfo struct {
+	// tx详情
 	tx     *types.Transaction
+	// 被发送给了哪些节点
 	sentTo map[*peer]struct{}
 }
 
+// peerSetNotify 的一个实现
 type LesTxRelay struct {
+	// 记录已发送的tx
 	txSent       map[common.Hash]*ltrInfo
+	// 记录还没发送的tx
 	txPending    map[common.Hash]struct{}
+	// 和当前节点互联的对端节点集
 	ps           *peerSet
+	//
 	peerList     []*peer
 	peerStartPos int
 	lock         sync.RWMutex
 
+	// 请求分发器的指针
 	reqDist *requestDistributor
 }
 
 func NewLesTxRelay(ps *peerSet, reqDist *requestDistributor) *LesTxRelay {
 	r := &LesTxRelay{
+		//
 		txSent:    make(map[common.Hash]*ltrInfo),
 		txPending: make(map[common.Hash]struct{}),
 		ps:        ps,

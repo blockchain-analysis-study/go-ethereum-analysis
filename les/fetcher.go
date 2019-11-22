@@ -39,6 +39,8 @@ const (
 // lightFetcher implements retrieval of newly announced headers. It also provides a peerHasBlock function for the
 // ODR system to ensure that we only request data related to a certain block from peers who have already processed
 // and announced that block.
+//
+// peerSetNotify 的一个实现
 type lightFetcher struct {
 	pm    *ProtocolManager
 	odr   *LesOdr
@@ -46,6 +48,9 @@ type lightFetcher struct {
 
 	lock            sync.Mutex // lock protects access to the fetcher's internal state variables except sent requests
 	maxConfirmedTd  *big.Int
+
+	// 存储 peer指针 与之链接的对端peer
+	// 我擦,使用指针来作为map的key??
 	peers           map[*peer]*fetcherPeerInfo
 	lastUpdateStats *updateStatsEntry
 	syncing         bool
@@ -59,6 +64,8 @@ type lightFetcher struct {
 }
 
 // fetcherPeerInfo holds fetcher-specific information about each active peer
+//
+// fetcherPeerInfo保存有关每个活动peer的特定于访存器的信息
 type fetcherPeerInfo struct {
 	root, lastAnnounced *fetcherTreeNode
 	nodeCnt             int
@@ -106,6 +113,7 @@ type fetchResponse struct {
 
 // newLightFetcher creates a new light fetcher
 func newLightFetcher(pm *ProtocolManager) *lightFetcher {
+	// peerSetNotify 的一个实现
 	f := &lightFetcher{
 		pm:             pm,
 		chain:          pm.blockchain.(*light.LightChain),
@@ -118,15 +126,20 @@ func newLightFetcher(pm *ProtocolManager) *lightFetcher {
 		syncDone:       make(chan *peer),
 		maxConfirmedTd: big.NewInt(0),
 	}
+	// 这里和 请求分发器一样 (主要是将 peerSet中的p注册到f中)
 	pm.peers.notify(f)
 
 	f.pm.wg.Add(1)
+
+	// TODO  处理 f 的逻辑, 超级重要
 	go f.syncLoop()
 	return f
 }
 
 // syncLoop is the main event loop of the light fetcher
 func (f *lightFetcher) syncLoop() {
+
+	// 是否正在和对端节点做 fecher 连接中?
 	requesting := false
 	defer f.pm.wg.Done()
 	for {
@@ -135,6 +148,9 @@ func (f *lightFetcher) syncLoop() {
 			return
 		// when a new announce is received, request loop keeps running until
 		// no further requests are necessary or possible
+		//
+		// 当收到新的通知时，请求循环将继续运行，直到不再需要或可能没有其他请求为止
+		//
 		case newAnnounce := <-f.requestChn:
 			f.lock.Lock()
 			s := requesting
@@ -143,14 +159,26 @@ func (f *lightFetcher) syncLoop() {
 				rq    *distReq
 				reqID uint64
 			)
+
+			// 如果不是同步中,且收到新
 			if !f.syncing && !(newAnnounce && s) {
+
+				// 获取下一个请求,及随机生成的reqId
+				// TODO 这个 贼鸡 重要
+				// 在这里面返回 distReq 实体啊
+				// distReq 最终会追加到 请求分发器中的啊
 				rq, reqID = f.nextRequest()
 			}
+
+			// 获取 同步标识位
 			syncing := f.syncing
 			f.lock.Unlock()
 
 			if rq != nil {
 				requesting = true
+				// 根据 f.pm.reqDist.queue() 返回的chan中获取 响应的值
+				// 注意 reqDist 是那个 `请求分发器` 的引用
+				// 所以这里返回的chan 中的响应由 分发器的方法中回填信号
 				_, ok := <-f.pm.reqDist.queue(rq)
 				if !ok {
 					f.requestChn <- false
@@ -171,6 +199,7 @@ func (f *lightFetcher) syncLoop() {
 					}()
 				}
 			}
+		// 处理 超时请求
 		case reqID := <-f.timeoutChn:
 			f.reqMu.Lock()
 			req, ok := f.requested[reqID]
@@ -179,10 +208,14 @@ func (f *lightFetcher) syncLoop() {
 			}
 			f.reqMu.Unlock()
 			if ok {
+				// 调整响应时间
 				f.pm.serverPool.adjustResponseTime(req.peer.poolEntry, time.Duration(mclock.Now()-req.sent), true)
 				req.peer.Log().Debug("Fetching data timed out hard")
+				// 从pm中移除超时的 对端peer
 				go f.pm.removePeer(req.peer.id)
 			}
+
+		// 处理响应
 		case resp := <-f.deliverChn:
 			f.reqMu.Lock()
 			req, ok := f.requested[resp.reqID]
@@ -202,6 +235,7 @@ func (f *lightFetcher) syncLoop() {
 				go f.pm.removePeer(resp.peer.id)
 			}
 			f.lock.Unlock()
+		// 处理 同步结束信号
 		case p := <-f.syncDone:
 			f.lock.Lock()
 			p.Log().Debug("Done synchronising with peer")
@@ -375,6 +409,8 @@ func (f *lightFetcher) peerHasBlock(p *peer, hash common.Hash, number uint64) bo
 
 // requestAmount calculates the amount of headers to be downloaded starting
 // from a certain head backwards
+//
+// requestAmount计算从特定header开始向后下载的header的数量
 func (f *lightFetcher) requestAmount(p *peer, n *fetcherTreeNode) uint64 {
 	amount := uint64(0)
 	nn := n
@@ -398,17 +434,28 @@ func (f *lightFetcher) requestedID(reqID uint64) bool {
 
 // nextRequest selects the peer and announced head to be requested next, amount
 // to be downloaded starting from the head backwards is also returned
+//
+// nextRequest选择 对端peer 并宣布下一步要请求的head，还返回从head开始向后下载的数量
+//
 func (f *lightFetcher) nextRequest() (*distReq, uint64) {
 	var (
 		bestHash   common.Hash
 		bestAmount uint64
 	)
-	bestTd := f.maxConfirmedTd
-	bestSyncing := false
 
+	bestTd := f.maxConfirmedTd  // 初始化难度值
+	bestSyncing := false		// 初始化 同步标识位
+
+	// 逐个获取peer 和 fecherPeerInfo
+	// fecherPeerInfo中存在一个trie
+	// fetcherPeerInfo保存有关每个活动peer的特定于访存器的信息
 	for p, fp := range f.peers {
+		// 遍历该peer的所有 访存器
 		for hash, n := range fp.nodeByHash {
+
+			// 逐个教研检查,逐个对比td
 			if !f.checkKnownNode(p, n) && !n.requested && (bestTd == nil || n.td.Cmp(bestTd) >= 0) {
+				// 计算从特定header开始向后下载的header的数量
 				amount := f.requestAmount(p, n)
 				if bestTd == nil || n.td.Cmp(bestTd) > 0 || amount < bestAmount {
 					bestHash = hash
@@ -423,11 +470,20 @@ func (f *lightFetcher) nextRequest() (*distReq, uint64) {
 		return nil, 0
 	}
 
+
+	//
 	f.syncing = bestSyncing
 
 	var rq *distReq
+	// 随机生成一个 请求Id
 	reqID := genReqID()
+
+	// 如果是同步中的话
 	if f.syncing {
+
+		/**
+		组装 req 实体
+		 */
 		rq = &distReq{
 			getCost: func(dp distPeer) uint64 {
 				return 0
@@ -451,6 +507,10 @@ func (f *lightFetcher) nextRequest() (*distReq, uint64) {
 			},
 		}
 	} else {
+
+		/**
+		组装 req 实体
+		 */
 		rq = &distReq{
 			getCost: func(dp distPeer) uint64 {
 				p := dp.(*peer)
@@ -468,6 +528,8 @@ func (f *lightFetcher) nextRequest() (*distReq, uint64) {
 				n := fp.nodeByHash[bestHash]
 				return n != nil && !n.requested
 			},
+
+			//
 			request: func(dp distPeer) func() {
 				p := dp.(*peer)
 				f.lock.Lock()
@@ -489,10 +551,17 @@ func (f *lightFetcher) nextRequest() (*distReq, uint64) {
 					time.Sleep(hardRequestTimeout)
 					f.timeoutChn <- reqID
 				}()
-				return func() { p.RequestHeadersByHash(reqID, cost, bestHash, int(bestAmount), 0, true) }
+
+				//
+				return func() {
+					// 根据Hash 去拿 header
+					p.RequestHeadersByHash(reqID, cost, bestHash, int(bestAmount), 0, true)
+				}
 			},
 		}
 	}
+
+	// 返回 组装好的 req, 和对应的随机生成的 reqId
 	return rq, reqID
 }
 
@@ -651,6 +720,9 @@ func (f *lightFetcher) checkSyncedHeaders(p *peer) {
 
 // checkKnownNode checks if a block tree node is known (downloaded and validated)
 // If it was not known previously but found in the database, sets its known flag
+//
+// checkKnownNode检查是否知道（下载并验证了）block tree node。如果以前未知但在数据库中找到它，则设置其已知标志
+//
 func (f *lightFetcher) checkKnownNode(p *peer, n *fetcherTreeNode) bool {
 	if n.known {
 		return true

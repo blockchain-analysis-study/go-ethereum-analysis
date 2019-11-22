@@ -32,6 +32,7 @@ requestDistributor
 实现了一种将请求分发到合适的peer的机制，
 服从流控制规则并按创建顺序对它们进行优先级排序（即使需要重新发送）。
  */
+// peerSetNotify 的一个实现
 type requestDistributor struct {
 	// 一个队列
 	reqQueue         *list.List
@@ -52,7 +53,7 @@ type requestDistributor struct {
 //
 /**
 distPeer是请求分发器的 LES服务器peer 接口。
-waitBefore在发送具有给定的较高估计成本的请求之前返回必需的等待时间，
+waitBefore 在发送具有给定的较高估计成本的请求之前返回必需的等待时间，
 或者在发送此类请求之后返回估计的剩余相对缓冲区估计值
 （在这种情况下，可以立即发送请求）。 这些值中的至少一个始终为零。
 
@@ -114,6 +115,8 @@ func newRequestDistributor(peers *peerSet, stopChn chan struct{}) *requestDistri
 		// 逐个注册 peers中的 peer 到 请求分发器中
 		peers.notify(d)
 	}
+
+	// todo 在这里处理各种 req
 	go d.loop()
 	return d
 }
@@ -172,11 +175,15 @@ func (d *requestDistributor) loop() {
 			// 先初始化 标识位 `loopNextSent`
 			d.loopNextSent = false
 		loop:
+			// 一直清空队列中的请求req
 			for {
+
 				peer, req, wait := d.nextRequest()
 				if req != nil && wait == 0 {
-					chn := req.sentChn // save sentChn because remove sets it to nil
+					chn := req.sentChn // save sentChn because remove sets it to nil   保存sendChn，因为remove将其设置为nil
 					d.remove(req)
+
+					// 获取 各自的 sendFunc
 					send := req.request(peer)
 					if send != nil {
 						peer.queueSend(send)
@@ -187,11 +194,16 @@ func (d *requestDistributor) loop() {
 					if wait == 0 {
 						// no request to send and nothing to wait for; the next
 						// queued request will wake up the loop
+						//
+						// 当 没有req去send 且没有任何需要wait的,这时候 next req将继续loop
 						break loop
 					}
-					d.loopNextSent = true // a "next" signal has been sent, do not send another one until this one has been received
+					// a "next" signal has been sent, do not send another one until this one has been received
+					// 已发送“下一”信号，在收到该信号之前，请勿发送另一信号
+					d.loopNextSent = true
 					if wait > distMaxWait {
 						// waiting times may be reduced by incoming request replies, if it is too long, recalculate it periodically
+						// 入站请求回复可能会减少等待时间，如果时间太长，请定期重新计算
 						wait = distMaxWait
 					}
 					go func() {
@@ -207,6 +219,9 @@ func (d *requestDistributor) loop() {
 }
 
 // selectPeerItem represents a peer to be selected for a request by weightedRandomSelect
+//
+// selectPeerItem
+// 表示要通过weightedRandomSelect选择用于请求的 peer
 type selectPeerItem struct {
 	peer   distPeer
 	req    *distReq
@@ -246,18 +261,26 @@ func (d *requestDistributor) nextRequest() (distPeer, *distReq, time.Duration) {
 		// 是否可以发送请求了(即： 可以有资源处理请求了)
 		canSend := false
 
-		// 遍历所有peer
+		// TODO 遍历所有peer
 		for peer := range d.peers {
 			// 去重 且 告知服务器peer是否适合处理请求
 			if _, ok := checkedPeers[peer]; !ok && peer.canQueue() && req.canSend(peer) {
 				canSend = true
 				// 返回将请求发送到给定peer的开销的上限
 				cost := req.getCost(peer)
+
+				// 返回以给定的最大估计成本发送请求之前所需的最短等待时间
 				wait, bufRemain := peer.waitBefore(cost)
 				if wait == 0 {
 					if sel == nil {
+						//  初始化一个 weightedRandomSelect
+						//  weightedRandomSelect, 能够从一组项目中进行加权随机选择
 						sel = newWeightedRandomSelect()
 					}
+
+					// selectPeerItem表示要通过weightedRandomSelect选择用于请求的peer
+					//
+					// 更新 selectItem 的权重
 					sel.update(selectPeerItem{peer: peer, req: req, weight: int64(bufRemain*1000000) + 1})
 				} else {
 					if bestReq == nil || wait < bestWait {
@@ -278,6 +301,7 @@ func (d *requestDistributor) nextRequest() (distPeer, *distReq, time.Duration) {
 	}
 
 	if sel != nil {
+		// TODO 随机返回一个 item
 		c := sel.choose().(selectPeerItem)
 		return c.peer, c.req, 0
 	}
@@ -288,6 +312,14 @@ func (d *requestDistributor) nextRequest() (distPeer, *distReq, time.Duration) {
 // receiving peer is sent once the request has been sent (request callback returned).
 // If the request is cancelled or timed out without suitable peers, the channel is
 // closed without sending any peer references to it.
+/**
+queue:
+将请求添加到分发队列，返回一个通道，
+在该通道中，发送请求后将发送接收对等方（返回请求回调）。
+如果在没有合适的对端peer的情况下取消或超时了该请求，
+则该通道将关闭，而不发送任何对端peer的引用。
+
+ */
 func (d *requestDistributor) queue(r *distReq) chan distPeer {
 	d.lock.Lock()
 	defer d.lock.Unlock()

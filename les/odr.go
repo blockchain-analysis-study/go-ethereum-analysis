@@ -52,6 +52,8 @@ func (odr *LesOdr) Database() ethdb.Database {
 }
 
 // SetIndexers adds the necessary chain indexers to the ODR backend
+//
+// SetIndexers向ODR backend添加必要的链索引器
 func (odr *LesOdr) SetIndexers(chtIndexer, bloomTrieIndexer, bloomIndexer *core.ChainIndexer) {
 	odr.chtIndexer = chtIndexer
 	odr.bloomTrieIndexer = bloomTrieIndexer

@@ -98,10 +98,15 @@ type Downloader struct {
 
 	queue   *queue   // Scheduler for selecting the hashes to download
 	peers   *peerSet // Set of active peers from which download can proceed
-	stateDB ethdb.Database
+	stateDB ethdb.Database  // 直接操作 levelDB 的中的State数据的db引用
 
-	rttEstimate   uint64 // Round trip time to target for download requests
-	rttConfidence uint64 // Confidence in the estimated RTT (unit: millionths to allow atomic ops)
+	// Round trip time to target for download requests
+	// 以下载请求为目标的往返时间
+	rttEstimate   uint64
+
+	// Confidence in the estimated RTT (unit: millionths to allow atomic ops)
+	// 对估算的RTT的置信度（单位：允许原子操作的百万分之一）
+	rttConfidence uint64
 
 	// Statistics
 	syncStatsChainOrigin uint64 // Origin block number where syncing started at
@@ -130,7 +135,7 @@ type Downloader struct {
 	headerProcCh  chan []*types.Header // [eth/62] Channel to feed the header processor new tasks
 
 	// for stateFetcher
-	stateSyncStart chan *stateSync
+	stateSyncStart chan *stateSync   // 发起同步state的请求信号
 	trackStateReq  chan *stateReq
 	stateCh        chan dataPack // [eth/63] Channel receiving inbound node state data
 
@@ -198,13 +203,15 @@ type BlockChain interface {
 }
 
 // New creates a new downloader to fetch hashes and blocks from remote peers.
+// 创建 Downloader 对象
+// 到时候同步是根据 mode 来同步的
 func New(mode SyncMode, stateDb ethdb.Database, mux *event.TypeMux, chain BlockChain, lightchain LightChain, dropPeer peerDropFn) *Downloader {
 	if lightchain == nil {
 		lightchain = chain
 	}
 
 	dl := &Downloader{
-		mode:           mode,
+		mode:           mode, // mode: full/fast/light 三种模式
 		stateDB:        stateDb,
 		mux:            mux,
 		queue:          newQueue(),
@@ -228,6 +235,11 @@ func New(mode SyncMode, stateDb ethdb.Database, mux *event.TypeMux, chain BlockC
 		},
 		trackStateReq: make(chan *stateReq),
 	}
+
+	// 运行Qos调音器!?
+	// 	调节
+	//	d.rttEstimate: 下载请求为目标的往返时间
+	// 	d.rttConfidence: 对估算的RTT的置信度（单位：允许原子操作的百万分之一）
 	go dl.qosTuner()
 	go dl.stateFetcher()
 	return dl
@@ -1568,18 +1580,40 @@ func (d *Downloader) deliver(id string, destCh chan dataPack, packet dataPack, i
 
 // qosTuner is the quality of service tuning loop that occasionally gathers the
 // peer latency statistics and updates the estimated request round trip time.
+//
+// qosTuner是服务质量调整循环，它偶尔会收集 对端peer 延迟统计信息并更新估计的请求往返时间。
+//
+//
+// 知识点:
+//
+// RTT(Round Trip Time)：一个连接的往返时间，即数据发送时刻到接收到确认的时刻的差值；
+// RTO(Retransmission Time Out)：重传超时时间，即从数据发送时刻算起，超过这个时间便执行重传。
+// RTT和RTO 的关系是：由于网络波动的不确定性，每个RTT都是动态变化的，所以RTO也应随着RTT动态变化。
+//
+//
+//
 func (d *Downloader) qosTuner() {
+
+	// 	调节
+	//	d.rttEstimate: 下载请求为目标的往返时间
+	// 	d.rttConfidence: 对估算的RTT的置信度（单位：允许原子操作的百万分之一）
+
 	for {
 		// Retrieve the current median RTT and integrate into the previoust target RTT
+		// 检索当前的中位RTT并整合到先前的目标RTT中
 		rtt := time.Duration((1-qosTuningImpact)*float64(atomic.LoadUint64(&d.rttEstimate)) + qosTuningImpact*float64(d.peers.medianRTT()))
 		atomic.StoreUint64(&d.rttEstimate, uint64(rtt))
 
 		// A new RTT cycle passed, increase our confidence in the estimated RTT
+		// 新的RTT周期过去了，提高了我们对估算的RTT的信心
 		conf := atomic.LoadUint64(&d.rttConfidence)
 		conf = conf + (1000000-conf)/2
 		atomic.StoreUint64(&d.rttConfidence, conf)
 
 		// Log the new QoS values and sleep until the next RTT
+		// 记录新的QoS值并休眠直到下一个RTT
+		//
+		// QoS（Quality of Service，服务质量）
 		log.Debug("Recalculated downloader QoS values", "rtt", rtt, "confidence", float64(conf)/1000000.0, "ttl", d.requestTTL())
 		select {
 		case <-d.quitCh:

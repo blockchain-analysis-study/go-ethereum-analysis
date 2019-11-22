@@ -34,15 +34,28 @@ var ErrNotRequested = errors.New("not requested")
 var ErrAlreadyProcessed = errors.New("already processed")
 
 // request represents a scheduled or already in-flight state retrieval request.
+//
+/**
+request 表示已调度或已经进行中的状态检索请求。
+ */
 type request struct {
+
+	// 节点数据内容的Hash检索 (其实就是state的node的Hash 值!?)
 	hash common.Hash // Hash of the node data content to retrieve
+	// 节点的数据内容，一直缓存到所有子树完成
 	data []byte      // Data content of the node, cached until all subtrees complete
+	// 这是原始条目（代码）或者 trie节点 (就是state中的kv的原始数据或trie上的node)
 	raw  bool        // Whether this is a raw entry (code) or a trie node
 
+	// 引用此条目的父State节点（完成时通知所有）
 	parents []*request // Parent state nodes referencing this entry (notify all upon completion)
+
+	// 节点所在的Trie中的深度级别可对DFS进行优先级排序
 	depth   int        // Depth level within the trie the node is located to prioritise DFS
+	// 允许提交此节点之前的依赖关系数
 	deps    int        // Number of dependencies before allowed to commit this node
 
+	// 如果在此分支上到达叶节点，则调用以进行回调函数
 	callback LeafCallback // Callback to invoke if a leaf node it reached on this branch
 }
 
@@ -71,10 +84,20 @@ func newSyncMemBatch() *syncMemBatch {
 // Sync is the main state trie synchronisation scheduler, which provides yet
 // unknown trie hashes to retrieve, accepts node data associated with said hashes
 // and reconstructs the trie step by step until all is done.
+//
+/**
+Sync是主要state Trie同步调度程序，它提供尚未取回的Trie Hash以进行检索，接受与所述Hash相关的trie node date并逐步重建Trie直到完成所有步骤。
+
+ */
 type Sync struct {
+	// 持久数据库检查现有条目 (就是db的指针!?)
 	database DatabaseReader           // Persistent database to check for existing entries
+	// 内存缓冲区以避免 频繁的 数据库写入
+	// 开始同步过来的数据都滞留在这里头
 	membatch *syncMemBatch            // Memory buffer to avoid frequest database writes
+	// 与Hash有关的待处理请求 (其中数据缓存在request中)
 	requests map[common.Hash]*request // Pending requests pertaining to a key hash
+	// pending 请求的优先级队列
 	queue    *prque.Prque             // Priority queue with the pending requests
 }
 
@@ -213,8 +236,11 @@ func (s *Sync) Process(results []SyncResult) (bool, int, error) {
 
 // Commit flushes the data stored in the internal membatch out to persistent
 // storage, returning the number of items written and any occurred error.
+//
+// Commit 将存储在 membatch (内存缓存中) 中的数据刷新到持久存储中，返回写入的项目数和任何发生的错误。
 func (s *Sync) Commit(dbw ethdb.Putter) (int, error) {
 	// Dump the membatch into a database dbw
+	// 将membatch转储到数据库dbw中
 	for i, key := range s.membatch.order {
 		if err := dbw.Put(key[:], s.membatch.batch[key]); err != nil {
 			return i, err
@@ -223,6 +249,7 @@ func (s *Sync) Commit(dbw ethdb.Putter) (int, error) {
 	written := len(s.membatch.order)
 
 	// Drop the membatch data and return
+	// 删除membatch数据并返回
 	s.membatch = newSyncMemBatch()
 	return written, nil
 }

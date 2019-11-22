@@ -46,30 +46,50 @@ var (
 )
 
 // peerConnection represents an active peer from which hashes and blocks are retrieved.
+//
+/**
+peerConnection表示一个活动peer，可从中检索 Hash和 Block。
+ */
 type peerConnection struct {
 	id string // Unique identifier of the peer
 
+	// 对端peer的当前 header的活动状态
 	headerIdle  int32 // Current header activity state of the peer (idle = 0, active = 1)
+	// 对端peer的当前block的活动状态
 	blockIdle   int32 // Current block activity state of the peer (idle = 0, active = 1)
+	// 对端peer的当前 receipt的活动状态
 	receiptIdle int32 // Current receipt activity state of the peer (idle = 0, active = 1)
+	// 对端peer的当前 state trie node的数据活动状态
 	stateIdle   int32 // Current node data activity state of the peer (idle = 0, active = 1)
 
+
+	// 每秒可检索的标头数量
 	headerThroughput  float64 // Number of headers measured to be retrievable per second
+	// 每秒可检索的块（实体）数
 	blockThroughput   float64 // Number of blocks (bodies) measured to be retrievable per second
+	// 每秒测量为可检索的收据数量
 	receiptThroughput float64 // Number of receipts measured to be retrievable per second
+	// 每秒测量为可检索的 state trie node 数据片数
 	stateThroughput   float64 // Number of node data pieces measured to be retrievable per second
 
+	// 请求往返时间, 用来跟踪响应
 	rtt time.Duration // Request round trip time to track responsiveness (QoS)
 
+	// 开始获取最后一个 header 的时间
 	headerStarted  time.Time // Time instance when the last header fetch was started
+	// 开始获取最后一个 block（ body ）的时间
 	blockStarted   time.Time // Time instance when the last block (body) fetch was started
+	// 开始获取最后一次 receipt 的时间
 	receiptStarted time.Time // Time instance when the last receipt fetch was started
+	// 开始获取最后一个 state trie node数据的时间
 	stateStarted   time.Time // Time instance when the last node data fetch was started
 
+	// 不需要请求的哈希集（以前没有） 什么 Hash 值? state trie Hash集
 	lacking map[common.Hash]struct{} // Set of hashes not to request (didn't have previously)
 
-	peer Peer
+	peer Peer  // 被封装的 peer 实例
 
+	// ETH协议版本号切换策略
 	version int        // Eth protocol version number to switch strategies
 	log     log.Logger // Contextual logger to add extra infos to peer logs
 	lock    sync.RWMutex
@@ -510,15 +530,24 @@ func (ps *peerSet) ReceiptIdlePeers() ([]*peerConnection, int) {
 
 // NodeDataIdlePeers retrieves a flat list of all the currently node-data-idle
 // peers within the active peer set, ordered by their reputation.
+//
+// NodeDataIdlePeers检索活动 peerSet中所有当前节点数据空闲 peer 的平面列表，并按其[信誉]排序。
+// NOTE: 这里的 信誉 指的是和 Downloader 中的 d.rttConfidence 对估算的RTT的置信度  是否一个意思!?
 func (ps *peerSet) NodeDataIdlePeers() ([]*peerConnection, int) {
+
+	// 回调函数, 返回节点是否具备 state 空闲
 	idle := func(p *peerConnection) bool {
 		return atomic.LoadInt32(&p.stateIdle) == 0
 	}
+
+	//
 	throughput := func(p *peerConnection) float64 {
 		p.lock.RLock()
 		defer p.lock.RUnlock()
 		return p.stateThroughput
 	}
+
+	// 获取空闲的 peers
 	return ps.idlePeers(63, 64, idle, throughput)
 }
 

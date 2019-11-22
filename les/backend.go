@@ -48,30 +48,45 @@ import (
 type LightEthereum struct {
 	lesCommons
 
+	// 处理ODR检索类型的后端服务
 	odr         *LesOdr
+	// 交易中继器
 	relay       *LesTxRelay
 	chainConfig *params.ChainConfig
 	// Channel for shutting down the service
+	// 用于接收退出信号
 	shutdownChan chan bool
 
 	// Handlers
 	peers      *peerSet
+	// txpool 指针
 	txPool     *light.TxPool
+	// lightchain指针
 	blockchain *light.LightChain
 	serverPool *serverPool
 	reqDist    *requestDistributor
+	// 猎犬 (reqDist的更上一层)
 	retriever  *retrieveManager
 
-	bloomRequests chan chan *bloombits.Retrieval // Channel receiving bloom data retrieval requests
+	// Channel receiving bloom data retrieval requests
+	// chan接收Bloom数据检索请求
+	bloomRequests chan chan *bloombits.Retrieval
+	// 链 bloom索引器服务
 	bloomIndexer  *core.ChainIndexer
 
+	// api的封装
 	ApiBackend *LesApiBackend
 
 	eventMux       *event.TypeMux
+	// 共识引擎
 	engine         consensus.Engine
+
+	// 账号管理器
 	accountManager *accounts.Manager
 
 	networkId     uint64
+
+	// RPC API服务
 	netRPCService *ethapi.PublicNetAPI
 
 	wg sync.WaitGroup
@@ -116,46 +131,74 @@ func New(ctx *node.ServiceContext, config *eth.Config) (*LightEthereum, error) {
 		chainConfig:    chainConfig,
 		eventMux:       ctx.EventMux,
 		peers:          peers,
+		// 构建 请求req分发器
 		reqDist:        newRequestDistributor(peers, quitSync),
 		accountManager: ctx.AccountManager,
+		// 构建共识引擎
 		engine:         eth.CreateConsensusEngine(ctx, chainConfig, &config.Ethash, nil, chainDb),
 		shutdownChan:   make(chan bool),
 		networkId:      config.NetworkId,
 		bloomRequests:  make(chan chan *bloombits.Retrieval),
+		// 布隆服务器
 		bloomIndexer:   eth.NewBloomIndexer(chainDb, light.BloomTrieFrequency, light.HelperTrieConfirmations),
 	}
 
+	// 交易中继器
 	leth.relay = NewLesTxRelay(peers, leth.reqDist)
+	//
 	leth.serverPool = newServerPool(chainDb, quitSync, &leth.wg)
+	// 猎犬管理器 (额,请求分发器的更上一层)
 	leth.retriever = newRetrieveManager(peers, leth.reqDist, leth.serverPool)
 
+	// 处理ODR检索类型的后端服务
 	leth.odr = NewLesOdr(chainDb, leth.retriever)
+
+	// cht 是轻节点相关的 checkpoint 索引器
 	leth.chtIndexer = light.NewChtIndexer(chainDb, true, leth.odr)
+
+	// bloom树索引
 	leth.bloomTrieIndexer = light.NewBloomTrieIndexer(chainDb, true, leth.odr)
+	// SetIndexers向ODR backend添加必要的链索引器
 	leth.odr.SetIndexers(leth.chtIndexer, leth.bloomTrieIndexer, leth.bloomIndexer)
 
 	// Note: NewLightChain adds the trusted checkpoint so it needs an ODR with
 	// indexers already set but not started yet
+	//
+	// 注意：NewLightChain添加了受信任的检查点，因此需要已设置索引器但尚未启动的ODR
 	if leth.blockchain, err = light.NewLightChain(leth.odr, leth.chainConfig, leth.engine); err != nil {
 		return nil, err
 	}
 	// Note: AddChildIndexer starts the update process for the child
+	//
+	// 注意：AddChildIndexer启动子项的更新过程
 	leth.bloomIndexer.AddChildIndexer(leth.bloomTrieIndexer)
+
+	/** todo 启动 checkpoint 索引器 */
 	leth.chtIndexer.Start(leth.blockchain)
+	/** todo 启动 bloom 索引器 */
 	leth.bloomIndexer.Start(leth.blockchain)
 
 	// Rewind the chain in case of an incompatible config upgrade.
+	//
+	// 如果配置升级不兼容，请倒回链。
 	if compat, ok := genesisErr.(*params.ConfigCompatError); ok {
 		log.Warn("Rewinding chain to upgrade configuration", "err", compat)
 		leth.blockchain.SetHead(compat.RewindTo)
 		rawdb.WriteChainConfig(chainDb, genesisHash, chainConfig)
 	}
 
+	// 初始化 light txpool
 	leth.txPool = light.NewTxPool(leth.chainConfig, leth.blockchain, leth.relay)
+
+	/** TODO 这个是大头啊  p2p 管理 */
 	if leth.protocolManager, err = NewProtocolManager(leth.chainConfig, true, config.NetworkId, leth.eventMux, leth.engine, leth.peers, leth.blockchain, nil, chainDb, leth.odr, leth.relay, leth.serverPool, quitSync, &leth.wg); err != nil {
 		return nil, err
 	}
+
+	// light api backend
 	leth.ApiBackend = &LesApiBackend{leth, nil}
+
+	// 实例化 gasPrice预言机
 	gpoParams := config.GPO
 	if gpoParams.Default == nil {
 		gpoParams.Default = config.MinerGasPrice

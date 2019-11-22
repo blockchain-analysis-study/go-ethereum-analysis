@@ -45,8 +45,12 @@ const (
 	// full database upgrade, so that should be left for a suitable moment.
 	CHTFrequencyServer = 4096
 
-	HelperTrieConfirmations        = 2048 // number of confirmations before a server is expected to have the given HelperTrie available
-	HelperTrieProcessConfirmations = 256  // number of confirmations before a HelperTrie is generated
+	// number of confirmations before a server is expected to have the given HelperTrie available
+	// 预期服务器使给定的HelperTrie可用之前的确认次数
+	HelperTrieConfirmations        = 2048
+	// number of confirmations before a HelperTrie is generated
+	// 生成HelperTrie之前的确认次数
+	HelperTrieProcessConfirmations = 256
 )
 
 // TrustedCheckpoint represents a set of post-processed trie roots (CHT and BloomTrie) associated with

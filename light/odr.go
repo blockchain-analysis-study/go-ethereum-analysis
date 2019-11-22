@@ -38,6 +38,8 @@ var NoOdr = context.Background()
 var ErrNoPeers = errors.New("no suitable peers available")
 
 // OdrBackend is an interface to a backend service that handles ODR retrievals type
+//
+// OdrBackend是处理ODR检索类型的后端服务的接口
 type OdrBackend interface {
 	Database() ethdb.Database
 	ChtIndexer() *core.ChainIndexer

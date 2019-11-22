@@ -239,6 +239,8 @@ func (p *peer) SendTxStatus(reqID, bv uint64, stats []txStatus) error {
 
 // RequestHeadersByHash fetches a batch of blocks' headers corresponding to the
 // specified header query, based on the hash of an origin block.
+//
+// 根据Hash 去拿 header
 func (p *peer) RequestHeadersByHash(reqID, cost uint64, origin common.Hash, amount int, skip int, reverse bool) error {
 	p.Log().Debug("Fetching batch of headers", "count", amount, "fromhash", origin, "skip", skip, "reverse", reverse)
 	return sendRequest(p.rw, GetBlockHeadersMsg, reqID, cost, &getBlockHeadersData{Origin: hashOrNumber{Hash: origin}, Amount: uint64(amount), Skip: uint64(skip), Reverse: reverse})
@@ -536,6 +538,14 @@ func (p *peer) String() string {
 // removed peers
 /**
 peerSetNotify是一个回调接口，用于通知服务有关已添加或已删除的peer
+
+目前有四种实现
+
+LesTxRelay
+downloaderPeerNotify (真实类型是: ProtocolManager)
+requestDistributor
+lightFetcher
+
  */
 type peerSetNotify interface {
 	registerPeer(*peer)
@@ -630,6 +640,7 @@ func (ps *peerSet) Unregister(id string) error {
 			n.unregisterPeer(p)
 		}
 		p.sendQueue.quit()
+		// 断开对端peer 的链接
 		p.Peer.Disconnect(p2p.DiscUselessPeer)
 		return nil
 	}

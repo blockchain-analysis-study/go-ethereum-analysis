@@ -140,6 +140,7 @@ type serverPool struct {
 }
 
 // newServerPool creates a new serverPool instance
+// 这是一个 server的pool的实现
 func newServerPool(db ethdb.Database, quit chan struct{}, wg *sync.WaitGroup) *serverPool {
 	pool := &serverPool{
 		db:           db,
@@ -152,7 +153,9 @@ func newServerPool(db ethdb.Database, quit chan struct{}, wg *sync.WaitGroup) *s
 		connCh:       make(chan *connReq),
 		disconnCh:    make(chan *disconnReq),
 		registerCh:   make(chan *registerReq),
+		// 已知的 请求随机选择器
 		knownSelect:  newWeightedRandomSelect(),
+		// 新的 请求随机选择器
 		newSelect:    newWeightedRandomSelect(),
 		fastDiscover: true,
 	}
