@@ -23,6 +23,8 @@ import (
 )
 
 var (
+
+	// 下面这些都是 StandardMeter 和  StandardTimer
 	headerInMeter      = metrics.NewRegisteredMeter("eth/downloader/headers/in", nil)
 	headerReqTimer     = metrics.NewRegisteredTimer("eth/downloader/headers/req", nil)
 	headerDropMeter    = metrics.NewRegisteredMeter("eth/downloader/headers/drop", nil)

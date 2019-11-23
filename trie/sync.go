@@ -97,7 +97,7 @@ type Sync struct {
 	membatch *syncMemBatch            // Memory buffer to avoid frequest database writes
 	// 与Hash有关的待处理请求 (其中数据缓存在request中)
 	requests map[common.Hash]*request // Pending requests pertaining to a key hash
-	// pending 请求的优先级队列
+	// pending 请求的优先级队列   (queue和requests 一一对应)
 	queue    *prque.Prque             // Priority queue with the pending requests
 }
 
@@ -179,8 +179,13 @@ func (s *Sync) AddRawEntry(hash common.Hash, depth int, parent common.Hash) {
 }
 
 // Missing retrieves the known missing nodes from the trie for retrieval.
+//
+// Missing: 从trie中拉取已知的丢失节点以进行拉取
 func (s *Sync) Missing(max int) []common.Hash {
 	requests := []common.Hash{}
+
+	// 如果 queue不为空,且 max ==0 ?(表示全部拉取?) 或者需要组装max个新的task
+	// 从queue队列中加载出max个req返回出去
 	for !s.queue.Empty() && (max == 0 || len(requests) < max) {
 		requests = append(requests, s.queue.PopItem().(common.Hash))
 	}
@@ -262,13 +267,24 @@ func (s *Sync) Pending() int {
 // schedule inserts a new state retrieval request into the fetch queue. If there
 // is already a pending request for this node, the new request will be discarded
 // and only a parent reference added to the old one.
+//
+/**
+schedule:
+在获取队列中插入一个新的 state 拉取 req。
+如果该state trie node已经有一个待处理的req，
+则新的请求将被丢弃，只有父引用添加到旧的请求中
+ */
 func (s *Sync) schedule(req *request) {
 	// If we're already requesting this node, add a new reference and stop
+	//
+	// 如果我们已经在请求该state trie node，请添加一个新引用并停止
 	if old, ok := s.requests[req.hash]; ok {
 		old.parents = append(old.parents, req.parents...)
 		return
 	}
 	// Schedule the request for future retrieval
+	//
+	// 安排请求以备将来拉取 (将req加入优先级队列)
 	s.queue.Push(req.hash, float32(req.depth))
 	s.requests[req.hash] = req
 }

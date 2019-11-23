@@ -49,6 +49,7 @@ var (
 	rttMinEstimate   = 2 * time.Second          // Minimum round-trip time to target for download requests
 	rttMaxEstimate   = 20 * time.Second         // Maximum round-trip time to target for download requests
 	rttMinConfidence = 0.1                      // Worse confidence factor in our estimated RTT value
+	// RTT的恒定比例因子-> TTL转换
 	ttlScaling       = 3                        // Constant scaling factor for RTT -> TTL conversion
 	ttlLimit         = time.Minute              // Maximum TTL allowance to prevent reaching crazy timeouts
 
@@ -135,8 +136,8 @@ type Downloader struct {
 	headerProcCh  chan []*types.Header // [eth/62] Channel to feed the header processor new tasks
 
 	// for stateFetcher
-	stateSyncStart chan *stateSync   // 发起同步state的请求信号
-	trackStateReq  chan *stateReq
+	stateSyncStart chan *stateSync   // TODO 超级重要的, 发起同步state的请求信号
+	trackStateReq  chan *stateReq    // 用来 跟踪req 的处理
 	stateCh        chan dataPack // [eth/63] Channel receiving inbound node state data
 
 	// Cancellation and termination
@@ -282,9 +283,12 @@ func (d *Downloader) Synchronising() bool {
 
 // RegisterPeer injects a new download peer into the set of block source to be
 // used for fetching hashes and blocks from.
+//
+// RegisterPeer: 将新的下载 peer 注入到块源集中，以用于从中获取哈希值和块
 func (d *Downloader) RegisterPeer(id string, version int, peer Peer) error {
 	logger := log.New("peer", id)
 	logger.Trace("Registering sync peer")
+	/** todo 这里的 peer 是light peer 的实现 */
 	if err := d.peers.Register(newPeerConnection(id, version, peer, logger)); err != nil {
 		logger.Error("Failed to register sync peer", "err", err)
 		return err
@@ -296,6 +300,8 @@ func (d *Downloader) RegisterPeer(id string, version int, peer Peer) error {
 
 // RegisterLightPeer injects a light client peer, wrapping it so it appears as a regular peer.
 func (d *Downloader) RegisterLightPeer(id string, version int, peer LightPeer) error {
+
+	/** todo 注册 light peer 实例, downloader 同步时,需要 */
 	return d.RegisterPeer(id, version, &lightPeerWrapper{peer})
 }
 
@@ -462,6 +468,7 @@ func (d *Downloader) syncWithPeer(p *peerConnection, hash common.Hash, td *big.I
 			}
 		}
 	}
+
 	d.committed = 1
 	if d.mode == FastSync && pivot != 0 {
 		d.committed = 0
@@ -472,12 +479,32 @@ func (d *Downloader) syncWithPeer(p *peerConnection, hash common.Hash, td *big.I
 		d.syncInitHook(origin, height)
 	}
 
+
+	/**
+	TODO 同步模块最重要的几部分
+
+	抓取 headers
+	抓取 bodies
+	抓取 receipts
+
+	 */
 	fetchers := []func() error{
+		// headers 总是被拉取的
 		func() error { return d.fetchHeaders(p, origin+1, pivot) }, // Headers are always retrieved
+		// block bodies 只在 full(normal) 和 fast 模式下被拉取
 		func() error { return d.fetchBodies(origin + 1) },          // Bodies are retrieved during normal and fast sync
+		// receipts 只有在 fast 模式下被拉取
 		func() error { return d.fetchReceipts(origin + 1) },        // Receipts are retrieved during fast sync
+
+		//
 		func() error { return d.processHeaders(origin+1, pivot, td) },
 	}
+
+	/**
+	TODO 超级超级重要
+	todo 这里只有  full  和fast 模式才会执行到同步 state trie node
+	todo  processFastSyncContent 这个方法中就会最终调到这里
+	*/
 	if d.mode == FastSync {
 		fetchers = append(fetchers, func() error { return d.processFastSyncContent(latest) })
 	} else if d.mode == FullSync {
@@ -778,53 +805,91 @@ func (d *Downloader) fetchHeaders(p *peerConnection, from uint64, pivot uint64) 
 	defer p.log.Debug("Header download terminated")
 
 	// Create a timeout timer, and the associated header fetcher
+	// 创建一个超时计时器，以及相关的 header提取程序
+
+
+	// 表示: 骨架组装阶段或完成阶段 的标识位
+	// true: 表示可以拉取 骨架
+	// false: 表示不可以或者已完成拉取骨架
 	skeleton := true            // Skeleton assembly phase or finishing up
+	// 最后骨架获取请求的时间
 	request := time.Now()       // time of the last skeleton fetch request
+	// 计时器以 记录 dump 无响应的活动 peer
 	timeout := time.NewTimer(0) // timer to dump a non-responsive active peer
+
+	// 超时通道最初应为空
 	<-timeout.C                 // timeout channel should be initially empty
 	defer timeout.Stop()
 
 	var ttl time.Duration
+
+	/**
+	封装 获取头的函数
+	 */
 	getHeaders := func(from uint64) {
 		request = time.Now()
 
+		// 获取出计算得到的 TTL 值
 		ttl = d.requestTTL()
+		// 使用该值设置给 timer
 		timeout.Reset(ttl)
 
 		if skeleton {
+			// 如果是用骨架同步的话 (一般,同步开始的时候先用 骨架同步方式, 同步回几个关键的 block 作为骨架点)
 			p.log.Trace("Fetching skeleton headers", "count", MaxHeaderFetch, "from", from)
 			go p.peer.RequestHeadersByNumber(from+uint64(MaxHeaderFetch)-1, MaxSkeletonSize, MaxHeaderFetch-1, false)
 		} else {
+			// 使用 正常同步方式, 一般是骨架同步关键 block 之后
 			p.log.Trace("Fetching full headers", "count", MaxHeaderFetch, "from", from)
 			go p.peer.RequestHeadersByNumber(from, MaxHeaderFetch, 0, false)
 		}
 	}
 	// Start pulling the header chain skeleton until all is done
-	getHeaders(from)
+	// 开始拉取回 headeR chain 骨架，直到完成所有操作
+	getHeaders(from) // 先拉 骨架
 
 	for {
 		select {
+
+		// 接收到取消信号
 		case <-d.cancelCh:
 			return errCancelHeaderFetch
 
+		// 接收到 block header 的数据包
 		case packet := <-d.headerCh:
 			// Make sure the active peer is giving us the skeleton headers
+			// 确保活动的 peer 正在给我们骨架点上的 headers
+			//
+			// 如果不是对应的对端peer发回来的消息包
 			if packet.PeerId() != p.id {
 				log.Debug("Received skeleton from incorrect peer", "peer", packet.PeerId())
 				break
 			}
+
+			// 统计相关
 			headerReqTimer.UpdateSince(request)
+			// 数据包已经拿回,则将超时计时器关闭,以免时间到了,发送没必要的超市信号
 			timeout.Stop()
 
 			// If the skeleton's finished, pull any remaining head headers directly from the origin
+			//
+			// 如果骨架完成，直接从原点拉出任何剩余的header
 			if packet.Items() == 0 && skeleton {
+
+				// 现将骨架标识位置为: false
 				skeleton = false
+				// 从 起始点拉取剩余部分 headers
 				getHeaders(from)
 				continue
 			}
+
 			// If no more headers are inbound, notify the content fetchers and return
+			//
+			// 如果没有更多的headers 入站，则通知所有内容提取器(fetchers)并返回
 			if packet.Items() == 0 {
 				// Don't abort header fetches while the pivot is downloading
+				//
+				// 当基准点 pivot被下载时,不要终止其他headers 的拉取
 				if atomic.LoadInt32(&d.committed) == 0 && pivot <= from {
 					p.log.Debug("No headers, waiting for pivot commit")
 					select {
@@ -844,10 +909,19 @@ func (d *Downloader) fetchHeaders(p *peerConnection, from uint64, pivot uint64) 
 					return errCancelHeaderFetch
 				}
 			}
+
+			// 将数据包做断言转化
+			// 沃日,这里不做ok判断的?
 			headers := packet.(*headerPack).headers
 
 			// If we received a skeleton batch, resolve internals concurrently
+			//
+			// 如果我们收到 骨架 batch，请同时解决
+			// 即:
 			if skeleton {
+
+				// todo 一个重中之重的入口
+				// 以起始点为基准,开始填充 拉取回来的,骨架之外的 其他headers
 				filled, proced, err := d.fillHeaderSkeleton(from, headers)
 				if err != nil {
 					p.log.Debug("Skeleton chain invalid", "err", err)
@@ -905,30 +979,75 @@ func (d *Downloader) fetchHeaders(p *peerConnection, from uint64, pivot uint64) 
 //
 // The method returns the entire filled skeleton and also the number of headers
 // already forwarded for processing.
+//
+/**
+fillHeaderSkeleton:
+同时从所有可用 peer 拉取 header，并将它们映射到提供的 骨架header chain 上面
+
+骨架开头的任何部分结果（如果可能）都将立即转发到 headers 处理器，即使在 某个骨架点的header 停顿的情况下也可以保持其余的管道满载
+
+该方法返回整个已填充的骨架以及已被转发进行处理的 headers数目
+ */
 func (d *Downloader) fillHeaderSkeleton(from uint64, skeleton []*types.Header) ([]*types.Header, int, error) {
 	log.Debug("Filling up skeleton", "from", from)
+
+	// 开始填充 骨架上剩余的被拉取回来的block 相关的header,body,receipt等等之类
 	d.queue.ScheduleSkeleton(from, skeleton)
 
 	var (
+
+		/**
+		req拉取回来的数据 交付函数
+		 */
 		deliver = func(packet dataPack) (int, error) {
 			pack := packet.(*headerPack)
 			return d.queue.DeliverHeaders(pack.peerID, pack.headers, d.headerProcCh)
 		}
+
+		/**
+		处理 存活时间 相关函数
+		 */
 		expire   = func() map[string]int { return d.queue.ExpireHeaders(d.requestTTL()) }
+
+		/**
+		喉咙? 油门?
+		 */
 		throttle = func() bool { return false }
+
+		/**
+		保留给定 peer 的一组 headers，跳过任何先前失败的 batch
+		 */
 		reserve  = func(p *peerConnection, count int) (*fetchRequest, bool, error) {
 			return d.queue.ReserveHeaders(p, count), false, nil
 		}
+
+		/**
+		发送header 拉取 req到远程 peer
+		TODO 在这里头,真正的请求 RequestHeadersByNumber 函数了
+		 */
 		fetch    = func(p *peerConnection, req *fetchRequest) error { return p.FetchHeaders(req.From, MaxHeaderFetch) }
+
+		/**
+		根据其先前发现的吞吐量拉取peer 的header 下载配额
+		 */
 		capacity = func(p *peerConnection) int { return p.HeaderCapacity(d.requestRTT()) }
+
+		/**
+		将peer设置为空闲，从而允许其执行新的header拉取req
+		 */
 		setIdle  = func(p *peerConnection, accepted int) { p.SetHeadersIdle(accepted) }
 	)
+
+	/* 将上述 func 加到这里头,进行调度 */
+	// todo 这个大头函数,你读懂,我吃屎
 	err := d.fetchParts(errCancelHeaderFetch, d.headerCh, deliver, d.queue.headerContCh, expire,
 		d.queue.PendingHeaders, d.queue.InFlightHeaders, throttle, reserve,
 		nil, fetch, d.queue.CancelHeaders, capacity, d.peers.HeaderIdlePeers, setIdle, "headers")
 
 	log.Debug("Skeleton fill terminated", "err", err)
 
+	// 根据计划的骨架拉取header进行组装
+	// todo 说是这么说,但其实这个方法并没有做任何事.
 	filled, proced := d.queue.RetrieveHeaders()
 	return filled, proced, err
 }
@@ -981,6 +1100,9 @@ func (d *Downloader) fetchReceipts(from uint64) error {
 	return err
 }
 
+/**
+todo 这个大头函数,你读懂,我吃屎
+ */
 // fetchParts iteratively downloads scheduled block parts, taking any available
 // peers, reserving a chunk of fetch requests for each, waiting for delivery and
 // also periodically checking for timeouts.
@@ -1169,6 +1291,11 @@ func (d *Downloader) fetchParts(errCancel error, deliveryCh chan dataPack, deliv
 // processHeaders takes batches of retrieved headers from an input channel and
 // keeps processing and scheduling them into the header chain and downloader's
 // queue until the stream ends or a failure occurs.
+//
+/**
+processHeaders:
+从输入通道中提取批次的headers，并继续进行处理并将其安排在 headerchain 和 download 的 queue中，直到流结束或发生故障
+ */
 func (d *Downloader) processHeaders(origin uint64, pivot uint64, td *big.Int) error {
 	// Keep a count of uncertain headers to roll back
 	rollback := []*types.Header{}
@@ -1663,11 +1790,18 @@ func (d *Downloader) requestRTT() time.Duration {
 
 // requestTTL returns the current timeout allowance for a single download request
 // to finish under.
+//
+// requestTTL: 返回当前的超时限额，以完成单个下载请求
+// TTL: Time To Live 生存时间
 func (d *Downloader) requestTTL() time.Duration {
 	var (
+		// 获取, 以下载请求为目标的往返时间
 		rtt  = time.Duration(atomic.LoadUint64(&d.rttEstimate))
+		// 对估算的RTT的置信度（单位：允许原子操作的百万分之一）
 		conf = float64(atomic.LoadUint64(&d.rttConfidence)) / 1000000.0
 	)
+
+	// 根据几个值,计算出 TTL
 	ttl := time.Duration(ttlScaling) * time.Duration(float64(rtt)/conf)
 	if ttl > ttlLimit {
 		ttl = ttlLimit

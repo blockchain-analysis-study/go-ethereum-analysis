@@ -116,18 +116,27 @@ type lightPeerWrapper struct {
 }
 
 func (w *lightPeerWrapper) Head() (common.Hash, *big.Int) { return w.peer.Head() }
+
+// light 支持同步 headeR by hash
 func (w *lightPeerWrapper) RequestHeadersByHash(h common.Hash, amount int, skip int, reverse bool) error {
 	return w.peer.RequestHeadersByHash(h, amount, skip, reverse)
 }
+
+// light 支持同步 headeR by number
 func (w *lightPeerWrapper) RequestHeadersByNumber(i uint64, amount int, skip int, reverse bool) error {
 	return w.peer.RequestHeadersByNumber(i, amount, skip, reverse)
 }
+
+// light 模式,不支持 同步 bodies
 func (w *lightPeerWrapper) RequestBodies([]common.Hash) error {
 	panic("RequestBodies not supported in light client mode sync")
 }
+// light 模式,不支持 同步 receipt
 func (w *lightPeerWrapper) RequestReceipts([]common.Hash) error {
 	panic("RequestReceipts not supported in light client mode sync")
 }
+
+// light 模式,不支持 同步 state trie node
 func (w *lightPeerWrapper) RequestNodeData([]common.Hash) error {
 	panic("RequestNodeData not supported in light client mode sync")
 }
@@ -164,6 +173,11 @@ func (p *peerConnection) Reset() {
 }
 
 // FetchHeaders sends a header retrieval request to the remote peer.
+//
+/**
+FetchHeaders:
+发送header 拉取 req到远程 peer
+ */
 func (p *peerConnection) FetchHeaders(from uint64, count int) error {
 	// Sanity check the protocol version
 	if p.version < 62 {
@@ -176,6 +190,7 @@ func (p *peerConnection) FetchHeaders(from uint64, count int) error {
 	p.headerStarted = time.Now()
 
 	// Issue the header retrieval request (absolut upwards without gaps)
+	// todo 这里才是主体
 	go p.peer.RequestHeadersByNumber(from, count, 0, false)
 
 	return nil
@@ -226,17 +241,28 @@ func (p *peerConnection) FetchReceipts(request *fetchRequest) error {
 }
 
 // FetchNodeData sends a node state data retrieval request to the remote peer.
+//
+/**
+FetchNodeData:
+向远程peer发送节点 state trie node 数据拉取请求
+ */
 func (p *peerConnection) FetchNodeData(hashes []common.Hash) error {
 	// Sanity check the protocol version
 	if p.version < 63 {
 		panic(fmt.Sprintf("node data fetch [eth/63+] requested on eth/%d", p.version))
 	}
 	// Short circuit if the peer is already fetching
+	// 修改state空闲标识位为  active: 1, 修改成功则成功,否则直接返回
 	if !atomic.CompareAndSwapInt32(&p.stateIdle, 0, 1) {
 		return errAlreadyFetching
 	}
+
+	// 记录 开始拉取 state 数据的时间
 	p.stateStarted = time.Now()
 
+	/** todo 真正启动拉取state 数据 */
+	// TODO 注意: 只有 fast 模式才会最终走到这里来
+	// TODO 查看  eth/downloader.syncWithPeer() 自明
 	go p.peer.RequestNodeData(hashes)
 
 	return nil
@@ -245,6 +271,11 @@ func (p *peerConnection) FetchNodeData(hashes []common.Hash) error {
 // SetHeadersIdle sets the peer to idle, allowing it to execute new header retrieval
 // requests. Its estimated header retrieval throughput is updated with that measured
 // just now.
+//
+/**
+SetHeadersIdle:
+将peer设置为空闲，从而允许其执行新的header拉取req。 其估计的 header 拉取吞吐量已更新为刚刚测量的
+ */
 func (p *peerConnection) SetHeadersIdle(delivered int) {
 	p.setIdle(p.headerStarted, delivered, &p.headerThroughput, &p.headerIdle)
 }
@@ -273,6 +304,12 @@ func (p *peerConnection) SetReceiptsIdle(delivered int) {
 // SetNodeDataIdle sets the peer to idle, allowing it to execute new state trie
 // data retrieval requests. Its estimated state retrieval throughput is updated
 // with that measured just now.
+//
+/**
+SetNodeDataIdle
+将 peer 设置为空闲，从而允许其执行新的state Trie数据 拉取请求。
+其估计的 state 拉取吞吐量已更新为现在测量的状态。
+ */
 func (p *peerConnection) SetNodeDataIdle(delivered int) {
 	p.setIdle(p.stateStarted, delivered, &p.stateThroughput, &p.stateIdle)
 }
@@ -306,6 +343,11 @@ func (p *peerConnection) setIdle(started time.Time, delivered int, throughput *f
 
 // HeaderCapacity retrieves the peers header download allowance based on its
 // previously discovered throughput.
+//
+/**
+HeaderCapacity:
+根据其先前发现的吞吐量拉取peer 的header 下载配额
+ */
 func (p *peerConnection) HeaderCapacity(targetRTT time.Duration) int {
 	p.lock.RLock()
 	defer p.lock.RUnlock()
@@ -333,6 +375,8 @@ func (p *peerConnection) ReceiptCapacity(targetRTT time.Duration) int {
 
 // NodeDataCapacity retrieves the peers state download allowance based on its
 // previously discovered throughput.
+//
+// NodeDataCapacity: 根据先前发现的吞吐量拉取 peers 的 state下载配额
 func (p *peerConnection) NodeDataCapacity(targetRTT time.Duration) int {
 	p.lock.RLock()
 	defer p.lock.RUnlock()
@@ -422,6 +466,8 @@ func (ps *peerSet) Register(p *peerConnection) error {
 	if len(ps.peers) > 0 {
 		p.headerThroughput, p.blockThroughput, p.receiptThroughput, p.stateThroughput = 0, 0, 0, 0
 
+
+		/* 累加各个 peer 中记录的 同步各种数据的 吞吐量 */
 		for _, peer := range ps.peers {
 			peer.lock.RLock()
 			p.headerThroughput += peer.headerThroughput
@@ -430,11 +476,15 @@ func (ps *peerSet) Register(p *peerConnection) error {
 			p.stateThroughput += peer.stateThroughput
 			peer.lock.RUnlock()
 		}
+
+		/** 这里是将总的 吞吐量 除以 peer的个数, 得到个平均值 */
 		p.headerThroughput /= float64(len(ps.peers))
 		p.blockThroughput /= float64(len(ps.peers))
 		p.receiptThroughput /= float64(len(ps.peers))
 		p.stateThroughput /= float64(len(ps.peers))
 	}
+
+
 	ps.peers[p.id] = p
 	ps.lock.Unlock()
 

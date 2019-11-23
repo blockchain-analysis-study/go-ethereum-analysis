@@ -35,11 +35,12 @@ import (
 // a single data retrieval network packet.
 //
 /**
+todo 超级重要的一个req
 stateReq 代表一批 state 获取请求，这些请求被组合到一个数据检索网络数据包中。
  */
 type stateReq struct {
 
-	// 同步过来的 state的item的hash
+	// 准备去 同步的 state 的 item 的hash
 	items    []common.Hash              // Hashes of the state items to download
 	// 缓存所有的 同步任务以跟踪 之前的尝试 (什么尝试? 之前去各个peers上拉 state trie node 数据的尝试)
 	tasks    map[common.Hash]*stateTask // Download tasks to track previous attempts
@@ -75,9 +76,13 @@ type stateSyncStats struct {
 func (d *Downloader) syncState(root common.Hash) *stateSync {
 	s := newStateSync(d, root)
 	select {
+
+	/** todo 发送state 同步信号 */
 	case d.stateSyncStart <- s:
 	case <-d.quitCh:
 		s.err = errCancelStateFetch
+
+		// 退出同步时,关闭完成通道
 		close(s.done)
 	}
 	return s
@@ -90,7 +95,12 @@ func (d *Downloader) syncState(root common.Hash) *stateSync {
 func (d *Downloader) stateFetcher() {
 	for {
 		select {
-		// 接收到发起的同步state的信号
+		/**
+		TODO 超级重要
+		TODO 接收到发起的同步state的信号
+
+		这是第一次接收到的入口, 后续都是  d.runStateSync(next) 里头接收到了
+		 */
 		case s := <-d.stateSyncStart:
 			for next := s; next != nil; {
 
@@ -111,22 +121,29 @@ func (d *Downloader) stateFetcher() {
 // runStateSync将运行state同步，直到完成同步或请求将另一个 root 哈希切换到该state
 func (d *Downloader) runStateSync(s *stateSync) *stateSync {
 	var (
-		active   = make(map[string]*stateReq) // Currently in-flight requests      	当前进行中的请求
-		finished []*stateReq                  // Completed or failed requests		完成或失败的请求
-		timeout  = make(chan *stateReq)       // Timed out active requests			活动请求超时
+		// 记录当前进行中的请求
+		// todo 这个相当有用,用来记录是否活跃
+		active   = make(map[string]*stateReq) // Currently in-flight requests
+		// 完成或失败的请求
+		finished []*stateReq                  // Completed or failed requests
+		// 活动请求超时
+		timeout  = make(chan *stateReq)       // Timed out active requests
 	)
 	defer func() {
 		// Cancel active request timers on exit. Also set peers to idle so they're
 		// available for the next sync.
 		//
-		// 退出时,取消活动的请求计时器。 还要将 peer 设置为空闲，以便下次同步时可用。
+		/**
+		退出时取消活动的请求计时器。 还要将对等端设置为空闲，以便下次同步时可用。
+		 */
 		for _, req := range active {
 			req.timer.Stop()
+			// 将对应req中的 peer 设置为空闲
 			req.peer.SetNodeDataIdle(len(req.items))
 		}
 	}()
 	// Run the state sync.
-	go s.run()   // todo 这个 是真的 state 同步
+	go s.run()   /** todo 这个 是真的 state 同步 */
 	defer s.Cancel()
 
 	// Listen for peer departure events to cancel assigned tasks
@@ -190,6 +207,8 @@ func (d *Downloader) runStateSync(s *stateSync) *stateSync {
 			delete(active, p.id)
 
 		// Handle timed-out requests:
+		//
+		// 处理超时的请求
 		case req := <-timeout:
 			// If the peer is already requesting something else, ignore the stale timeout.
 			// This can happen when the timeout and the delivery happens simultaneously,
@@ -202,6 +221,8 @@ func (d *Downloader) runStateSync(s *stateSync) *stateSync {
 			delete(active, req.peer.id)
 
 		// Track outgoing state requests:
+		//
+		// 跟踪传出 state req：
 		case req := <-d.trackStateReq:
 			// If an active request already exists for this peer, we have a problem. In
 			// theory the trie node schedule must never assign two requests to the same
@@ -209,24 +230,44 @@ func (d *Downloader) runStateSync(s *stateSync) *stateSync {
 			// immediately reconnect before the previous times out. In this case the first
 			// request is never honored, alas we must not silently overwrite it, as that
 			// causes valid requests to go missing and sync to get stuck.
-			if old := active[req.peer.id]; old != nil {
+			//
+			/**
+			如果此 peer 已经存在活动请求(active req)，则我们有问题。
+			理论上，state trie node 的调度程序绝不能将两个请求分配给同一 peer。
+			但是，实际上，peer可能会收到请求，断开连接并在之前的超时之前立即重新连接。
+			在这种情况下，永远不会满足第一个请求，因为我们决不能无声地覆盖它，
+			因为这会导致有效请求丢失并导致同步卡住
+			 */
+			if old := active[req.peer.id]; old != nil { // assigned: 分配
 				log.Warn("Busy peer assigned new state fetch", "peer", old.peer.id)
 
 				// Make sure the previous one doesn't get siletly lost
-				old.timer.Stop()
-				old.dropped = true
+				//
+				// 确保前一个 req 不会丢失
+				old.timer.Stop()   // 关闭掉超市 触发器
+				old.dropped = true // 标识为 移除状态
 
 				finished = append(finished, old)
 			}
 			// Start a timer to notify the sync loop if the peer stalled.
+			//
+			// 启动一个计时器以通知同步循环（如果对等方停止）
+			// 启动req 的超市触发器
 			req.timer = time.AfterFunc(req.timeout, func() {
 				select {
+
+				// 当超时时,将本 req 发送至 timeout 通道
 				case timeout <- req:
 				case <-s.done:
 					// Prevent leaking of timer goroutines in the unlikely case where a
 					// timer is fired just before exiting runStateSync.
+					/**
+					在不太可能发生的情况下，防止定时器goroutine泄漏，这是在退出runStateSync之前触发定时器的情况
+					 */
 				}
 			})
+
+			// 在 active (活跃中 )集中记录当前req
 			active[req.peer.id] = req
 		}
 	}
@@ -246,7 +287,7 @@ type stateSync struct {
 	sched  *trie.Sync                 // State trie sync scheduler defining the tasks
 	// Keccak256哈希器 去做验证交付
 	keccak hash.Hash                  // Keccak256 hasher to verify deliveries with
-	// 当前队列等待检索的任务集 (这个应该是查看该 state trie node hash 同步的任务已经发给了 哪些 peer)
+	// 当前队列等待拉取的任务集 (这个应该是查看该 state trie node hash 同步的任务已经发给了 哪些 peer)
 	tasks  map[common.Hash]*stateTask // Set of tasks currently queued for retrieval
 
 	/**
@@ -277,6 +318,8 @@ stateTask表示单个trie节点下载任务，其中包含一组已经尝试从�
  */
 type stateTask struct {
 	// 缓存 peerId
+	// 记录之前所有尝试过peer
+	// attempts: 尝试
 	attempts map[string]struct{}
 }
 
@@ -299,10 +342,15 @@ func newStateSync(d *Downloader, root common.Hash) *stateSync {
 // finish.
 //
 /**
+todo 重要的方法
 run启动任务分配和响应处理循环，阻塞直到完成，最后通知所有等待循环的goroutine。
  */
 func (s *stateSync) run() {
+
+	/** TODO 重要的方法 */
 	s.err = s.loop()
+
+	// 一直持续到 同步完成或者最终失败,时关闭done,表示结束
 	close(s.done)
 }
 
@@ -421,19 +469,30 @@ func (s *stateSync) commit(force bool) error {
 // assignTasks attempts to assign new tasks to all idle peers, either from the
 // batch currently being retried, or fetching new data from the trie sync itself.
 //
-// AssignTasks尝试将新任务分配给具有空闲 peers，这些任务是从当前正在重试的 batch中，或者是从trie同步本身中获取新数据。
+/**  assign  分配
+AssignTasks
+尝试将新任务分配给具有空闲 peers，这些任务是从当前正在重试的 batch中，或者是从trie同步本身中获取新数据。
+ */
 func (s *stateSync) assignTasks() {
 	// Iterate over all idle peers and try to assign them state fetches
 	//
-	// 遍历所有空闲 peer，并尝试分配 state获取
+	// 遍历所有空闲 peer，并尝试分配 state 获取
 	peers, _ := s.d.peers.NodeDataIdlePeers()
 	for _, p := range peers {
 		// Assign a batch of fetches proportional to the estimated latency/bandwidth
+		//
+		// 分配与估计的延迟/带宽成比例的一批提取 (batch)
 		cap := p.NodeDataCapacity(s.d.requestRTT())
+		// 组装 req 实例
 		req := &stateReq{peer: p, timeout: s.d.requestTTL()}
+
+		/** todo 给该req填充一些拉取 state trie node 数据的 task*/
 		s.fillTasks(cap, req)
 
 		// If the peer was assigned tasks to fetch, send the network request
+		//
+		// 如果 peer 被分配了要提取的任务，请发送网络请求
+		// 根据 req中的 items (state trie node条目数) 来判断
 		if len(req.items) > 0 {
 			req.peer.log.Trace("Requesting new batch of data", "type", "state", "count", len(req.items))
 			select {
@@ -450,27 +509,49 @@ func (s *stateSync) assignTasks() {
 
 // fillTasks fills the given request object with a maximum of n state download
 // tasks to send to the remote peer.
+//
+/**
+fillTasks:
+使用最多n个 state 下载任务填充给定的请求对象以发送给远程对等方
+ */
 func (s *stateSync) fillTasks(n int, req *stateReq) {
 	// Refill available tasks from the scheduler.
+	//
+	// 从scheduler中重新填充可用任务。
+	// 入参的n代表 req去对端peer 拉取数据的量
+	// 入参的req表示去对端peer拉取state的请求封装
 	if len(s.tasks) < n {
+		// 从优先级队列中弹出max个req
 		new := s.sched.Missing(n - len(s.tasks))
+
+		// 分别根据这些req组装新的 task直到完整到达n的大小
 		for _, hash := range new {
 			s.tasks[hash] = &stateTask{make(map[string]struct{})}
 		}
 	}
 	// Find tasks that haven't been tried with the request's peer.
+	//
+	// 查找尚未与req中的peer尝试过拉取的 task
 	req.items = make([]common.Hash, 0, n)
 	req.tasks = make(map[common.Hash]*stateTask, n)
+	// 遍历所有 task
 	for hash, t := range s.tasks {
 		// Stop when we've gathered enough requests
+		//
+		// 当我们收集到足够的请求时停止
 		if len(req.items) == n {
 			break
 		}
 		// Skip any requests we've already tried from this peer
+		//
+		// 跳过我们已经尝试过的来自此peer的任何 req
 		if _, ok := t.attempts[req.peer.id]; ok {
 			continue
 		}
 		// Assign the request to this peer
+		//
+		// 分配req给这个peer
+		// 在尝试记录中添加该peer的记录
 		t.attempts[req.peer.id] = struct{}{}
 		req.items = append(req.items, hash)
 		req.tasks[hash] = t

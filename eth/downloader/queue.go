@@ -64,37 +64,77 @@ type fetchResult struct {
 }
 
 // queue represents hashes that are either need fetching or are being fetched
+/**
+queue: 代表需要获取或正在获取的hashes
+
+即: 正在被处理的block 相关的 部件集合/队列等等杂七杂八的
+ */
 type queue struct {
+	// 同步模式决定要计划要提取的block的部件
 	mode SyncMode // Synchronisation mode to decide on the block parts to schedule for fetching
 
 	// Headers are "special", they download in batches, supported by a skeleton chain
+	/**
+	Headers是“特殊的”，它们是分批下载的，并由骨架链来决定
+	 */
+
+	// 最后一个排队的header的Hash以验证顺序 (用来校验 chain 的顺序)
 	headerHead      common.Hash                    // [eth/62] Hash of the last queued header to verify order
+	// 待处理的 header 拉取task，将起始索引映射到 骨架的headers上
+	// 保存所有骨架点的 header
+	// 以每一个 骨架点作为task的起始
 	headerTaskPool  map[uint64]*types.Header       // [eth/62] Pending header retrieval tasks, mapping starting indexes to skeleton headers
+	// 为了拉取header填充骨架的骨架索引优先队列
 	headerTaskQueue *prque.Prque                   // [eth/62] Priority queue of the skeleton indexes to fetch the filling headers for
+	// 每个peer 的header batch的已知不可用的集合
 	headerPeerMiss  map[string]map[uint64]struct{} // [eth/62] Set of per-peer header batches known to be unavailable
 	headerPendPool  map[string]*fetchRequest       // [eth/62] Currently pending header retrieval operations
+	// 结果缓存累积完成的 header
 	headerResults   []*types.Header                // [eth/62] Result cache accumulating the completed headers
+	// 已被处理的 header 数量
 	headerProced    int                            // [eth/62] Number of headers already processed from the results
+	// 结果缓存中第一个header的编号
+	// 即当时构建骨架时的 起始点
 	headerOffset    uint64                         // [eth/62] Number of the first header in the result cache
+	// headers下载全部完成时通知的chan (即: headers 全部被下载完了)
 	headerContCh    chan bool                      // [eth/62] Channel to notify when header download finishes
 
 	// All data retrievals below are based on an already assembles header chain
+	//
+	/**
+	以下所有数据拉取均基于已组装的 header chain
+	 */
+
+
+	// 待处理的 block（ body）拉取task，将 hashes 映射到 headers
 	blockTaskPool  map[common.Hash]*types.Header // [eth/62] Pending block (body) retrieval tasks, mapping hashes to headers
+	// headers的优先级队列，以获取对应的 blocks（bodies）
 	blockTaskQueue *prque.Prque                  // [eth/62] Priority queue of the headers to fetch the blocks (bodies) for
+	// 当前待处理的 block（body）的拉取操作req实例
 	blockPendPool  map[string]*fetchRequest      // [eth/62] Currently pending block (body) retrieval operations
+	// 一组已完成抓取的block（body）的hash (去重用)
 	blockDonePool  map[common.Hash]struct{}      // [eth/62] Set of the completed block (body) fetches
 
+	// 等待receipt拉取的task，将Hash映射到对用的header
 	receiptTaskPool  map[common.Hash]*types.Header // [eth/63] Pending receipt retrieval tasks, mapping hashes to headers
+	// headers的优先级队列，以获取其receipts
 	receiptTaskQueue *prque.Prque                  // [eth/63] Priority queue of the headers to fetch the receipts for
+	// 当前待处理的receipt拉取req
 	receiptPendPool  map[string]*fetchRequest      // [eth/63] Currently pending receipt retrieval operations
+	// 一组已完成抓取的 receipt的hash
 	receiptDonePool  map[common.Hash]struct{}      // [eth/63] Set of the completed receipt fetches
 
+	// 已经被下载但尚未被处理的 req (即: req回来了但是结果数据还未被及时处理)
 	resultCache  []*fetchResult     // Downloaded but not yet delivered fetch results
+	// 区块链中第一个缓存的获取结果的偏移量
 	resultOffset uint64             // Offset of the first cached fetch result in the block chain
+	// block的近似大小（指数移动平均线）
 	resultSize   common.StorageSize // Approximate size of a block (exponential moving average)
 
 	lock   *sync.Mutex
 	active *sync.Cond
+
+	// 队列 关闭信号
 	closed bool
 }
 
@@ -267,20 +307,31 @@ func (q *queue) resultSlots(pendPool map[string]*fetchRequest, donePool map[comm
 
 // ScheduleSkeleton adds a batch of header retrieval tasks to the queue to fill
 // up an already retrieved header skeleton.
+//
+// 将一批  header 拉取的任务添加到队列中，以填充已拉取回来的的 header 骨架
 func (q *queue) ScheduleSkeleton(from uint64, skeleton []*types.Header) {
 	q.lock.Lock()
 	defer q.lock.Unlock()
 
 	// No skeleton retrieval can be in progress, fail hard if so (huge implementation bug)
+	// 无法进行骨架 拉取，否则将导致失败（巨大的实现 bug）
 	if q.headerResults != nil {
 		panic("skeleton assembly already in progress")
 	}
 	// Schedule all the header retrieval tasks for the skeleton assembly
+	// 为了骨架装配而去拉取回来的所有 header的拉取task
 	q.headerTaskPool = make(map[uint64]*types.Header)
+	// 为了拉取header填充骨架的骨架索引优先队列
 	q.headerTaskQueue = prque.New()
+	// 重置可用性以更正无效链
+	// headerPeerMiss: 每个peer 的header batch的已知不可用的集合
 	q.headerPeerMiss = make(map[string]map[uint64]struct{}) // Reset availability to correct invalid chains
+	// 结果缓存累积完成的 header
 	q.headerResults = make([]*types.Header, len(skeleton)*MaxHeaderFetch)
+	// 初始化已被处理的 header 数量
 	q.headerProced = 0
+	// 结果缓存中第一个header的编号
+	// 即当时构建骨架时的 起始点
 	q.headerOffset = from
 	q.headerContCh = make(chan bool, 1)
 
@@ -294,6 +345,11 @@ func (q *queue) ScheduleSkeleton(from uint64, skeleton []*types.Header) {
 
 // RetrieveHeaders retrieves the header chain assemble based on the scheduled
 // skeleton.
+//
+/**
+RetrieveHeaders:
+根据计划的骨架拉取header进行组装
+ */
 func (q *queue) RetrieveHeaders() ([]*types.Header, int) {
 	q.lock.Lock()
 	defer q.lock.Unlock()
@@ -413,6 +469,11 @@ func (q *queue) countProcessableItems() int {
 
 // ReserveHeaders reserves a set of headers for the given peer, skipping any
 // previously failed batches.
+//
+/**
+ReserveHeaders:
+保留给定 peer 的一组 headers，跳过任何先前失败的 batch
+ */
 func (q *queue) ReserveHeaders(p *peerConnection, count int) *fetchRequest {
 	q.lock.Lock()
 	defer q.lock.Unlock()
