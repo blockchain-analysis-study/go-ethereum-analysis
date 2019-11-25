@@ -42,6 +42,9 @@ type ClientNode struct {
 	cmNode   *cmNode
 }
 
+/**
+创建一个 light 模式的client
+ */
 func NewClientNode(cm *ClientManager, params *ServerParams) *ClientNode {
 	node := &ClientNode{
 		cm:       cm,

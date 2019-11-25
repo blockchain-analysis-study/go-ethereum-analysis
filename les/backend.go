@@ -63,6 +63,9 @@ type LightEthereum struct {
 	txPool     *light.TxPool
 	// lightchain指针
 	blockchain *light.LightChain
+
+	// todo 这个东西,只有当前节点为 light 节点测 client端的时候才会有值
+	// todo 里头记录的是和当前 client链接的 server 端
 	serverPool *serverPool
 	reqDist    *requestDistributor
 	// 猎犬 (reqDist的更上一层)
@@ -145,7 +148,8 @@ func New(ctx *node.ServiceContext, config *eth.Config) (*LightEthereum, error) {
 
 	// 交易中继器
 	leth.relay = NewLesTxRelay(peers, leth.reqDist)
-	//
+	// todo 这个东西,只有当前节点为 light 节点测 client端的时候才会有值
+	// todo 里头记录的是和当前 client链接的 server 端
 	leth.serverPool = newServerPool(chainDb, quitSync, &leth.wg)
 	// 猎犬管理器 (额,请求分发器的更上一层)
 	leth.retriever = newRetrieveManager(peers, leth.reqDist, leth.serverPool)

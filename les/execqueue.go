@@ -20,6 +20,10 @@ import "sync"
 
 // execQueue implements a queue that executes function calls in a single thread,
 // in the same order as they have been queued.
+//
+/**
+execQueue: 实现了一个队列，该队列在单个线程中按已排队的顺序执行 func 调用。
+ */
 type execQueue struct {
 	mu        sync.Mutex
 	cond      *sync.Cond
@@ -31,6 +35,7 @@ type execQueue struct {
 func newExecQueue(capacity int) *execQueue {
 	q := &execQueue{funcs: make([]func(), 0, capacity)}
 	q.cond = sync.NewCond(&q.mu)
+	// 直接进入监听阶段
 	go q.loop()
 	return q
 }

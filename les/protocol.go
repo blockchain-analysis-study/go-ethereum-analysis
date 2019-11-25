@@ -52,6 +52,7 @@ var ProtocolLengths = map[uint]uint64{lpv1: 15, lpv2: 22}
 
 const (
 	NetworkId          = 1
+	// todo 协议消息大小的最大上限
 	ProtocolMaxMsgSize = 10 * 1024 * 1024 // Maximum cap on the size of a protocol message
 )
 
@@ -132,6 +133,8 @@ type announceBlock struct {
 }
 
 // announceData is the network packet for the block announcements.
+//
+// announceData 是block 广播的网络数据包
 type announceData struct {
 	Hash       common.Hash // Hash of one particular block being announced
 	Number     uint64      // Number of one particular block being announced

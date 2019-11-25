@@ -35,6 +35,7 @@ import (
 var (
 	blockCacheItems      = 8192             // Maximum number of blocks to cache before throttling the download
 	blockCacheMemory     = 64 * 1024 * 1024 // Maximum amount of memory to use for block caching
+	// 乘以近似基于过去的平均块大小 (用来计算 downloader 同步时,的内存占用大小)
 	blockCacheSizeWeight = 0.1              // Multiplier to approximate the average block size based on past ones
 )
 
@@ -53,13 +54,24 @@ type fetchRequest struct {
 
 // fetchResult is a struct collecting partial results from data fetchers until
 // all outstanding pieces complete and the result as a whole can be processed.
+//
+// fetchResult 是一个结构，
+// 它从数据获取器中收集部分结果，
+// 直到所有未完成的部分完成并且整个结果可以被处理
 type fetchResult struct {
+	// 仍待处理的数据提取数量 <即: 这些数据还在需要被处理>
 	Pending int         // Number of data fetches still pending
+	// header的hash以防止重新计算
 	Hash    common.Hash // Hash of the header to prevent recalculating
 
+	// 该Hash 对应的 header
 	Header       *types.Header
+	// 其,相关的 uncles
 	Uncles       []*types.Header
+
+	// 该Hash 对应的block body 中的所有txs
 	Transactions types.Transactions
+	// 该Hash 对应的block body 中的所有receipts
 	Receipts     types.Receipts
 }
 
@@ -185,8 +197,12 @@ func (q *queue) Reset() {
 
 // Close marks the end of the sync, unblocking WaitResults.
 // It may be called even if the queue is already closed.
+//
+// 标志着同步的结束，不阻塞 WaitResults.
+// 即使队列已经关闭也可能被调用.
 func (q *queue) Close() {
 	q.lock.Lock()
+	// 添加 close 标识
 	q.closed = true
 	q.lock.Unlock()
 	q.active.Broadcast()
@@ -413,41 +429,68 @@ func (q *queue) Schedule(headers []*types.Header, from uint64) []*types.Header {
 
 // Results retrieves and permanently removes a batch of fetch results from
 // the cache. the result slice will be empty if the queue has been closed.
+//
+// Results
+// 从缓存中 拉取并永久删除一批提取结果。 如果队列已关闭，则结果数组将为空
 func (q *queue) Results(block bool) []*fetchResult {
 	q.lock.Lock()
 	defer q.lock.Unlock()
 
 	// Count the number of items available for processing
+	//
+	// 计算可处理的项目数 (这个 func 的实现有问题?)
+	// 也只是个 估算的了
 	nproc := q.countProcessableItems()
+	// 如果没有了需要处理的条目 且 queue 已经关闭
 	for nproc == 0 && !q.closed {
+
+		// block: 是否直接结束标识
 		if !block {
 			return nil
 		}
+		// 等待结束
 		q.active.Wait()
+		// 再次 尝试获取 需要处理的条目
+		// (因为退出时,需要将没处理完的处理掉,那么可能这时候 缓存中需要被处理的items突然又有了)
 		nproc = q.countProcessableItems()
 	}
 	// Since we have a batch limit, don't pull more into "dangling" memory
+	//
+	// 由于我们有批次限制，所以不要将更多信息放入“悬挂”的内存中
+	// 每次处理的 条目数不能 大于 一次导入到链中的内容(txs, receipts)下载结果数
 	if nproc > maxResultsProcess {
 		nproc = maxResultsProcess
 	}
 	results := make([]*fetchResult, nproc)
+	// 从缓存中copy出一部分条目进行处理
 	copy(results, q.resultCache[:nproc])
 	if len(results) > 0 {
 		// Mark results as done before dropping them from the cache.
+		//
+		// 将结果标记为已完成，然后将其从缓存中删除
+		// (先清除 已完成的去重集中的 hash)
 		for _, result := range results {
 			hash := result.Header.Hash()
 			delete(q.blockDonePool, hash)
 			delete(q.receiptDonePool, hash)
 		}
 		// Delete the results from the cache and clear the tail.
+		//
+		// 从缓存中删除结果并清除尾部
 		copy(q.resultCache, q.resultCache[nproc:])
+		// todo 这个for 我是真的看不懂啊
 		for i := len(q.resultCache) - nproc; i < len(q.resultCache); i++ {
 			q.resultCache[i] = nil
 		}
 		// Advance the expected block number of the first cache entry.
+		//
+		// 提前第一个缓存条目的预期块号
 		q.resultOffset += uint64(nproc)
 
 		// Recalculate the result item weights to prevent memory exhaustion
+		//
+		// 重新计算结果项的权重，以防止内存耗尽
+		// 累加一个 result的大小
 		for _, result := range results {
 			size := result.Header.Size()
 			for _, uncle := range result.Uncles {
@@ -459,6 +502,8 @@ func (q *queue) Results(block bool) []*fetchResult {
 			for _, tx := range result.Transactions {
 				size += tx.Size()
 			}
+
+			// sumSize = size*0.1 + (1-0.1) * sumSize  这公式是怎么的出来的啊!? 我叼啊~
 			q.resultSize = common.StorageSize(blockCacheSizeWeight)*size + (1-common.StorageSize(blockCacheSizeWeight))*q.resultSize
 		}
 	}
@@ -466,12 +511,20 @@ func (q *queue) Results(block bool) []*fetchResult {
 }
 
 // countProcessableItems counts the processable items.
+// countProcessableItems 计算可处理项目
 func (q *queue) countProcessableItems() int {
+
+	// 遍历 缓存中的 已经被下载但尚未被处理的 req
 	for i, result := range q.resultCache {
+
+		// 这里的处理  很奇葩啊,我叼, result == nil 时,直接返回 for index (有问题)
+		// 或者 当有 result 是pending的时候<仍待处理的数据提取数量>, 返回Pending中的数目? (有问题)
 		if result == nil || result.Pending > 0 {
 			return i
 		}
 	}
+
+	// 返回违背处理的 所有 req数目
 	return len(q.resultCache)
 }
 

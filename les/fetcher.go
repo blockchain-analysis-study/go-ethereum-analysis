@@ -71,6 +71,7 @@ type fetcherPeerInfo struct {
 	nodeCnt             int
 	confirmedTd         *big.Int
 	bestConfirmed       *fetcherTreeNode
+	// TODO 这个是干嘛的
 	nodeByHash          map[common.Hash]*fetcherTreeNode
 	firstUpdateStats    *updateStatsEntry
 }
@@ -500,6 +501,12 @@ func (f *lightFetcher) nextRequest() (*distReq, uint64) {
 				go func() {
 					p := dp.(*peer)
 					p.Log().Debug("Synchronisation started")
+
+					/**
+					TODO 超级重要
+					TODO 这里是 light 同步的开始,
+					TODO 同步的流程最终会流转到 downloader 那边
+					 */
 					f.pm.synchronise(p)
 					f.syncDone <- p
 				}()

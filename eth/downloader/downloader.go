@@ -60,6 +60,7 @@ var (
 	maxQueuedHeaders  = 32 * 1024 // [eth/62] Maximum number of headers to queue for import (DOS protection)
 	// 一次导入链中的header下载结果数
 	maxHeadersProcess = 2048      // Number of header download results to import at once into the chain
+	// 一次导入到链中的内容(txs, receipts)下载结果数
 	maxResultsProcess = 2048      // Number of content download results to import at once into the chain
 
 	// fast同步期间下载headers的验证频率
@@ -68,6 +69,9 @@ var (
 	fsHeaderSafetyNet      = 2048            // Number of headers to discard in case a chain violation is detected
 	fsHeaderForceVerify    = 24              // Number of headers to verify before and after the pivot to accept it
 	fsHeaderContCheck      = 3 * time.Second // Time interval to check for header continuations during state download
+	// 即使在 fast 同步下也能完全拉取的块数
+	// fast其实不是从当前对端节点的最高块开始,而是从最高块往前64个块开始同步
+	// 这里是以太坊故意留64个块,在fast之后赶紧做full以校验数据的准确性
 	fsMinFullBlocks        = 64              // Number of blocks to retrieve fully even in fast sync
 )
 
@@ -132,8 +136,12 @@ type Downloader struct {
 	committed       int32
 
 	// Channels
+	//
+	// 接收入站 headers的通道
 	headerCh      chan dataPack        // [eth/62] Channel receiving inbound block headers
+	// 接收入站 bodies的通道
 	bodyCh        chan dataPack        // [eth/62] Channel receiving inbound block bodies
+	// 接收入站 receipts的通道
 	receiptCh     chan dataPack        // [eth/63] Channel receiving inbound receipts
 
 	// 向新tasks的block body获取程序(fetcher)发送信号的chan
@@ -448,6 +456,8 @@ func (d *Downloader) syncWithPeer(p *peerConnection, hash common.Hash, td *big.I
 	}(time.Now())
 
 	// Look up the sync boundaries: the common ancestor and the target block
+	//
+	// todo 查找同步边界：`公共祖先` 和 `目标块`
 	latest, err := d.fetchHeight(p)
 	if err != nil {
 		return err
@@ -496,9 +506,10 @@ func (d *Downloader) syncWithPeer(p *peerConnection, hash common.Hash, td *big.I
 	抓取 bodies
 	抓取 receipts
 
+	将抓取到的 header 进行处理 <校验,刷盘> full fast light 都使用的函数 `processHeaders`
 	 */
 	fetchers := []func() error{
-		// headers 总是被拉取的
+		// headers 总是被拉取的 (根据 skeleton 骨架的方式去拉取) fast full light 都用到
 		func() error { return d.fetchHeaders(p, origin+1, pivot) }, // Headers are always retrieved
 		// block bodies 只在 full(normal) 和 fast 模式下被拉取
 		func() error { return d.fetchBodies(origin + 1) },          // Bodies are retrieved during normal and fast sync
@@ -507,6 +518,7 @@ func (d *Downloader) syncWithPeer(p *peerConnection, hash common.Hash, td *big.I
 
 		// todo: 处理已被 拉取回来的headers
 		// todo: 将 headers 校验且落链,且决定是否基于这些headers 拉取更多相关信息 (bodies, receipts等等)
+		// todo: full fast light 三种模式都会用到的方法, 处理拉取回来的headers
 		func() error { return d.processHeaders(origin+1, pivot, td) },
 	}
 
@@ -516,10 +528,11 @@ func (d *Downloader) syncWithPeer(p *peerConnection, hash common.Hash, td *big.I
 	todo  processFastSyncContent 这个方法中就会最终调到这里
 	*/
 	if d.mode == FastSync {
-		// 如果是 fast 模式,还需要追加处理同步 state 的func
+		// todo 如果是 fast 模式,处理 txs receipts states 的func
 		fetchers = append(fetchers, func() error { return d.processFastSyncContent(latest) })
 	} else if d.mode == FullSync {
 		// 否则只是处理 bodies 之类
+		// 逐个将拉取回来的 `fetchResult` 刷盘, 比较简单的实现
 		fetchers = append(fetchers, d.processFullSyncContent)
 	}
 
@@ -529,14 +542,34 @@ func (d *Downloader) syncWithPeer(p *peerConnection, hash common.Hash, td *big.I
 
 // spawnSync runs d.process and all given fetcher functions to completion in
 // separate goroutines, returning the first error that appears.
+//
+// spawnSync:
+// 在单独的goroutine中运行 `d.process` 和所有给定的fetcher函数，以返回出现的第一个错误
+//
+// 入参为多个函数的集合,
+// 必须的函数:
+//     	fetchHeaders : headers的拉取 (根据 skeleton 骨架的方式去拉取) fast full light 都用到
+//     	fetchBodies :  bodies的拉取 只在 full(normal) 和 fast 模式下被拉取
+//     	fetchReceipts : receipts的拉取 只有在 fast 模式下被拉取
+//     	processHeaders : 处理已被 拉取回来的headers  fast full light 都用到
+// fast模式需要的函数:
+// 		processFastSyncContent : fast 模式拉取的结果处理 处理 txs receipts states 的func
+// full模式需要的函数:
+// 		processFullSyncContent : full 模式拉取的结果处理 处理 txs 的func
+//
+//
 func (d *Downloader) spawnSync(fetchers []func() error) error {
 	errc := make(chan error, len(fetchers))
 	d.cancelWg.Add(len(fetchers))
+
+	// 按照顺序,逐个 调用 fn
 	for _, fn := range fetchers {
 		fn := fn
 		go func() { defer d.cancelWg.Done(); errc <- fn() }()
 	}
 	// Wait for the first error, then terminate the others.
+	//
+	// 等待第一个错误，然后终止其他错误
 	var err error
 	for i := 0; i < len(fetchers); i++ {
 		if i == len(fetchers)-1 {
@@ -580,6 +613,12 @@ func (d *Downloader) Cancel() {
 
 // Terminate interrupts the downloader, canceling all pending operations.
 // The downloader cannot be reused after calling Terminate.
+//
+/**
+Terminate:
+中断下载程序，取消所有挂起的操作.
+调用终止后无法重用 downloader.
+ */
 func (d *Downloader) Terminate() {
 	// Close the termination channel (make sure double close is allowed)
 	d.quitLock.Lock()
@@ -596,13 +635,23 @@ func (d *Downloader) Terminate() {
 
 // fetchHeight retrieves the head header of the remote peer to aid in estimating
 // the total time a pending synchronisation would take.
+//
+/**
+fetchHeight:
+拉取远程peer的头部(最高的)header，以帮助估计待处理的同步将花费的总时间
+ */
 func (d *Downloader) fetchHeight(p *peerConnection) (*types.Header, error) {
 	p.log.Debug("Retrieving remote chain height")
 
 	// Request the advertised remote head block and wait for the response
+	//
+	// 请求播发的远程头(最高)块并等待响应
 	head, _ := p.peer.Head()
+
+	// todo 往对端 peer 发起拉取 block header 的请求 (根据hash)
 	go p.peer.RequestHeadersByHash(head, 1, 0, false)
 
+	// 获取 downloader 允许的 请求存活时间
 	ttl := d.requestTTL()
 	timeout := time.After(ttl)
 	for {
@@ -610,14 +659,24 @@ func (d *Downloader) fetchHeight(p *peerConnection) (*types.Header, error) {
 		case <-d.cancelCh:
 			return nil, errCancelBlockFetch
 
+		// 处理一个 header 的数据包
+		// 从远端抓取的
+		// Downloader.DeliverHeaders() 中压入 chan
 		case packet := <-d.headerCh:
 			// Discard anything not from the origin peer
+			//
+			// 丢弃不来自原始 peer 的任何内容
+			// 即: 丢掉所有pid 不匹配的数据包
 			if packet.PeerId() != p.id {
 				log.Debug("Received headers from incorrect peer", "peer", packet.PeerId())
 				break
 			}
 			// Make sure the peer actually gave something valid
+			// 转化成 headers
 			headers := packet.(*headerPack).headers
+
+			// 如果 拿到的包中的header 不是1个的话,报异常~
+			// 因为 当前只根据一个Hash 拉取对端peer上的最高块的header啊
 			if len(headers) != 1 {
 				p.log.Debug("Multiple headers for single request", "headers", len(headers))
 				return nil, errBadPeer
@@ -626,13 +685,17 @@ func (d *Downloader) fetchHeight(p *peerConnection) (*types.Header, error) {
 			p.log.Debug("Remote head header identified", "number", head.Number, "hash", head.Hash())
 			return head, nil
 
+		// 超时处理, 依据是上边的 TTL
 		case <-timeout:
 			p.log.Debug("Waiting for head header timed out", "elapsed", ttl)
 			return nil, errTimeout
 
+		// 忽略 body 和receipt
+		// todo note: 理论上都不应该走这一步吧
 		case <-d.bodyCh:
 		case <-d.receiptCh:
 			// Out of bounds delivery, ignore
+			// 超出范围交付，忽略
 		}
 	}
 }
@@ -1599,6 +1662,8 @@ func (d *Downloader) processHeaders(origin uint64, pivot uint64, td *big.Int) er
 
 // processFullSyncContent takes fetch results from the queue and imports them into the chain.
 func (d *Downloader) processFullSyncContent() error {
+	// full 没有 fast那么复杂,就直接拿数据直接组个刷盘
+	// 没有什么根据pivot点操作
 	for {
 		results := d.queue.Results(true)
 		if len(results) == 0 {
@@ -1642,51 +1707,89 @@ func (d *Downloader) importBlockResults(results []*fetchResult) error {
 
 // processFastSyncContent takes fetch results from the queue and writes them to the
 // database. It also controls the synchronisation of state nodes of the pivot block.
+//
+/**
+processFastSyncContent:
+从队列中获取结果并将其写入leveldb。 它还控制枢纽块(pivot block) state trie node 的同步
+ */
 func (d *Downloader) processFastSyncContent(latest *types.Header) error {
 	// Start syncing state of the reported head block. This should get us most of
 	// the state of the pivot block.
+	//
+	//
+	// 开始同步报告的头块的state。 这应该使我们获得枢轴块的大部分state
+	// (什么 枢纽块, state 同步不是只有 lastest块的同步么)
+	//
+	// todo 这里就是发起state 同步的开始
 	stateSync := d.syncState(latest.Root)
 	defer stateSync.Cancel()
 	go func() {
+		// 阻塞,等待接收 结束信号
 		if err := stateSync.Wait(); err != nil && err != errCancelStateFetch {
 			d.queue.Close() // wake up WaitResults
 		}
 	}()
 	// Figure out the ideal pivot block. Note, that this goalpost may move if the
 	// sync takes long enough for the chain head to move significantly.
+	//
+	// (判断)找出理想的枢轴块。 请注意，如果同步花费足够长的时间使链头明显移动
+	// <因为, 同步时间过长,对端节点上的peer可能已经增长了>，则该球门柱(goalpost: 门柱, 即 枢纽块)可能会移动
 	pivot := uint64(0)
+	// 这里先算出 枢纽块
 	if height := latest.Number.Uint64(); height > uint64(fsMinFullBlocks) {
+		// TODO fast其实不是从当前对端节点的最高块开始,而是从最高块往前64个块开始同步
 		pivot = height - uint64(fsMinFullBlocks)
 	}
 	// To cater for moving pivot points, track the pivot block and subsequently
 	// accumulated download results separately.
+	//
+	// 为了适应枢轴点的移动，请分别跟踪枢轴块和随后累积的下载结果
 	var (
+		// 锁定在枢轴块中，最终可能会更改
+		// 记录历史的pivot fetchResult
 		oldPivot *fetchResult   // Locked in pivot block, might change eventually
+		// 枢轴之后的下载fetchResult
+		// 即 对应pivot fetchResult 后面的去下载的fetchResult
 		oldTail  []*fetchResult // Downloaded content after the pivot
 	)
+
 	for {
 		// Wait for the next batch of downloaded data to be available, and if the pivot
 		// block became stale, move the goalpost
-		results := d.queue.Results(oldPivot == nil) // Block if we're not monitoring pivot staleness
+		//
+		// 等待下一批下载的数据可用，并且如果枢轴块变得陈旧，请移动球门柱。
+		// 说白了就是动态的去调整 pivot
+		// 从 queue.resultCache 中拿出一部分 `fetchResult` 进行处理
+		results := d.queue.Results(oldPivot == nil) // Block if we're not monitoring pivot staleness 如果我们不监视轴心陈旧，则阻止
 		if len(results) == 0 {
 			// If pivot sync is done, stop
+			// 如果完成数据 枢纽同步，请停止
 			if oldPivot == nil {
 				return stateSync.Cancel()
 			}
 			// If sync failed, stop
+			// 如果同步失败，请停止
 			select {
 			case <-d.cancelCh:
 				return stateSync.Cancel()
 			default:
 			}
 		}
+
+		// 回调
 		if d.chainInsertHook != nil {
 			d.chainInsertHook(results)
 		}
+
+		// 收集各个 pivot fetchResult
+		// 和 pivot fetchResult 之后的 fetchResult
+		// 和 从 queue.resultCache 中拿出一部分 `fetchResult`
 		if oldPivot != nil {
 			results = append(append([]*fetchResult{oldPivot}, oldTail...), results...)
 		}
 		// Split around the pivot block and process the two sides via fast/full sync
+		//
+		// 围绕枢轴块拆分并通过 fast/full 同步处理两侧 (blocks?)
 		if atomic.LoadInt32(&d.committed) == 0 {
 			latest = results[len(results)-1].Header
 			if height := latest.Number.Uint64(); height > pivot+2*uint64(fsMinFullBlocks) {
@@ -1694,15 +1797,28 @@ func (d *Downloader) processFastSyncContent(latest *types.Header) error {
 				pivot = height - uint64(fsMinFullBlocks)
 			}
 		}
+
+		//	P: pivot点的 `fetchResult`
+		// 	beforeP: pivot点之前的所有 `fetchResult`
+		//  afterP: pivot点之后的所有 `fetchResult`
 		P, beforeP, afterP := splitAroundPivot(pivot, results)
+
+		// 将beforeP的 blocks 和 receipt 刷入磁盘
+		// todo 注意: state 数据不在这里刷盘哦
 		if err := d.commitFastSyncData(beforeP, stateSync); err != nil {
 			return err
 		}
+
+
+		// 当,存在pivot点的 `fetchResult`时
 		if P != nil {
 			// If new pivot block found, cancel old state retrieval and restart
+			//
+			// 如果找到新的枢轴块，请取消旧状态检索并重新启动
 			if oldPivot != P {
 				stateSync.Cancel()
 
+				// todo 由于找到了新的 pivot, 则重新启动同步 state 数据
 				stateSync = d.syncState(P.Header.Root)
 				defer stateSync.Cancel()
 				go func() {
@@ -1713,11 +1829,17 @@ func (d *Downloader) processFastSyncContent(latest *types.Header) error {
 				oldPivot = P
 			}
 			// Wait for completion, occasionally checking for pivot staleness
+			//
+			// 等待完成，偶尔检查枢纽是否陈旧
 			select {
+
+			// 接收到同步结束信号
 			case <-stateSync.done:
 				if stateSync.err != nil {
 					return stateSync.err
 				}
+
+				// todo 刷入 pivot 点的`fetchResult`
 				if err := d.commitPivotBlock(P); err != nil {
 					return err
 				}
@@ -1729,6 +1851,9 @@ func (d *Downloader) processFastSyncContent(latest *types.Header) error {
 			}
 		}
 		// Fast sync done, pivot commit done, full import
+		//
+		// 快速同步完成，数据 `枢纽` 提交完成，数据完全(同步)导入
+		// 将afterP 的数据刷盘
 		if err := d.importBlockResults(afterP); err != nil {
 			return err
 		}
@@ -1750,6 +1875,9 @@ func splitAroundPivot(pivot uint64, results []*fetchResult) (p *fetchResult, bef
 	return p, before, after
 }
 
+
+// 将 blocks 和 receipt 刷入磁盘
+// todo 注意: state 数据不在这里刷盘哦
 func (d *Downloader) commitFastSyncData(results []*fetchResult, stateSync *stateSync) error {
 	// Check for any early termination requests
 	if len(results) == 0 {
@@ -1776,6 +1904,8 @@ func (d *Downloader) commitFastSyncData(results []*fetchResult, stateSync *state
 		blocks[i] = types.NewBlockWithHeader(result.Header).WithBody(result.Transactions, result.Uncles)
 		receipts[i] = result.Receipts
 	}
+
+	// todo 将 blocks 和 receipt 刷入磁盘
 	if index, err := d.blockchain.InsertReceiptChain(blocks, receipts); err != nil {
 		log.Debug("Downloaded item processing failed", "number", results[index].Header.Number, "hash", results[index].Header.Hash(), "err", err)
 		return errInvalidChain
@@ -1783,6 +1913,7 @@ func (d *Downloader) commitFastSyncData(results []*fetchResult, stateSync *state
 	return nil
 }
 
+// 刷入 pivot 点的`fetchResult`
 func (d *Downloader) commitPivotBlock(result *fetchResult) error {
 	block := types.NewBlockWithHeader(result.Header).WithBody(result.Transactions, result.Uncles)
 	log.Debug("Committing fast sync pivot as new head", "number", block.Number(), "hash", block.Hash())
@@ -1834,6 +1965,8 @@ func (d *Downloader) deliver(id string, destCh chan dataPack, packet dataPack, i
 		return errNoSyncActive
 	}
 	select {
+
+	// todo 将数据包 丢给 通道
 	case destCh <- packet:
 		return nil
 	case <-cancel:

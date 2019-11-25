@@ -111,6 +111,12 @@ type registerReq struct {
 // serverPool implements a pool for storing and selecting newly discovered and already
 // known light server nodes. It received discovered nodes, stores statistics about
 // known nodes and takes care of always having enough good quality servers connected.
+//
+/**
+serverPool:
+实现一个池，用于存储和选择新发现的和已知的轻型服务器节点 <轻节点>。
+它接收发现的节点，存储有关已知节点的统计信息，并始终保持连接足够高质量的服务器 (即: 轻节点的Server端, 全节点)
+ */
 type serverPool struct {
 	db     ethdb.Database
 	dbKey  []byte
@@ -186,6 +192,12 @@ func (pool *serverPool) start(server *p2p.Server, topic discv5.Topic) {
 // Otherwise, the connection should be rejected.
 // Note that whenever a connection has been accepted and a pool entry has been returned,
 // disconnect should also always be called.
+//
+/**
+任何传入连接都应调用 `connect`。 如果 服务器池(serverPool) 最近已拨打该连接，
+则返回适当的池条目，否则应拒绝该连接。
+请注意，无论何时接受连接并返回池条目，都应始终调用断开连接。
+ */
 func (pool *serverPool) connect(p *peer, ip net.IP, port uint16) *poolEntry {
 	log.Debug("Connect new entry", "enode", p.id)
 	req := &connReq{p: p, ip: ip, port: port, result: make(chan *poolEntry, 1)}
@@ -603,6 +615,8 @@ const (
 )
 
 // poolEntry represents a server node and stores its current state and statistics.
+//
+// poolEntry: 代表 服务器节点 <light的server端> 并存储其当前状态和统计信息
 type poolEntry struct {
 	peer                  *peer
 	id                    discover.NodeID

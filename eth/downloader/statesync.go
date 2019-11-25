@@ -355,12 +355,14 @@ func (s *stateSync) run() {
 }
 
 // Wait blocks until the sync is done or canceled.
+// Wait 阻止直到同步完成或取消
 func (s *stateSync) Wait() error {
 	<-s.done
 	return s.err
 }
 
 // Cancel cancels the sync and waits until it has shut down.
+// Cancel 取消同步并等待直到它关闭
 func (s *stateSync) Cancel() error {
 	s.cancelOnce.Do(func() { close(s.cancel) })
 	return s.Wait()

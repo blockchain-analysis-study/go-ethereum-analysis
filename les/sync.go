@@ -37,6 +37,8 @@ func (pm *ProtocolManager) syncer() {
 	//forceSync := time.Tick(forceSyncCycle)
 	for {
 		select {
+
+		// 这里 屁事都不做
 		case <-pm.newPeerCh:
 			/*			// Make sure we have peers to select from, then sync
 						if pm.peers.Len() < minDesiredPeerCount {
@@ -61,6 +63,10 @@ func (pm *ProtocolManager) needToSync(peerHead blockInfo) bool {
 }
 
 // synchronise tries to sync up our local block chain with a remote peer.
+//
+/**
+todo synchronise: 尝试将我们的本地 lightchain 与 远程 peer 同步
+ */
 func (pm *ProtocolManager) synchronise(peer *peer) {
 	// Short circuit if no peers are available
 	if peer == nil {

@@ -37,9 +37,14 @@ import (
 	"github.com/go-ethereum-analysis/rlp"
 )
 
+
+/**
+轻节点 的server端实现 (即: 全节点对于 les 的server实现)
+ */
 type LesServer struct {
 	lesCommons
 
+	// 如果我们的节点仅是客户端，则为nil
 	fcManager   *flowcontrol.ClientManager // nil if our node is client only
 	fcCostStats *requestCostStats
 	defParams   *flowcontrol.ServerParams
@@ -50,6 +55,8 @@ type LesServer struct {
 
 func NewLesServer(eth *eth.Ethereum, config *eth.Config) (*LesServer, error) {
 	quitSync := make(chan struct{})
+
+
 	pm, err := NewProtocolManager(eth.BlockChain().Config(), false, config.NetworkId, eth.EventMux(), eth.Engine(), newPeerSet(), eth.BlockChain(), eth.TxPool(), eth.ChainDb(), nil, nil, nil, quitSync, new(sync.WaitGroup))
 	if err != nil {
 		return nil, err
@@ -102,7 +109,10 @@ func NewLesServer(eth *eth.Ethereum, config *eth.Config) (*LesServer, error) {
 		BufLimit:    300000000,
 		MinRecharge: 50000,
 	}
+
+	// todo 只有当前节点是 les 的server 端下回有这个, 即一些关于 client 管理相关的
 	srv.fcManager = flowcontrol.NewClientManager(uint64(config.LightServ), 10, 1000000000)
+	// 资源消耗统计相关 !?
 	srv.fcCostStats = newCostStats(eth.ChainDb())
 	return srv, nil
 }

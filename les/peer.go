@@ -59,23 +59,34 @@ type peer struct {
 	version int    // Protocol version negotiated
 	network uint64 // Network ID being on
 
+	// 响应 通知类型, 请求 通知类型
 	announceType, requestAnnounceType uint64
 
 	id string
 
+	// 设置当前 peer 的通知类型?
+	// 就是当前节点的 td / currentHead Hash/ currentHead num
 	headInfo *announceData
 	lock     sync.RWMutex
 
 	announceChn chan announceData
+
+	// 一个 func 队列
 	sendQueue   *execQueue
 
+	// poolEntry: 代表 服务器节点 <light的server端> 并存储其当前状态和统计信息
 	poolEntry      *poolEntry
 	hasBlock       func(common.Hash, uint64) bool
 	responseErrors int
 
+	// 如果peer 是server的话,则该值为nil
 	fcClient       *flowcontrol.ClientNode // nil if the peer is server only
+	// 如果peer 是client的话,则该值为nil
 	fcServer       *flowcontrol.ServerNode // nil if the peer is client only
+
 	fcServerParams *flowcontrol.ServerParams
+
+	// todo 记录req的消耗表
 	fcCosts        requestCostTable
 }
 
@@ -370,22 +381,34 @@ func (m keyValueMap) get(key string, val interface{}) error {
 // 处理 P2P 的 Send和Receive 列表
 func (p *peer) sendReceiveHandshake(sendList keyValueList) (keyValueList, error) {
 	// Send out own handshake in a new thread
+	// 在新线程中发送自己的握手
 	errc := make(chan error, 1)
 	go func() {
+
+		/**
+		发送 Status
+		 */
 		errc <- p2p.Send(p.rw, StatusMsg, sendList)
 	}()
 	// In the mean time retrieve the remote status message
+	// 同时 拉取 远程状态消息
+	// 即: 接收响应的详细
 	msg, err := p.rw.ReadMsg()
 	if err != nil {
 		return nil, err
 	}
+
 	if msg.Code != StatusMsg {
 		return nil, errResp(ErrNoStatusMsg, "first msg has code %x (!= %x)", msg.Code, StatusMsg)
 	}
 	if msg.Size > ProtocolMaxMsgSize {
 		return nil, errResp(ErrMsgTooLarge, "%v > %v", msg.Size, ProtocolMaxMsgSize)
 	}
+
+
 	// Decode the handshake
+	//
+	// 解码握手
 	var recvList keyValueList
 	if err := msg.Decode(&recvList); err != nil {
 		return nil, errResp(ErrDecode, "msg %v: %v", msg, err)
@@ -407,7 +430,9 @@ func (p *peer) Handshake(td *big.Int, head common.Hash, headNum uint64, genesis 
 
 	// TODO 握手时声明的3个参数为：
 	//
-	// todo 在server(全节点)对client(轻节点)提供服务，在双方建立连接握手时，server会声名3个流量控制参数，如果在服务过程中，client不遵守协议，client将会被终止服务。
+	// todo 在server(全节点)对client(轻节点)提供服务，
+	// todo 在双方建立连接握手时，server会声名3个流量控制参数，
+	// todo 如果在服务过程中，client不遵守协议，client将会被终止服务。
 	//
 	// Buffer Limit
 	// Maximum Request Cost table
@@ -428,12 +453,14 @@ func (p *peer) Handshake(td *big.Int, head common.Hash, headNum uint64, genesis 
 		send = send.add("serveChainSince", uint64(0))
 		send = send.add("serveStateSince", uint64(0))
 		send = send.add("txRelay", nil)
-		send = send.add("flowControl/BL", server.defParams.BufLimit)    // 握手的 Buffer Limit
-		send = send.add("flowControl/MRR", server.defParams.MinRecharge)// 握手时 Minimum Rate of Recharge
+		send = send.add("flowControl/BL", server.defParams.BufLimit)    // TODO 握手的 Buffer Limit
+		send = send.add("flowControl/MRR", server.defParams.MinRecharge)// TODO 握手时 Minimum Rate of Recharge
 		list := server.fcCostStats.getCurrentList()
-		send = send.add("flowControl/MRC", list)   // 握手时的 Maximum Request Cost table
+		send = send.add("flowControl/MRC", list)   // TODO 握手时的 Maximum Request Cost table
 		p.fcCosts = list.decode()
 	} else {
+
+		// 设置为默认，直到实现“非常轻巧”客户端模式
 		p.requestAnnounceType = announceTypeSimple // set to default until "very light" client mode is implemented
 		send = send.add("announceType", p.requestAnnounceType)
 	}
@@ -445,9 +472,13 @@ func (p *peer) Handshake(td *big.Int, head common.Hash, headNum uint64, genesis 
 	if err != nil {
 		return err
 	}
+
+	// 将 slice 转成 map
 	recv := recvList.decode()
 
+	// 读取对端peer的 resp 中的gensis 和 链上最高块的Hash
 	var rGenesis, rHash common.Hash
+	// 读取对端peer 的p2p version 和 networkId 和链上最高块的num
 	var rVersion, rNetwork, rNum uint64
 	var rTd *big.Int
 
@@ -484,7 +515,7 @@ func (p *peer) Handshake(td *big.Int, head common.Hash, headNum uint64, genesis 
 
 
 	// 根据条件 选择性的获取 参数
-	// todo 如果当前本地节点是 server
+	// todo 如果当前本地节点是 server (即: 全节点)
 	if server != nil {
 		// until we have a proper peer connectivity API, allow LES connection to other servers
 		/*if recv.get("serveStateSince", nil) == nil {
@@ -493,9 +524,11 @@ func (p *peer) Handshake(td *big.Int, head common.Hash, headNum uint64, genesis 
 		if recv.get("announceType", &p.announceType) != nil {
 			p.announceType = announceTypeSimple
 		}
-		// 则，确认对端节点实例 p 是 client
+		// todo 则，确认 `对端节点实例 p` 是 client
 		p.fcClient = flowcontrol.NewClientNode(server.fcManager, server.defParams)
 	} else {
+
+		// todo 如果当前节点是 client的话
 		if recv.get("serveChainSince", nil) != nil {
 			return errResp(ErrUselessPeer, "peer cannot serve chain")
 		}
@@ -517,7 +550,7 @@ func (p *peer) Handshake(td *big.Int, head common.Hash, headNum uint64, genesis 
 			return err
 		}
 		p.fcServerParams = params
-		// 否则，确认对端节点实例 p 是 server
+		// todo 否则，确认 `对端节点实例 p` 是 server
 		p.fcServer = flowcontrol.NewServerNode(params)
 		p.fcCosts = MRC.decode()
 	}
@@ -601,6 +634,9 @@ func (ps *peerSet) notify(n peerSetNotify) {
 
 // Register injects a new peer into the working set, or returns an error if the
 // peer is already known.
+/**
+Register: 将一个新的 peer 注入工作集中 (peerSet)，或者如果已知该 peer，则返回错误
+ */
 func (ps *peerSet) Register(p *peer) error {
 	ps.lock.Lock()
 	if ps.closed {
@@ -611,12 +647,18 @@ func (ps *peerSet) Register(p *peer) error {
 		ps.lock.Unlock()
 		return errAlreadyRegistered
 	}
+
+	// 如果 peer 还未存在,则加入 peerSet中
 	ps.peers[p.id] = p
+
+	// 创建一个 func 队列实例
+	// 该队列在创建的同时就已经进入 监听阶段了
 	p.sendQueue = newExecQueue(100)
 	peers := make([]peerSetNotify, len(ps.notifyList))
 	copy(peers, ps.notifyList)
 	ps.lock.Unlock()
 
+	// 每一次有新的peer注册到pm的时候,都需要将peer 逐个注册到 对应改的 notify 实现上
 	for _, n := range peers {
 		n.registerPeer(p)
 	}
@@ -631,14 +673,18 @@ func (ps *peerSet) Unregister(id string) error {
 		ps.lock.Unlock()
 		return errNotRegistered
 	} else {
+
+		// 先从pm的peerSet中删除对应pid的peer
 		delete(ps.peers, id)
 		peers := make([]peerSetNotify, len(ps.notifyList))
 		copy(peers, ps.notifyList)
 		ps.lock.Unlock()
 
+		// 每一次有peer被移除时,都需要逐个到对应的 notify 上面去移除掉
 		for _, n := range peers {
 			n.unregisterPeer(p)
 		}
+		// 将该peer 的func 执行队列关闭
 		p.sendQueue.quit()
 		// 断开对端peer 的链接
 		p.Peer.Disconnect(p2p.DiscUselessPeer)

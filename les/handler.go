@@ -97,7 +97,11 @@ type ProtocolManager struct {
 	blockchain  BlockChain
 	chainDb     ethdb.Database
 	odr         *LesOdr
-	server      *LesServer  // todo TODO  只有是开启了支持轻节点连接 Server 端的全节点，才会对 pm.server 赋值
+	// todo  只有是开启了支持轻节点连接 Server 端的全节点，才会对 pm.server 赋值
+	server      *LesServer
+
+	// todo  如果当前节点是轻节点Client 则,该值就有
+	// todo 里头记录的是和当前 client链接的 server 端 (与当前client链接的server全节点)
 	serverPool  *serverPool
 	clientPool  *freeClientPool
 	lesTopic    discv5.Topic
@@ -106,9 +110,13 @@ type ProtocolManager struct {
 	// 猎犬(请求分发器的更上一层)
 	retriever   *retrieveManager
 
+	// downloader 的引用
 	downloader *downloader.Downloader
+	// lightfetcher的引用
 	fetcher    *lightFetcher
 	peers      *peerSet
+
+	// 限制当前 节点 最多可连接多少个对端peer
 	maxPeers   int
 
 	eventMux *event.TypeMux
@@ -137,6 +145,10 @@ func NewProtocolManager(chainConfig *params.ChainConfig, lightSync bool, network
 		networkId:   networkId,
 		txpool:      txpool,
 		txrelay:     txrelay,
+
+		// todo 这个,如果是 轻节点的client端 (真的轻节点) 的话,才会有
+		// TODO 如果是 轻节点的server端 (一个全节点) 的话,则没有
+		// todo 里头记录的是和当前 client链接的 server 端
 		serverPool:  serverPool,
 		peers:       peers,
 		newPeerCh:   make(chan *peer),
@@ -211,23 +223,44 @@ func (pm *ProtocolManager) Stop() {
 }
 
 // runPeer is the p2p protocol run function for the given version.
+//
+// runPeer: 是给定版本的p2p协议运行功能
 func (pm *ProtocolManager) runPeer(version uint, p *p2p.Peer, rw p2p.MsgReadWriter) error {
 	var entry *poolEntry
+
+	// 根据真实的 p2p 实例和 读写流等相关信息
+	// 封装一个 对端peer实例
 	peer := pm.newPeer(int(version), pm.networkId, p, rw)
+
+	// todo  如果当前节点是轻节点Client 则,该值就有
+	// todo 里头记录的是和当前 client链接的 server 端 (与当前client链接的server全节点)
 	if pm.serverPool != nil {
 		addr := p.RemoteAddr().(*net.TCPAddr)
+		// todo 将当前 client 和远端的 server 建立TCP连接, 当前节点主动发起
+		// 其实我耶不清楚,为毛这里还要去做 p2p? 传进来的p2p.Peer 不已经是具备了 TCP 的了么
 		entry = pm.serverPool.connect(peer, addr.IP, uint16(addr.Port))
 	}
+
+	// poolEntry: 代表 服务器节点 <light的server端> 并存储其当前状态和统计信息
 	peer.poolEntry = entry
 	select {
+	// 来一波新节点加入的通知
 	case pm.newPeerCh <- peer:
 		pm.wg.Add(1)
 		defer pm.wg.Done()
+
+		/**
+		todo 处理轻节点 握手
+		 */
 		err := pm.handle(peer)
+
+		// 最后断开? 看不懂哦
 		if entry != nil {
 			pm.serverPool.disconnect(entry)
 		}
 		return err
+
+	// 如果退出 同步
 	case <-pm.quitSync:
 		if entry != nil {
 			pm.serverPool.disconnect(entry)
@@ -246,8 +279,10 @@ func (pm *ProtocolManager) handle(p *peer) error {
 	// Ignore maxPeers if this is a trusted peer
 	// In server mode we try to check into the client pool after handshake
 	//
-	// 如果是 light 模式 且 和对端的链接数越界 且对端不是可信任节点的话，
-	// 则，直接返回错误
+	/**
+	如果是 light 模式 且 和对端的链接数越界 且对端不是可信任节点的话，
+	则，直接返回错误
+	 */
 	if pm.lightSync && pm.peers.Len() >= pm.maxPeers && !p.Peer.Info().Network.Trusted {
 		return p2p.DiscTooManyPeers
 	}
@@ -256,25 +291,40 @@ func (pm *ProtocolManager) handle(p *peer) error {
 
 	// Execute the LES handshake
 	var (
+		// 创世块
 		genesis = pm.blockchain.Genesis()
+		// 链上最高快 header
 		head    = pm.blockchain.CurrentHeader()
+		// 链上最高块对应的Hash
 		hash    = head.Hash()
+		// 链上最高快对应的Hash
 		number  = head.Number.Uint64()
+		// 当前链上的td
 		td      = pm.blockchain.GetTd(hash, number)
 	)
 
 
 	/**
-	TODO 处理 轻节点和全节点 握手
+	TODO 处理 轻节点和全节点 握手 (即 tcp 的校验性链接)
+	todo 只是简单的发起 握手,并没有处理 TCP 连接之后的各种消息
+	todo 在 `pm.handleMsg` 这里才是真正的处理 TCP msg
 	 */
 	if err := p.Handshake(td, hash, number, genesis.Hash(), pm.server); err != nil {
 		p.Log().Debug("Light Ethereum handshake failed", "err", err)
 		return err
 	}
 
+
+
+	/**
+	在 握手完了之后, todo 其实这个是干嘛的我也不懂
+
+	 */
 	if !pm.lightSync && !p.Peer.Info().Network.Trusted {
 		addr, ok := p.RemoteAddr().(*net.TCPAddr)
 		// test peer address is not a tcp address, don't use client pool if can not typecast
+		//
+		// 测试 peer 的地址不是TCP地址，如果无法进行类型转换，请不要使用客户端池
 		if ok {
 			id := addr.IP.String()
 			if !pm.clientPool.connect(id, func() { go pm.removePeer(p.id) }) {
@@ -288,18 +338,28 @@ func (pm *ProtocolManager) handle(p *peer) error {
 		rw.Init(p.version)
 	}
 	// Register the peer locally
-	// 握手成功则，在当前节点的 peerSet 中注册一个对端节点的实例
+	/**
+	TODO 握手成功则，在当前节点的 peerSet 中注册一个对端节点的实例
+	 */
 	if err := pm.peers.Register(p); err != nil {
 		p.Log().Error("Light Ethereum peer registration failed", "err", err)
 		return err
 	}
 	defer func() {
+
+		//  todo 如果是 light 的server 端(全节点) 且 client的管理相关 不为空 且 对端peer 的client字段不为空
 		if pm.server != nil && pm.server.fcManager != nil && p.fcClient != nil {
+
+			// 从fcManager中移除 对端peer的fcClient
 			p.fcClient.Remove(pm.server.fcManager)
 		}
+		// 从pm的peerSet中移除 对端peer
 		pm.removePeer(p.id)
 	}()
 	// Register the peer in the downloader. If the downloader considers it banned, we disconnect
+	//
+	// 在 downloader中注册 该对端peer。
+	// 如果downloader认为它被禁止，我们将断开连接
 	if pm.lightSync {
 		p.lock.Lock()
 		head := p.headInfo
@@ -317,6 +377,7 @@ func (pm *ProtocolManager) handle(p *peer) error {
 	defer close(stop)
 	go func() {
 		// new block announce loop
+		// 新块 广播循环
 		for {
 			select {
 			case announce := <-p.announceChn:
@@ -329,6 +390,10 @@ func (pm *ProtocolManager) handle(p *peer) error {
 
 	// main loop. handle incoming messages.
 	for {
+
+		/**
+		TODO 这个是处理 TCP 数据消息交换
+		 */
 		if err := pm.handleMsg(p); err != nil {
 			p.Log().Debug("Light Ethereum message handling failed", "err", err)
 			return err

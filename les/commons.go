@@ -50,6 +50,8 @@ type NodeInfo struct {
 }
 
 // makeProtocols creates protocol descriptors for the given LES versions.
+//
+// makeProtocols: 为给定的LES版本创建协议描述符
 func (c *lesCommons) makeProtocols(versions []uint) []p2p.Protocol {
 	protos := make([]p2p.Protocol, len(versions))
 	for i, version := range versions {
@@ -59,11 +61,16 @@ func (c *lesCommons) makeProtocols(versions []uint) []p2p.Protocol {
 			Version:  version,
 			Length:   ProtocolLengths[version],
 			NodeInfo: c.nodeInfo,
+
+			/**
+			todo 启动当前节点
+			 */
 			Run: func(p *p2p.Peer, rw p2p.MsgReadWriter) error {
 
 				/**
 				TODO 这里相当的重要
-				运行 轻节点
+				todo 运行 轻节点
+				todo 轻节点就是从这里为入口的啦
 				 */
 				return c.protocolManager.runPeer(version, p, rw)
 			},
