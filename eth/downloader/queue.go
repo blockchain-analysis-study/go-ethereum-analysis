@@ -89,7 +89,7 @@ type queue struct {
 	// 每个peer 的header batch的已知不可用的集合
 	headerPeerMiss  map[string]map[uint64]struct{} // [eth/62] Set of per-peer header batches known to be unavailable
 	headerPendPool  map[string]*fetchRequest       // [eth/62] Currently pending header retrieval operations
-	// 结果缓存累积完成的 header
+	// 结果缓存累积完成的 header (这里的已完成指的是 同步拉取回来的headers,  不是指 已经处理完成的)
 	headerResults   []*types.Header                // [eth/62] Result cache accumulating the completed headers
 	// 已被处理的 header 数量
 	headerProced    int                            // [eth/62] Number of headers already processed from the results
@@ -354,7 +354,15 @@ func (q *queue) RetrieveHeaders() ([]*types.Header, int) {
 	q.lock.Lock()
 	defer q.lock.Unlock()
 
+	/**
+	返回:
+	结果缓存累积完成的 header
+	和 已被处理的 header 数量
+	*/
 	headers, proced := q.headerResults, q.headerProced
+	/**
+	重置q中的结果
+	 */
 	q.headerResults, q.headerProced = nil, 0
 
 	return headers, proced

@@ -237,6 +237,9 @@ func (hc *HeaderChain) ValidateHeaderChain(chain []*types.Header, checkFreq int)
 	}
 
 	// Generate the list of seal verification requests, and start the parallel verifier
+	//
+	// 生成印章(headers)验证请求列表，并启动并行验证
+	// 用于  `跳跃性` 校验
 	seals := make([]bool, len(chain))
 	for i := 0; i < len(seals)/checkFreq; i++ {
 		index := i*checkFreq + hc.rand.Intn(checkFreq)
@@ -245,8 +248,11 @@ func (hc *HeaderChain) ValidateHeaderChain(chain []*types.Header, checkFreq int)
 		}
 		seals[index] = true
 	}
+
+	// 最后一个header应该始终被验证以避免垃圾
 	seals[len(seals)-1] = true // Last should always be verified to avoid junk
 
+	// `跳跃性` 校验 header
 	abort, results := hc.engine.VerifyHeaders(hc, chain, seals)
 	defer close(abort)
 

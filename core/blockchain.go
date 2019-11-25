@@ -1219,6 +1219,8 @@ func (bc *BlockChain) insertChain(chain types.Blocks) (int, []interface{}, []*ty
 	// 收集 区块头 及初始化 标识位为：true
 	for i, block := range chain {
 		headers[i] = block.Header()
+		// true: 表示对应index 的header 需要校验, 为什么会有这个 标识位?
+		// 应为,在light或者fast模式中不是所有的header 都需要校验的,而是 `跳跃性` 校验
 		seals[i] = true
 	}
 
