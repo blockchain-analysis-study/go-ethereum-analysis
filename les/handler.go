@@ -407,12 +407,16 @@ var reqList = []uint64{GetBlockHeadersMsg, GetBlockBodiesMsg, GetCodeMsg, GetRec
 // peer. The remote connection is torn down upon returning any error.
 func (pm *ProtocolManager) handleMsg(p *peer) error {
 	// Read the next message from the remote peer, and ensure it's fully consumed
+	//
+	// 读取来自 对端 peer 的下一条消息，并确保已将其完全读完
 	msg, err := p.rw.ReadMsg()
 	if err != nil {
 		return err
 	}
 	p.Log().Trace("Light Ethereum message arrived", "code", msg.Code, "bytes", msg.Size)
 
+
+	// 根据不同的 msg.Code 获取
 	costs := p.fcCosts[msg.Code]
 	reject := func(reqCnt, maxCnt uint64) bool {
 		if p.fcClient == nil || reqCnt > maxCnt {
