@@ -89,6 +89,7 @@ type txPool interface {
 }
 
 type ProtocolManager struct {
+	// 是否是 轻节点 同步模式
 	lightSync   bool
 	txpool      txPool
 	txrelay     *LesTxRelay
@@ -185,6 +186,8 @@ func (pm *ProtocolManager) removePeer(id string) {
 func (pm *ProtocolManager) Start(maxPeers int) {
 	pm.maxPeers = maxPeers
 
+
+	// todo 如果是轻节点同步的话
 	if pm.lightSync {
 		go pm.syncer()
 	} else {
@@ -375,12 +378,24 @@ func (pm *ProtocolManager) handle(p *peer) error {
 
 	stop := make(chan struct{})
 	defer close(stop)
+
+	/**
+	todo 超级重要这个携程
+	 */
 	go func() {
 		// new block announce loop
-		// 新块 广播循环
+		/**
+		todo 新块 广播循环
+		 */
 		for {
 			select {
+			/**
+			todo 这里才是真正的
+			 */
 			case announce := <-p.announceChn:
+
+				// 发送新block header 通知
+				// todo 消息在 `pm.handleMsg(p)` 中被处理
 				p.SendAnnounce(announce)
 			case <-stop:
 				return
@@ -418,15 +433,33 @@ func (pm *ProtocolManager) handleMsg(p *peer) error {
 
 	// 根据不同的 msg.Code 获取
 	costs := p.fcCosts[msg.Code]
+
+	// reject: 拒绝
+	//
+	// reqCnt: req的checkpoint?
+	// maxCnt: max的checkpoint
 	reject := func(reqCnt, maxCnt uint64) bool {
+
+		// 如果该 peer 是 light 的server 端,
+		// 或者 req的checkpoint > max的checkpoint
 		if p.fcClient == nil || reqCnt > maxCnt {
 			return true
 		}
+
+		/**
+		轻节点 client 接收req !?
+		 */
+		// 返回peer 被允许的缓存数量大小
+		// todo fcClient: 流量控制Client
 		bufValue, _ := p.fcClient.AcceptRequest()
+
+		// 计算(资源)消耗的值
 		cost := costs.baseCost + reqCnt*costs.reqCost
 		if cost > pm.server.defParams.BufLimit {
 			cost = pm.server.defParams.BufLimit
 		}
+
+		// 如果
 		if cost > bufValue {
 			recharge := time.Duration((cost - bufValue) * 1000000 / pm.server.defParams.MinRecharge)
 			p.Log().Error("Request came too early", "recharge", common.PrettyDuration(recharge))
@@ -435,24 +468,38 @@ func (pm *ProtocolManager) handleMsg(p *peer) error {
 		return false
 	}
 
+
+	// 校验msg的大小
 	if msg.Size > ProtocolMaxMsgSize {
 		return errResp(ErrMsgTooLarge, "%v > %v", msg.Size, ProtocolMaxMsgSize)
 	}
+
+	// TODO Discard: 会将所有剩余的有效负载数据读入黑洞
 	defer msg.Discard()
 
+
+	// 交付的消息
 	var deliverMsg *Msg
 
 	// Handle the message depending on its contents
+	//
+	// 根据消息内容处理消息
 	switch msg.Code {
+
+	// todo 这里是接收到 握手时发起的状态查询msg
 	case StatusMsg:
 		p.Log().Trace("Received status message")
 		// Status messages should never arrive after the handshake
+		/**
+		todo 握手后状态消息永远不会到达
+		 */
 		return errResp(ErrExtraStatusMsg, "uncontrolled status message")
 
 	// Block header query, collect the requested headers and reply
+	// block header 的查询，收集请求的headers并回复
 	case AnnounceMsg:
 		p.Log().Trace("Received announce message")
-		if p.requestAnnounceType == announceTypeNone {
+		if p.requestAnnounceType == announceTypeNone { // 这种, 基本上不会遇上,遇上的话就是异常
 			return errResp(ErrUnexpectedResponse, "")
 		}
 
@@ -461,7 +508,7 @@ func (pm *ProtocolManager) handleMsg(p *peer) error {
 			return errResp(ErrDecode, "%v: %v", msg, err)
 		}
 
-		if p.requestAnnounceType == announceTypeSigned {
+		if p.requestAnnounceType == announceTypeSigned { // 这个也是, 因为目前没看到对这个 p.requestAnnounceType 赋值 这个的地方啊
 			if err := req.checkSignature(p.pubKey); err != nil {
 				p.Log().Trace("Invalid announcement signature", "err", err)
 				return err
@@ -470,7 +517,15 @@ func (pm *ProtocolManager) handleMsg(p *peer) error {
 		}
 
 		p.Log().Trace("Announce message content", "number", req.Number, "hash", req.Hash, "td", req.Td, "reorg", req.ReorgDepth)
+
+		/**
+		todo 这个才是正常处理 msg
+		todo 即,处理类型为 `announceTypeSimple` 的
+		 */
 		if pm.fetcher != nil {
+
+			// todo fetcher 去处理 这个 对端peer过来的 新header 的广播通知msg
+			// todo 将新的 header 的 hash, number 等相关的 信息追加到 odr tree 中
 			pm.fetcher.announce(p, &req)
 		}
 

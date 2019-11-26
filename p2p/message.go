@@ -61,6 +61,7 @@ func (msg Msg) String() string {
 }
 
 // Discard reads any remaining payload data into a black hole.
+// Discard: 会将所有剩余的有效负载数据读入黑洞
 func (msg Msg) Discard() error {
 	_, err := io.Copy(ioutil.Discard, msg.Payload)
 	return err

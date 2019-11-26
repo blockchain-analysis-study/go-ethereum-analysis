@@ -65,8 +65,12 @@ type lightFetcher struct {
 
 // fetcherPeerInfo holds fetcher-specific information about each active peer
 //
-// fetcherPeerInfo保存有关每个活动peer的特定于访存器的信息
+/**
+fetcherPeerInfo保存有关每个活动peer的特定于访存器的信息
+ */
 type fetcherPeerInfo struct {
+	// root: tree root
+	// lastAnnounced: 最后加进来的一个 node !?
 	root, lastAnnounced *fetcherTreeNode
 	nodeCnt             int
 	confirmedTd         *big.Int
@@ -87,7 +91,22 @@ type fetcherPeerInfo struct {
 // which is necessary for selecting a suitable peer for ODR requests and also for
 // canonizing new heads. It also helps to always download the minimum necessary
 // amount of headers with a single request.
+/**
+fetcherTreeNode是树的节点，
+其中保存有关某个 peer 最近`宣布`和`确认`的 block的信息。
+来自peer的每个新的`公告消息`(announce message)都基于先前的`公告头`和`重组深度` 将节点添加到 tree 中。
+树节点有三种可能的状态：
+-`宣布`：尚未下载（已知），但我们知道其标题，编号和td
+-`中间级`：未知，hash和td为空，在已知时将填写它们
+-`已知`：此对等方宣布并下载（从任何对等方下载）。
+todo 这种结构使得始终可以知道哪个peer具有特定的块，
+这对于为ODR <可按需检索的> 请求选择合适的peer以及对新的header进行标准化来说是必需的。
+它还有助于始终通过单个请求下载最小数量的header。
+
+todo 这是一个梳妆的结构
+ */
 type fetcherTreeNode struct {
+	// 对应这个tree 上节点的  hash 和 number
 	hash             common.Hash
 	number           uint64
 	td               *big.Int
@@ -277,39 +296,71 @@ func (f *lightFetcher) unregisterPeer(p *peer) {
 
 // announce processes a new announcement message received from a peer, adding new
 // nodes to the peer's block tree and removing old nodes if necessary
+//
+/**
+announce: 处理从peer收到的新公告消息，将新节点添加到 peer 的block tree，并在必要时删除旧节点
+ */
 func (f *lightFetcher) announce(p *peer, head *announceData) {
 	f.lock.Lock()
 	defer f.lock.Unlock()
 	p.Log().Debug("Received new announcement", "number", head.Number, "hash", head.Hash, "reorg", head.ReorgDepth)
 
+	/**
+	todo 获取,每个活动peer的特定于访存器的信息
+	todo 这里有 odr tree
+	 */
 	fp := f.peers[p]
 	if fp == nil {
 		p.Log().Debug("Announcement from unknown peer")
 		return
 	}
 
+	// 当现在见进来的header 的TD 小于上次加进来的header相关的TD小时, (有问题)
 	if fp.lastAnnounced != nil && head.Td.Cmp(fp.lastAnnounced.td) <= 0 {
 		// announced tds should be strictly monotonic
+		//
+		// 公布的tds应该 `严格单调`
+		// 即 TD 应该单调递增, 如果不是,则该远端 peer 的数据有问题,需要从本地的peerSet中移除
 		p.Log().Debug("Received non-monotonic td", "current", head.Td, "previous", fp.lastAnnounced.td)
 		go f.pm.removePeer(p.id)
 		return
 	}
 
 	n := fp.lastAnnounced
+
+	// 根据 重组深度,遍历一直往 tree root 遍历
+	// todo 说白了就是需要查找公共祖先
 	for i := uint64(0); i < head.ReorgDepth; i++ {
 		if n == nil {
 			break
 		}
+
+		// 使用上一级 node
 		n = n.parent
 	}
+
+
 	// n is now the reorg common ancestor, add a new branch of nodes
+	//
+	// n现在是reorg的共同祖先，添加一个新的节点分支
 	if n != nil && (head.Number >= n.number+maxNodeCount || head.Number <= n.number) {
 		// if announced head block height is lower or same as n or too far from it to add
 		// intermediate nodes then discard previous announcement info and trigger a resync
-		n = nil
-		fp.nodeCnt = 0
+		//
+		/**
+		todo
+			如果已声明的 head块高度小于或等于n或相距太远而无法添加中间节点，则丢弃先前的声明信息并触发重新同步
+		 */
+		n = nil // 将指针引用置为 nil
+		fp.nodeCnt = 0  // 清空checkpoint
+		// 清空 tree
 		fp.nodeByHash = make(map[common.Hash]*fetcherTreeNode)
 	}
+
+
+	/**
+	TODO 来啦来啦 皮卡丘
+	 */
 	if n != nil {
 		// check if the node count is too high to add new nodes, discard oldest ones if necessary
 		locked := false

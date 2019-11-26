@@ -16,6 +16,12 @@
 
 // Package light implements on-demand retrieval capable state and chain objects
 // for the Ethereum Light Client.
+
+// todo Package light实现 `可按需检索` 的状态和链对象
+
+/**
+todo ODR: on-demand retrieva, 按需检索
+ */
 package light
 
 import (
@@ -32,6 +38,8 @@ import (
 
 // NoOdr is the default context passed to an ODR capable function when the ODR
 // service is not required.
+//
+// NoOdr是不需要ODR服务时传递给支持ODR的功能的默认上下文
 var NoOdr = context.Background()
 
 // ErrNoPeers is returned if no peers capable of serving a queued request are available

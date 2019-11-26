@@ -288,6 +288,8 @@ func (s *LightEthereum) EventMux() *event.TypeMux           { return s.eventMux 
 // Protocols implements node.Service, returning all the currently configured
 // network protocols to start.
 func (s *LightEthereum) Protocols() []p2p.Protocol {
+
+	// 这边才是创建
 	return s.makeProtocols(ClientProtocolVersions)
 }
 

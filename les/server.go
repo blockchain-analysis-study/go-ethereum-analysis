@@ -332,15 +332,25 @@ func (s *requestCostStats) update(msgCode, reqCnt, cost uint64) {
 func (pm *ProtocolManager) blockLoop() {
 	pm.wg.Add(1)
 	headCh := make(chan core.ChainHeadEvent, 10)
+
+	// 监听是否 是否存在新的header产生
 	headSub := pm.blockchain.SubscribeChainHeadEvent(headCh)
 	go func() {
 		var lastHead *types.Header
 		lastBroadcastTd := common.Big0
 		for {
 			select {
+
+			// todo 监听到 新的header 产生
 			case ev := <-headCh:
+
+				// 先 load 出所有 peer
 				peers := pm.peers.AllPeers()
+
+				// 如果当前节点,存在对端peer的话
 				if len(peers) > 0 {
+
+					// 新的block header
 					header := ev.Block.Header()
 					hash := header.Hash()
 					number := header.Number.Uint64()
@@ -350,11 +360,17 @@ func (pm *ProtocolManager) blockLoop() {
 						if lastHead != nil {
 							reorg = lastHead.Number.Uint64() - rawdb.FindCommonAncestor(pm.chainDb, header, lastHead).Number.Uint64()
 						}
+
+						// 给 lastHead 赋值
 						lastHead = header
+						// 给 lastTd 赋值
 						lastBroadcastTd = td
 
 						log.Debug("Announcing block to peers", "number", number, "hash", hash, "td", td, "reorg", reorg)
 
+						/**
+						todo 组装 广播 结构体
+						 */
 						announce := announceData{Hash: hash, Number: number, Td: td, ReorgDepth: reorg}
 						var (
 							signed         bool
@@ -364,6 +380,11 @@ func (pm *ProtocolManager) blockLoop() {
 						for _, p := range peers {
 							switch p.announceType {
 
+							/**
+							todo 广播新的区块的信息
+							包含: Hash, number, td, 是否重组标识位
+							todo 其实,走到这里
+							 */
 							case announceTypeSimple:
 								select {
 								case p.announceChn <- announce:
@@ -371,6 +392,11 @@ func (pm *ProtocolManager) blockLoop() {
 									pm.removePeer(p.id)
 								}
 
+
+							/**
+							todo 其实这个方式,永远用不到,至少在这个版本
+							todo 因为,没地方赋值啊
+							 */
 							case announceTypeSigned:
 								if !signed {
 									signedAnnounce = announce

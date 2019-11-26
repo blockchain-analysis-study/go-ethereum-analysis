@@ -45,7 +45,7 @@ const maxResponseErrors = 50 // number of invalid responses tolerated (makes the
 
 const (
 	announceTypeNone = iota
-	announceTypeSimple
+	announceTypeSimple  // 默认的 响应 通知类型, 请求 通知类型
 	announceTypeSigned
 )
 
@@ -60,6 +60,8 @@ type peer struct {
 	network uint64 // Network ID being on
 
 	// 响应 通知类型, 请求 通知类型
+	// todo announceType: 如果是 轻节点的server 端,则默认是: announceTypeSimple
+	// todo requestAnnounceType: 默认也是这模式
 	announceType, requestAnnounceType uint64
 
 	id string
@@ -80,10 +82,13 @@ type peer struct {
 	responseErrors int
 
 	// 如果peer 是server的话,则该值为nil
+	// todo fcClient: 流量控制Client
 	fcClient       *flowcontrol.ClientNode // nil if the peer is server only
 	// 如果peer 是client的话,则该值为nil
+	// todo fcServer: 流量控制Server
 	fcServer       *flowcontrol.ServerNode // nil if the peer is client only
 
+	// todo 流量控制的Server参数
 	fcServerParams *flowcontrol.ServerParams
 
 	// todo 记录req的消耗表
@@ -196,6 +201,7 @@ func (p *peer) HasBlock(hash common.Hash, number uint64) bool {
 
 // SendAnnounce announces the availability of a number of blocks through
 // a hash notification.
+// todo 发送新block header 通知
 func (p *peer) SendAnnounce(request announceData) error {
 	return p2p.Send(p.rw, AnnounceMsg, request)
 }
@@ -431,13 +437,18 @@ func (p *peer) Handshake(td *big.Int, head common.Hash, headNum uint64, genesis 
 	// TODO 握手时声明的3个参数为：
 	//
 	// todo 在server(全节点)对client(轻节点)提供服务，
-	// todo 在双方建立连接握手时，server会声名3个流量控制参数，
+	// todo 在双方建立连接握手时，server会声名 [3个流量控制参数]，
 	// todo 如果在服务过程中，client不遵守协议，client将会被终止服务。
 	//
 	// Buffer Limit
 	// Maximum Request Cost table
 	// Minimum Rate of Recharge
 	//
+	// MaxCostTablle，client在本地同样维护令牌桶，然后去判断本地令牌里面有没有这么多令牌让它发送请求，如果没有的话就不应该向server发送这个请求.
+	//
+	// 在server端显得更为复杂，因为server给client都是最低配置参数 ，比如最慢恢复速度。
+	// server处理请求有较为精确的计算公式，我们保证公式结果不会大于查询得到的结果。此外，
+	// 当server发现它的资源被闲置时会给client更快令牌速度，所以server端同时维护两个令牌桶.
 
 
 	// 收集 各种握手时的参数
@@ -522,6 +533,8 @@ func (p *peer) Handshake(td *big.Int, head common.Hash, headNum uint64, genesis 
 			return errResp(ErrUselessPeer, "wanted client, got server")
 		}*/
 		if recv.get("announceType", &p.announceType) != nil {
+
+			// todo 如果是 轻节点的server 端,则默认是: announceTypeSimple
 			p.announceType = announceTypeSimple
 		}
 		// todo 则，确认 `对端节点实例 p` 是 client

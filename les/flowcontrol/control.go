@@ -15,6 +15,12 @@
 // along with the github.com/go-ethereum-analysis library. If not, see <http://www.gnu.org/licenses/>.
 
 // Package flowcontrol implements a client side flow control mechanism
+
+// todo 包流量控制实现了客户端流量控制机制
+
+/**
+流量控制
+ */
 package flowcontrol
 
 import (
@@ -27,18 +33,27 @@ import (
 const fcTimeConst = time.Millisecond
 
 // 握手时的重要参数
+// recharge，代表这个server所能服务的请求能力，以及server运维者可以通过这个限制进行使用
 type ServerParams struct {
+
+	// 缓存的限制,  最低充值率
 	BufLimit, MinRecharge uint64
 }
 
-
+// todo 流量控制 client
 // 这是实现一个 轻节点链接的 client端 (就是一个轻节点)
 type ClientNode struct {
 	params   *ServerParams
+
+	// 该peer 被允许的缓存数量大小
 	bufValue uint64
+
+	// 上一次最后请求的 time
 	lastTime mclock.AbsTime
 	lock     sync.Mutex
 	cm       *ClientManager
+
+	// clientManager中的 该peer 的实例
 	cmNode   *cmNode
 }
 
@@ -61,14 +76,23 @@ func (peer *ClientNode) Remove(cm *ClientManager) {
 }
 
 func (peer *ClientNode) recalcBV(time mclock.AbsTime) {
+
+	// 当前时间 距 上一次请求该peer 的最后时间的 差值A
 	dt := uint64(time - peer.lastTime)
-	if time < peer.lastTime {
+	if time < peer.lastTime {  // 一般不可能存在这个吧
 		dt = 0
 	}
+
+
+	// 该peer的被给予缓存数量的大小 =  该peer的被给予缓存数量的大小 + 最低充值率*差值A/1ms
 	peer.bufValue += peer.params.MinRecharge * dt / uint64(fcTimeConst)
+
+	// 如果 该peer的被给予缓存数量的大小 > 缓存的限制
+	// 则, 就等于 缓存的限制
 	if peer.bufValue > peer.params.BufLimit {
 		peer.bufValue = peer.params.BufLimit
 	}
+	// 刷新最后一次请求时间
 	peer.lastTime = time
 }
 
@@ -77,7 +101,11 @@ func (peer *ClientNode) AcceptRequest() (uint64, bool) {
 	defer peer.lock.Unlock()
 
 	time := mclock.Now()
+
+	// 重新计算 peer 的缓存数量大小和最后一次请求时间
 	peer.recalcBV(time)
+	// 第一参数: 该peer 被允许的缓存数量大小
+	// 第二参数: 判断 node 是否可以被处理?
 	return peer.bufValue, peer.cm.accept(peer.cmNode, time)
 }
 
@@ -99,12 +127,22 @@ func (peer *ClientNode) RequestProcessed(cost uint64) (bv, realCost uint64) {
 	return peer.bufValue, rcost
 }
 
+
+// todo 流量控制 Server
 // 这是实现一个轻节点链接的 Server端 (一个全节点)
+// 每个server 挂着多个client
+// recharge，代表这个server所能服务的请求能力，以及server运维者可以通过这个限制进行使用
 type ServerNode struct {
+	// 需要开辟多少内存用来支持 s/c的同步的估算值
 	bufEstimate uint64
+
+	//最后一次操作的时间
 	lastTime    mclock.AbsTime
+	// server端的一些参数, 只有支持这些参数的client才可以连接
 	params      *ServerParams
+	// 发送到此服务器的请求费用总和
 	sumCost     uint64            // sum of req costs sent to this server
+	// value = 发送给定请求后的sumCost
 	pending     map[uint64]uint64 // value = sumCost after sending the given req
 	lock        sync.RWMutex
 }
