@@ -94,11 +94,25 @@ type Msg struct {
 
 // Retrieve tries to fetch an object from the LES network.
 // If the network retrieval was successful, it stores the object in local db.
+//
+/**
+Retrieve: 尝试从LES网络中获取对象。 如果网络检索成功，它将对象存储在本地数据库中.
+
+TODO 一般只有两个 Indexer 需要用到
+todo 一) BloomTrieIndexer
+todo 二) ChtIndexer
+ */
 func (odr *LesOdr) Retrieve(ctx context.Context, req light.OdrRequest) (err error) {
+
+	// 类型强转处理
 	lreq := LesRequest(req)
 
+	// 随机生成一个reqId
 	reqID := genReqID()
+	// 构造对应的req体
 	rq := &distReq{
+
+		//
 		getCost: func(dp distPeer) uint64 {
 			return lreq.GetCost(dp.(*peer))
 		},
@@ -109,7 +123,10 @@ func (odr *LesOdr) Retrieve(ctx context.Context, req light.OdrRequest) (err erro
 		request: func(dp distPeer) func() {
 			p := dp.(*peer)
 			cost := lreq.GetCost(p)
+
+			// 对端server peer 的
 			p.fcServer.QueueRequest(reqID, cost)
+
 			return func() { lreq.Request(reqID, p) }
 		},
 	}

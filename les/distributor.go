@@ -183,7 +183,7 @@ func (d *requestDistributor) loop() {
 					chn := req.sentChn // save sentChn because remove sets it to nil   保存sendChn，因为remove将其设置为nil
 					d.remove(req)
 
-					// 获取 各自的 sendFunc
+					// todo 获取 各自的 sendFunc
 					send := req.request(peer)
 					if send != nil {
 						peer.queueSend(send)

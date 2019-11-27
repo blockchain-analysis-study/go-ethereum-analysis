@@ -34,9 +34,14 @@ const fcTimeConst = time.Millisecond
 
 // 握手时的重要参数
 // recharge，代表这个server所能服务的请求能力，以及server运维者可以通过这个限制进行使用
+// todo recharge: 恢复速度总和 (恢复什么, 恢复 镜像令牌桶 buffer, 也就是说当具备更多的令牌 <buffer> 时才可以被请求)
 type ServerParams struct {
+	// todo server端可能同时有多个client，
+	//  恢复速度总和在server端有一个上限叫recharge，
+	//  代表这个server所能服务的请求能力，
+	//  以及server运维者可以通过这个限制进行使用
 
-	// 缓存的限制,  最低充值率
+	// 缓存的限制,  最低恢复速度总和
 	BufLimit, MinRecharge uint64
 }
 
@@ -133,14 +138,14 @@ func (peer *ClientNode) RequestProcessed(cost uint64) (bv, realCost uint64) {
 // 每个server 挂着多个client
 // recharge，代表这个server所能服务的请求能力，以及server运维者可以通过这个限制进行使用
 type ServerNode struct {
-	// 需要开辟多少内存用来支持 s/c的同步的估算值
+	// 需要开辟多少内存用来支持 s/c的同步的估算值<剩余量>
 	bufEstimate uint64
 
 	//最后一次操作的时间
 	lastTime    mclock.AbsTime
 	// server端的一些参数, 只有支持这些参数的client才可以连接
 	params      *ServerParams
-	// 发送到此服务器的请求费用总和
+	// 发送到此服务器的请求费用总和 (累计消耗)
 	sumCost     uint64            // sum of req costs sent to this server
 	// value = 发送给定请求后的sumCost
 	pending     map[uint64]uint64 // value = sumCost after sending the given req
@@ -210,12 +215,21 @@ func (peer *ServerNode) CanSend(maxCost uint64) (time.Duration, float64) {
 // QueueRequest should be called when the request has been assigned to the given
 // server node, before putting it in the send queue. It is mandatory that requests
 // are sent in the same order as the QueueRequest calls are made.
+//
+/**
+QueueRequest:
+QueueRequest 将在 req 被分配给定的 server时,在加入发送队列之前被调用.
+必须以与发出QueueRequest调用相同的顺序发送请求。
+ */
 func (peer *ServerNode) QueueRequest(reqID, maxCost uint64) {
 	peer.lock.Lock()
 	defer peer.lock.Unlock()
 
+	// 将对端peer 的预估的剩余令牌 - 本次可能使用的消耗
 	peer.bufEstimate -= maxCost
+	// 将本次消耗追加到 累计消耗上
 	peer.sumCost += maxCost
+	// 将累计消耗和对应的reqId丢到 pending中
 	peer.pending[reqID] = peer.sumCost
 }
 

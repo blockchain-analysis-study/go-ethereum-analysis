@@ -146,6 +146,11 @@ func NewChtIndexer(db ethdb.Database, clientMode bool, odr OdrBackend) *core.Cha
 	}
 	idb := ethdb.NewTable(db, "chtIndex-")
 	trieTable := ethdb.NewTable(db, ChtTablePrefix)
+
+	/**
+	todo
+	 这个是 Canonical Hash Trie, 规范哈希树
+	 */
 	backend := &ChtIndexerBackend{
 		diskdb:      db,
 		odr:         odr,
@@ -270,6 +275,8 @@ type BloomTrieIndexerBackend struct {
 // NewBloomTrieIndexer creates a BloomTrie chain indexer
 func NewBloomTrieIndexer(db ethdb.Database, clientMode bool, odr OdrBackend) *core.ChainIndexer {
 	trieTable := ethdb.NewTable(db, BloomTrieTablePrefix)
+
+
 	backend := &BloomTrieIndexerBackend{
 		diskdb:    db,
 		odr:       odr,

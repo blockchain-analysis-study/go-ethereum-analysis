@@ -307,6 +307,10 @@ func (c *ChainIndexer) updateLoop() {
 				}
 				// Process the newly defined section in the background
 				c.lock.Unlock()
+
+				/**
+				TODO 处理轻节点的  section
+				 */
 				newHead, err := c.processSection(section, oldHead)
 				if err != nil {
 					select {
@@ -340,7 +344,10 @@ func (c *ChainIndexer) updateLoop() {
 				}
 			}
 			// If there are still further sections to process, reschedule
+			//
+			// 如果还有其他部分要处理，请重新安排时间
 			if c.knownSections > c.storedSections {
+				// todo 经过短暂的延迟后,发送 更新 section 的信号
 				time.AfterFunc(c.throttling, func() {
 					select {
 					case c.update <- struct{}{}:
@@ -361,7 +368,8 @@ func (c *ChainIndexer) processSection(section uint64, lastHead common.Hash) (com
 	c.log.Trace("Processing new chain section", "section", section)
 
 	// Reset and partial processing
-
+	//
+	// 重置和部分处理
 	if err := c.backend.Reset(c.ctx, section, lastHead); err != nil {
 		c.setValidSections(0)
 		return common.Hash{}, err

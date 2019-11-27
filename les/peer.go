@@ -291,6 +291,10 @@ func (p *peer) RequestReceipts(reqID, cost uint64, hashes []common.Hash) error {
 }
 
 // RequestProofs fetches a batch of merkle proofs from a remote node.
+//
+/**
+RequestProofs: 从远程peer获取一批Merkle证明
+ */
 func (p *peer) RequestProofs(reqID, cost uint64, reqs []ProofReq) error {
 	p.Log().Debug("Fetching batch of proofs", "count", len(reqs))
 	switch p.version {
@@ -304,8 +308,14 @@ func (p *peer) RequestProofs(reqID, cost uint64, reqs []ProofReq) error {
 }
 
 // RequestHelperTrieProofs fetches a batch of HelperTrie merkle proofs from a remote node.
+//
+/**
+RequestHelperTrieProofs: 从远程节点获取一批HelperTrie merkle证明.
+ */
 func (p *peer) RequestHelperTrieProofs(reqID, cost uint64, reqs []HelperTrieReq) error {
 	p.Log().Debug("Fetching batch of HelperTrie proofs", "count", len(reqs))
+
+	// 查看对端peer协议版本
 	switch p.version {
 	case lpv1:
 		reqsV1 := make([]ChtReq, len(reqs))
@@ -315,6 +325,8 @@ func (p *peer) RequestHelperTrieProofs(reqID, cost uint64, reqs []HelperTrieReq)
 			}
 			blockNum := binary.BigEndian.Uint64(req.Key)
 			// convert HelperTrie request to old CHT request
+			//
+			// 将HelperTrie请求转换为旧的CHT请求
 			reqsV1[i] = ChtReq{ChtNum: (req.TrieIdx + 1) * (light.CHTFrequencyClient / light.CHTFrequencyServer), BlockNum: blockNum, FromLevel: req.FromLevel}
 		}
 		return sendRequest(p.rw, GetHeaderProofsMsg, reqID, cost, reqsV1)

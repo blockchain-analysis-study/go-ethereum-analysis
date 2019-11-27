@@ -34,20 +34,47 @@ import (
 // If the trie does not contain a value for key, the returned proof contains all
 // nodes of the longest existing prefix of the key (at least the root node), ending
 // with the node that proves the absence of the key.
+//
+/**
+todo 这个方法一般只有 轻节点用
+
+Prove: 构造入参的key的Merkle proof。
+结果包含键值上路径上的所有编码节点。 该值本身也包含在最后一个节点中，可以通过验证证明来检索.
+
+
+如果trie不包含key的值，
+则返回的证明将包含key的现有前缀最长的所有节点（至少是根节点），
+并以证明不存在key的节点结尾.
+*/
 func (t *Trie) Prove(key []byte, fromLevel uint, proofDb ethdb.Putter) error {
 	// Collect all nodes on the path to key.
+	//
+	// 收集 key 路径上的所有 node
+
+
+	// 现将 bytes 转成 hex
 	key = keybytesToHex(key)
 	nodes := []node{}
+
+	// 先拿当前trie root
 	tn := t.root
+
+	/**
+	todo 遍历出所有该key路径上经历的node
+	 */
 	for len(key) > 0 && tn != nil {
 		switch n := tn.(type) {
+
+		// 如果是 短节点
 		case *shortNode:
 			if len(key) < len(n.Key) || !bytes.Equal(n.Key, key[:len(n.Key)]) {
 				// The trie doesn't contain the key.
+				//
+				// 遍历到最后, 如果对应的key在树上没找到
 				tn = nil
 			} else {
-				tn = n.Val
-				key = key[len(n.Key):]
+				tn = n.Val // 得到valueNode
+				key = key[len(n.Key):] // 置空 key
 			}
 			nodes = append(nodes, n)
 		case *fullNode:
@@ -65,15 +92,27 @@ func (t *Trie) Prove(key []byte, fromLevel uint, proofDb ethdb.Putter) error {
 			panic(fmt.Sprintf("%T: invalid node: %v", tn, tn))
 		}
 	}
+
+	// 构建一个编码器
 	hasher := newHasher(0, 0, nil)
+
+	// todo 遍历出所有该key路径上经历的node
 	for i, n := range nodes {
 		// Don't bother checking for errors here since hasher panics
 		// if encoding doesn't work and we're not writing to any database.
+		//
+		/**
+		此处无需打扰检查错误，因为如果编码不起作用并且我们未写入任何数据库，则会加剧恐慌
+		 */
+		// 获取,key经过折叠之后的 node (只针对 shortNode 和 fullNode)
+		// (valueNode和hashNode返回的是原值,因为它们没有子节点)
 		n, _, _ = hasher.hashChildren(n, nil)
 		hn, _ := hasher.store(n, nil, false)
 		if hash, ok := hn.(hashNode); ok || i == 0 {
 			// If the node's database encoding is a hash (or is the
 			// root node), it becomes a proof element.
+			//
+			// 如果节点的数据库编码是哈希（或根节点），则它将成为证明元素。
 			if fromLevel > 0 {
 				fromLevel--
 			} else {
@@ -81,6 +120,8 @@ func (t *Trie) Prove(key []byte, fromLevel uint, proofDb ethdb.Putter) error {
 				if !ok {
 					hash = crypto.Keccak256(enc)
 				}
+
+				// 将node的Hash值存入proof
 				proofDb.Put(hash, enc)
 			}
 		}
@@ -95,6 +136,16 @@ func (t *Trie) Prove(key []byte, fromLevel uint, proofDb ethdb.Putter) error {
 // If the trie does not contain a value for key, the returned proof contains all
 // nodes of the longest existing prefix of the key (at least the root node), ending
 // with the node that proves the absence of the key.
+//
+/**
+Prove: 构造入参的key的Merkle proof。
+结果包含键值上路径上的所有编码节点。 该值本身也包含在最后一个节点中，可以通过验证证明来检索.
+
+
+如果trie不包含key的值，
+则返回的证明将包含key的现有前缀最长的所有节点（至少是根节点），
+并以证明不存在key的节点结尾.
+ */
 func (t *SecureTrie) Prove(key []byte, fromLevel uint, proofDb ethdb.Putter) error {
 	return t.trie.Prove(key, fromLevel, proofDb)
 }

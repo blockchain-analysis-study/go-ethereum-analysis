@@ -74,6 +74,12 @@ func returnHasherToPool(h *hasher) {
 
 // hash collapses a node down into a hash node, also returning a copy of the
 // original node initialized with the computed hash to replace the original one.
+//
+/**
+hash:
+将一个节点折叠成一个散列节点，
+还返回用计算得到的散列初始化的原始节点的副本以替换原始节点.
+ */
 func (h *hasher) hash(n node, db *Database, force bool) (node, node, error) {
 	// If we're not storing the node, just hashing, use available cached data
 	if hash, dirty := n.cache(); hash != nil {
@@ -91,10 +97,14 @@ func (h *hasher) hash(n node, db *Database, force bool) (node, node, error) {
 		}
 	}
 	// Trie not processed yet or needs storage, walk the children
+	//
+	// todo 这里将进入间接的递归
 	collapsed, cached, err := h.hashChildren(n, db)
 	if err != nil {
 		return hashNode{}, n, err
 	}
+
+	// todo 这里就是将该node 折叠之后的信息 存起来
 	hashed, err := h.store(collapsed, db, force)
 	if err != nil {
 		return hashNode{}, n, err
@@ -121,22 +131,42 @@ func (h *hasher) hash(n node, db *Database, force bool) (node, node, error) {
 // hashChildren replaces the children of a node with their hashes if the encoded
 // size of the child is larger than a hash, returning the collapsed node as well
 // as a replacement for the original node with the child hashes cached in.
+//
+/**
+如果子节点的编码大小大于哈希值，
+则hashChildren用其哈希值替换节点的子节点，
+并返回折叠的节点，并用缓存在其中的子哈希值替换原始节点。
+ */
 func (h *hasher) hashChildren(original node, db *Database) (node, node, error) {
 	var err error
 
+
 	switch n := original.(type) {
+
+	// 如果该 node 为shortNode
 	case *shortNode:
 		// Hash the short node's child, caching the newly hashed subtree
+		//
+		// 散列 short节点的 child节点，缓存新散列的子树
 		collapsed, cached := n.copy(), n.copy()
+
+		// 节点放入数据库时候的key用到的就是Compact编码，可以节约磁盘空间
+		// hex 转 Compact编码 <压缩编码>
 		collapsed.Key = hexToCompact(n.Key)
+		// hex 转 bytes
 		cached.Key = common.CopyBytes(n.Key)
 
+		// 如果 shortNode 存在valueNode子节点
 		if _, ok := n.Val.(valueNode); !ok {
+
 			collapsed.Val, cached.Val, err = h.hash(n.Val, db, false)
 			if err != nil {
 				return original, original, err
 			}
 		}
+
+		// collapsed: 将 key被折叠的shortNode返回
+		// cached: 将可以转成byte的shortNode返回
 		return collapsed, cached, nil
 
 	case *fullNode:
@@ -152,10 +182,15 @@ func (h *hasher) hashChildren(original node, db *Database) (node, node, error) {
 			}
 		}
 		cached.Children[16] = n.Children[16]
+
+		// collapsed: 将 key被折叠的shortNode返回
+		// cached: 将可以转成byte的shortNode返回
 		return collapsed, cached, nil
 
 	default:
 		// Value and hash nodes don't have children so they're left as were
+		//
+		// valueNode和 hashNode没有子节点，因此它们照原样保留
 		return n, original, nil
 	}
 }

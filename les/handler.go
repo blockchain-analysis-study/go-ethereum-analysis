@@ -55,6 +55,7 @@ const (
 	MaxBodyFetch             = 32  // Amount of block bodies to be fetched per retrieval request
 	MaxReceiptFetch          = 128 // Amount of transaction receipts to allow fetching per request
 	MaxCodeFetch             = 64  // Amount of contract codes to allow fetching per request
+	// 每个检索请求将获取的Merkle证明数量
 	MaxProofsFetch           = 64  // Amount of merkle proofs to be fetched per retrieval request
 	MaxHelperTrieProofsFetch = 64  // Amount of merkle proofs to be fetched per retrieval request
 	MaxTxSend                = 64  // Amount of transactions to be send per request
@@ -365,9 +366,13 @@ func (pm *ProtocolManager) handle(p *peer) error {
 	// 如果downloader认为它被禁止，我们将断开连接
 	if pm.lightSync {
 		p.lock.Lock()
+
+		// 获取该对端 peer缓存信息中的 (可能的) headerInfo
 		head := p.headInfo
 		p.lock.Unlock()
 		if pm.fetcher != nil {
+
+			// todo 根据可能的 header 去在本地的 `对端peer的缓存信息` 上拉取最高块的 header 的 hash, num, td 等等 announce msg
 			pm.fetcher.announce(p, head)
 		}
 
@@ -436,7 +441,7 @@ func (pm *ProtocolManager) handleMsg(p *peer) error {
 
 	// reject: 拒绝
 	//
-	// reqCnt: req的checkpoint?
+	// reqCnt: req的checkpoint <这里的checkpoint 指的是, req数据的数量级, 且没特指是哪种数据>
 	// maxCnt: max的checkpoint
 	reject := func(reqCnt, maxCnt uint64) bool {
 
@@ -459,7 +464,7 @@ func (pm *ProtocolManager) handleMsg(p *peer) error {
 			cost = pm.server.defParams.BufLimit
 		}
 
-		// 如果
+		// 如果计算出的预计消耗 令牌 > 剩余可消耗令牌
 		if cost > bufValue {
 			recharge := time.Duration((cost - bufValue) * 1000000 / pm.server.defParams.MinRecharge)
 			p.Log().Error("Request came too early", "recharge", common.PrettyDuration(recharge))
@@ -486,7 +491,9 @@ func (pm *ProtocolManager) handleMsg(p *peer) error {
 	// 根据消息内容处理消息
 	switch msg.Code {
 
-	// todo 这里是接收到 握手时发起的状态查询msg
+	/**
+	todo 这里是接收到 握手时发起的状态查询msg
+	 */
 	case StatusMsg:
 		p.Log().Trace("Received status message")
 		// Status messages should never arrive after the handshake
@@ -496,7 +503,9 @@ func (pm *ProtocolManager) handleMsg(p *peer) error {
 		return errResp(ErrExtraStatusMsg, "uncontrolled status message")
 
 	// Block header query, collect the requested headers and reply
-	// block header 的查询，收集请求的headers并回复
+	/**
+	block header 的查询，收集请求的headers并回复
+	 */
 	case AnnounceMsg:
 		p.Log().Trace("Received announce message")
 		if p.requestAnnounceType == announceTypeNone { // 这种, 基本上不会遇上,遇上的话就是异常
@@ -529,6 +538,10 @@ func (pm *ProtocolManager) handleMsg(p *peer) error {
 			pm.fetcher.announce(p, &req)
 		}
 
+	/**
+	获取 header 的req
+	这个是 server 才会收到的
+	 */
 	case GetBlockHeadersMsg:
 		p.Log().Trace("Received block header request")
 		// Decode the complex header query
@@ -629,6 +642,10 @@ func (pm *ProtocolManager) handleMsg(p *peer) error {
 		pm.server.fcCostStats.update(msg.Code, query.Amount, rcost)
 		return p.SendBlockHeaders(req.ReqID, bv, headers)
 
+	/**
+	接收 header 的resp
+	这个是client 端接收到的
+	 */
 	case BlockHeadersMsg:
 		if pm.downloader == nil {
 			return errResp(ErrUnexpectedResponse, "")
@@ -643,6 +660,8 @@ func (pm *ProtocolManager) handleMsg(p *peer) error {
 		if err := msg.Decode(&resp); err != nil {
 			return errResp(ErrDecode, "msg %v: %v", msg, err)
 		}
+
+		// 根据对端节点的 server
 		p.fcServer.GotReply(resp.ReqID, resp.BV)
 		if pm.fetcher != nil && pm.fetcher.requestedID(resp.ReqID) {
 			pm.fetcher.deliverHeaders(p, resp.ReqID, resp.Headers)
@@ -653,6 +672,10 @@ func (pm *ProtocolManager) handleMsg(p *peer) error {
 			}
 		}
 
+	/**
+	server 端
+	les 也会去拉取 bodies
+	 */
 	case GetBlockBodiesMsg:
 		p.Log().Trace("Received block bodies request")
 		// Decode the retrieval message
@@ -688,6 +711,10 @@ func (pm *ProtocolManager) handleMsg(p *peer) error {
 		pm.server.fcCostStats.update(msg.Code, uint64(reqCnt), rcost)
 		return p.SendBlockBodiesRLP(req.ReqID, bv, bodies)
 
+
+	/**
+	client端接收到 bodies
+	 */
 	case BlockBodiesMsg:
 		if pm.odr == nil {
 			return errResp(ErrUnexpectedResponse, "")
@@ -709,6 +736,10 @@ func (pm *ProtocolManager) handleMsg(p *peer) error {
 			Obj:     resp.Data,
 		}
 
+
+	/**
+	处理拉取 Code 的req
+	 */
 	case GetCodeMsg:
 		p.Log().Trace("Received code request")
 		// Decode the retrieval message
@@ -753,6 +784,9 @@ func (pm *ProtocolManager) handleMsg(p *peer) error {
 		pm.server.fcCostStats.update(msg.Code, uint64(reqCnt), rcost)
 		return p.SendCode(req.ReqID, bv, data)
 
+	/**
+	处理拉取 code 的resp
+	 */
 	case CodeMsg:
 		if pm.odr == nil {
 			return errResp(ErrUnexpectedResponse, "")
@@ -774,6 +808,9 @@ func (pm *ProtocolManager) handleMsg(p *peer) error {
 			Obj:     resp.Data,
 		}
 
+	/**
+	获取 rceipt 的req
+	 */
 	case GetReceiptsMsg:
 		p.Log().Trace("Received receipts request")
 		// Decode the retrieval message
@@ -819,6 +856,9 @@ func (pm *ProtocolManager) handleMsg(p *peer) error {
 		pm.server.fcCostStats.update(msg.Code, uint64(reqCnt), rcost)
 		return p.SendReceiptsRLP(req.ReqID, bv, receipts)
 
+	/**
+	处理 receipt 的resp
+	 */
 	case ReceiptsMsg:
 		if pm.odr == nil {
 			return errResp(ErrUnexpectedResponse, "")
@@ -840,6 +880,9 @@ func (pm *ProtocolManager) handleMsg(p *peer) error {
 			Obj:     resp.Receipts,
 		}
 
+	/**
+	获取 state 的proof
+	 */
 	case GetProofsV1Msg:
 		p.Log().Trace("Received proofs request")
 		// Decode the retrieval message
@@ -856,32 +899,63 @@ func (pm *ProtocolManager) handleMsg(p *peer) error {
 			proofs proofsData
 		)
 		reqCnt := len(req.Reqs)
+
+		// 资源不够,被拒绝请求
 		if reject(uint64(reqCnt), MaxProofsFetch) {
 			return errResp(ErrRequestRejected, "")
 		}
+
+		// TODO  遍历所有 proof req
 		for _, req := range req.Reqs {
 			// Retrieve the requested state entry, stopping if enough was found
+			//
+			// 如果已经拉取足够的 state 的条目了,则停止拉取
 			if number := rawdb.ReadHeaderNumber(pm.chainDb, req.BHash); number != nil {
 				if header := rawdb.ReadHeader(pm.chainDb, req.BHash, *number); header != nil {
 					statedb, err := pm.blockchain.State()
 					if err != nil {
 						continue
 					}
+
+					// 构造一个 stateTrie
 					var trie state.Trie
+
+					// 查询账户信息
 					if len(req.AccKey) > 0 {
+						// 根据对应的该 state的root以及 accountKey 去查选账户
 						account, err := pm.getAccount(statedb, header.Root, common.BytesToHash(req.AccKey))
 						if err != nil {
 							continue
 						}
+
+						// 再根据 账户去StorageTrie 上查会账户的整棵 StorageTrie
 						trie, _ = statedb.Database().OpenStorageTrie(common.BytesToHash(req.AccKey), account.Root)
 					} else {
+						// 如果没有没有制定AccKey,则只表示拉回该block中的StateTrie
 						trie, _ = statedb.Database().OpenTrie(header.Root)
 					}
+
+
 					if trie != nil {
+
+						// TODO 这里开始构造证明
 						var proof light.NodeList
+
+
+
+						// todo 来来来,这个贼重要
+						// trie的类型根据实际而定,
+						// todo State中的 trie是 cachedTrie
+						// todo Storage中的 trie是 SecureTrie
+						//
+						// todo 但是看了实现,最终的Prove 都是调用了 `SecureTrie.Prove`
 						trie.Prove(req.Key, 0, &proof)
 
+
+						// 追加取回来的proof (其实是各种node的rlp和sha3之后的hash值)
 						proofs = append(proofs, proof)
+
+						// 每次最多只取回 2097152
 						if bytes += proof.DataSize(); bytes >= softResponseLimit {
 							break
 						}
@@ -889,10 +963,17 @@ func (pm *ProtocolManager) handleMsg(p *peer) error {
 				}
 			}
 		}
+
+		// 调整当前Server节点中对端p的client 令牌桶
 		bv, rcost := p.fcClient.RequestProcessed(costs.baseCost + uint64(reqCnt)*costs.reqCost)
 		pm.server.fcCostStats.update(msg.Code, uint64(reqCnt), rcost)
+
+		// 将本节点组装好的proof发回client
 		return p.SendProofs(req.ReqID, bv, proofs)
 
+	/**
+	从远程peer获取一批Merkle证明
+	 */
 	case GetProofsV2Msg:
 		p.Log().Trace("Received les/2 proofs request")
 		// Decode the retrieval message
@@ -909,15 +990,23 @@ func (pm *ProtocolManager) handleMsg(p *peer) error {
 			statedb   *state.StateDB
 			root      common.Hash
 		)
+
+		// 请求 checkpoint 的长度 !?
 		reqCnt := len(req.Reqs)
+
+		// 判断流量(令牌桶)控制
 		if reject(uint64(reqCnt), MaxProofsFetch) {
 			return errResp(ErrRequestRejected, "")
 		}
 
+		// 构建一个node的Set
 		nodes := light.NewNodeSet()
 
+		// TODO  遍历所有 proof req
 		for _, req := range req.Reqs {
 			// Look up the state belonging to the request
+			//
+			// 查找属于 req的 state
 			if statedb == nil || req.BHash != lastBHash {
 				statedb, root, lastBHash = nil, common.Hash{}, req.BHash
 
@@ -1199,6 +1288,7 @@ func (pm *ProtocolManager) handleMsg(p *peer) error {
 
 		return p.SendTxStatus(req.ReqID, bv, stats)
 
+	//
 	case GetTxStatusMsg:
 		if pm.txpool == nil {
 			return errResp(ErrUnexpectedResponse, "")
@@ -1241,6 +1331,11 @@ func (pm *ProtocolManager) handleMsg(p *peer) error {
 		return errResp(ErrInvalidMsgCode, "%v", msg.Code)
 	}
 
+
+
+	/**
+	这里是 将被需要交付的 data做处理
+	 */
 	if deliverMsg != nil {
 		err := pm.retriever.deliver(p, deliverMsg)
 		if err != nil {

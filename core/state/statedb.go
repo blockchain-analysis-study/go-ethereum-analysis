@@ -85,6 +85,12 @@ type StateDB struct {
 
 // Create a new state from a given trie.
 func New(root common.Hash, db Database) (*StateDB, error) {
+
+	// todo State中的db是cachingDB
+
+	// todo State中的 trie是 cachedTrie
+	// todo Storage中的 trie是 SecureTrie
+
 	tr, err := db.OpenTrie(root)
 	if err != nil {
 		return nil, err

@@ -178,8 +178,17 @@ func (r *ReceiptsRequest) Validate(db ethdb.Database, msg *Msg) error {
 	return nil
 }
 
+
+/**
+todo 轻节点 拉取merkle证明的 请求
+ */
 type ProofReq struct {
+
+	// 表示需要从那个block 拉取数据
 	BHash       common.Hash
+
+	// AccKey: 账户的key
+	// Key:
 	AccKey, Key []byte
 	FromLevel   uint
 }
@@ -311,12 +320,27 @@ func (r *CodeRequest) Validate(db ethdb.Database, msg *Msg) error {
 
 const (
 	// helper trie type constants
+	// todo 超级超级重要
+	// helper trie类型常量
+	// todo 有两种
+
+	/**
+	规范Hashtrie
+	 */
 	htCanonical = iota // Canonical hash trie
+
+	/**
+	bloom 过滤 trie
+	 */
 	htBloomBits        // BloomBits trie
 
 	// applicable for all helper trie requests
+	//
+	// 适用于所有辅助 `helper trie` 请求
 	auxRoot = 1
 	// applicable for htCanonical
+	//
+	// 适用于htCanonical
 	auxHeader = 2
 )
 

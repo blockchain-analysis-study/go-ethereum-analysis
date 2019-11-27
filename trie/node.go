@@ -34,16 +34,77 @@ type node interface {
 }
 
 type (
+
+	/**
+	todo fullNode: 一个可以携带多个子节点的节点 root肯定是 fullNode
+
+	1) 它有一个容量为 17 的 node 数组成员变量 Children
+	2) 数组中前 16 个空位分别对应 16 进制 (hex) 下的 0-9a-f，这样对于每个子节点，
+		根据其 key 值 16 进制形式下的第一位的值，
+		就可挂载到 Children 数组的某个位置，fullNode 本身不再需要额外 key 变量；
+	3) Children 数组的第 17 位，留给该 fullNode 的数据部分。
+		fullNode 明显继承了原生 trie 的特点，而每个父节点最多拥有 16 个分支也包含了基于总体效率的考量.
+
+	 */
 	fullNode struct {
+
+		// 实际的Trie节点数据进行编码/解码（需要自定义编码器）
 		Children [17]node // Actual trie node data to encode/decode (needs custom encoder)
+
+		// nodeFlag: 包含有关节点的与缓存相关的元数据, todo 其中包含了 hashNode
 		flags    nodeFlag
 	}
+
+	/**
+	todo  shortNode: 是一个仅有一个子节点的节点 (其实被包含的子节点就是 valueNode 了)
+
+	1) 它的成员变量 Val 指向一个子节点，而成员 Key 是一个字节数组[]byte <这个就是真实的完整的key了>
+	2) 显然 shortNode 的设计体现了 PatriciaTrie 的特点，通过合并只有一个子节点的父节点和其子节点来缩短 trie 的深度.
+		(就是说将具备单叶子节点的父节点合并成了一个 shortNode)
+	 */
 	shortNode struct {
+
+		// 这个是真正的 key
 		Key   []byte
+
+		// 其实这个是 valueNode
 		Val   node
+
+		// nodeFlag: 包含有关节点的与缓存相关的元数据, todo 其中包含了 hashNode
 		flags nodeFlag
 	}
+
+
+	/**
+	todo 这个十分的特殊
+
+	1) hashNode 跟 valueNode 一样，也是字符数组 []byte 的一个别名，同样存放 32byte 的哈希值，也没有子节点。
+
+	2) 不同的是，hashNode 是 todo fullNode 或者 shortNode 对象的 RLP 哈希值，
+		所以它跟 valueNode 在使用上有着莫大的不同.
+
+
+	一旦 fullNode 或 shortNode 的成员变量 (包括子结构) 发生任何变化，它们的 hashNode 就一定需要更新.
+
+	在 trie.Trie 结构体的 insert()，delete()等函数实现中，
+	可以看到除了新创建的 fullNode、shortNode，
+	那些子结构有所改变的 fullNode、shortNode 的 nodeFlag 成员也会被重设，
+	hashNode 会被清空。在下次 trie.Hash()调用时，整个 MPT 自底向上的遍历过程中，
+	所有清空的 hashNode 会被重新赋值。这样 trie.Hash()结束后，
+	我们可以得到一个根节点 root 的 hashNode，它就是此时此刻这个 MPT 结构的哈希值。
+	上文中提到的，Block 的成员变量 Root、TxHash、ReceiptHash 的生成，正是源出于此.
+
+	 */
 	hashNode  []byte
+
+	/**
+	todo 承载了MPT结构中 真正数据部分的节点
+
+	1) 它其实是字节数组 []byte 的一个别名，不带子节点。
+	2) 在使用中，valueNode 就是所携带数据部分的 RLP 哈希值，长度 32byte，
+		数据的 RLP 编码值作为 valueNode 的匹配项存储在数据库里.
+
+	 */
 	valueNode []byte
 )
 
@@ -69,9 +130,14 @@ func (n *fullNode) copy() *fullNode   { copy := *n; return &copy }
 func (n *shortNode) copy() *shortNode { copy := *n; return &copy }
 
 // nodeFlag contains caching-related metadata about a node.
+//
+// nodeFlag: 包含有关节点的与缓存相关的元数据
 type nodeFlag struct {
+	// 节点的缓存哈希（可能为nil）
 	hash  hashNode // cached hash of the node (may be nil)
+	// 缓存生成计数器
 	gen   uint16   // cache generation counter
+	// 节点是否具有必须写入数据库的更改 (一个标识位)
 	dirty bool     // whether the node has changes that must be written to the database
 }
 
@@ -134,10 +200,15 @@ func decodeNode(hash, buf []byte, cachegen uint16) (node, error) {
 	if err != nil {
 		return nil, fmt.Errorf("decode error: %v", err)
 	}
+
+	//
 	switch c, _ := rlp.CountValues(elems); c {
+	//
 	case 2:
 		n, err := decodeShort(hash, elems, cachegen)
 		return n, wrapError(err, "short")
+
+	//
 	case 17:
 		n, err := decodeFull(hash, elems, cachegen)
 		return n, wrapError(err, "full")

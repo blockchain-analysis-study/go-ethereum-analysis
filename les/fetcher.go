@@ -33,6 +33,7 @@ import (
 
 const (
 	blockDelayTimeout = time.Second * 10 // timeout for a peer to announce a head that has already been confirmed by others
+	// 每个peer记住的fetcherTreeNode条目的最大数量
 	maxNodeCount      = 20               // maximum number of fetcherTreeNode entries remembered for each peer
 )
 
@@ -58,8 +59,13 @@ type lightFetcher struct {
 
 	reqMu      sync.RWMutex // reqMu protects access to sent header fetch requests
 	requested  map[uint64]fetchRequest
+
+	// todo 处理响应的chan
 	deliverChn chan fetchResponse
 	timeoutChn chan uint64
+
+	// 结构发起 拉取最新 block header 的hash,num,td等req信号的chan
+	// 如果从外部启动则为true
 	requestChn chan bool // true if initiated from outside
 }
 
@@ -72,6 +78,9 @@ type fetcherPeerInfo struct {
 	// root: tree root
 	// lastAnnounced: 最后加进来的一个 node !?
 	root, lastAnnounced *fetcherTreeNode
+
+	// todo 计数器,表示现在有多少个 checkpoint
+	//  和nodeByHash的大小一致
 	nodeCnt             int
 	confirmedTd         *big.Int
 	bestConfirmed       *fetcherTreeNode
@@ -157,6 +166,8 @@ func newLightFetcher(pm *ProtocolManager) *lightFetcher {
 }
 
 // syncLoop is the main event loop of the light fetcher
+//
+// syncLoop: 是 light fetcher 的主事件循环
 func (f *lightFetcher) syncLoop() {
 
 	// 是否正在和对端节点做 fecher 连接中?
@@ -169,7 +180,7 @@ func (f *lightFetcher) syncLoop() {
 		// when a new announce is received, request loop keeps running until
 		// no further requests are necessary or possible
 		//
-		// 当收到新的通知时，请求循环将继续运行，直到不再需要或可能没有其他请求为止
+		// todo 当收到新的通知时，请求循环将继续运行，直到不再需要或可能没有其他请求为止
 		//
 		case newAnnounce := <-f.requestChn:
 			f.lock.Lock()
@@ -180,13 +191,14 @@ func (f *lightFetcher) syncLoop() {
 				reqID uint64
 			)
 
-			// 如果不是同步中,且收到新
+			// 如果不是同步中,且收到的 announceMsg  为false <不需要拉取最新的 head 信息>, 且 没有和对端peer做同步
 			if !f.syncing && !(newAnnounce && s) {
 
 				// 获取下一个请求,及随机生成的reqId
 				// TODO 这个 贼鸡 重要
 				// 在这里面返回 distReq 实体啊
 				// distReq 最终会追加到 请求分发器中的啊
+				//  最终在,请求分发器的 loop中会调用 distReq的 request 函数, 里头会有去 GetBlockHeaders 的func
 				rq, reqID = f.nextRequest()
 			}
 
@@ -204,6 +216,8 @@ func (f *lightFetcher) syncLoop() {
 					f.requestChn <- false
 				}
 
+
+				// 如果不同步
 				if !syncing {
 					go func() {
 						time.Sleep(softRequestTimeout)
@@ -235,7 +249,7 @@ func (f *lightFetcher) syncLoop() {
 				go f.pm.removePeer(req.peer.id)
 			}
 
-		// 处理响应
+		// todo 处理响应
 		case resp := <-f.deliverChn:
 			f.reqMu.Lock()
 			req, ok := f.requested[resp.reqID]
@@ -326,23 +340,24 @@ func (f *lightFetcher) announce(p *peer, head *announceData) {
 		return
 	}
 
+	// todo 先拿到最后一个 block做成的 node
 	n := fp.lastAnnounced
 
 	// 根据 重组深度,遍历一直往 tree root 遍历
-	// todo 说白了就是需要查找公共祖先
+	// todo 说白了就是需要查找公共祖先   入参的head 和 fp的最后一个 block的node
 	for i := uint64(0); i < head.ReorgDepth; i++ {
 		if n == nil {
 			break
 		}
 
-		// 使用上一级 node
+		// todo 使用上一级 node
 		n = n.parent
 	}
 
 
 	// n is now the reorg common ancestor, add a new branch of nodes
 	//
-	// n现在是reorg的共同祖先，添加一个新的节点分支
+	// todo `n` 现在是reorg的共同祖先，添加一个新的节点分支
 	if n != nil && (head.Number >= n.number+maxNodeCount || head.Number <= n.number) {
 		// if announced head block height is lower or same as n or too far from it to add
 		// intermediate nodes then discard previous announcement info and trigger a resync
@@ -352,39 +367,73 @@ func (f *lightFetcher) announce(p *peer, head *announceData) {
 			如果已声明的 head块高度小于或等于n或相距太远而无法添加中间节点，则丢弃先前的声明信息并触发重新同步
 		 */
 		n = nil // 将指针引用置为 nil
-		fp.nodeCnt = 0  // 清空checkpoint
-		// 清空 tree
+		fp.nodeCnt = 0  // 清空checkpoint计数
+		// 清空 checkpoint tree
 		fp.nodeByHash = make(map[common.Hash]*fetcherTreeNode)
 	}
 
 
 	/**
 	TODO 来啦来啦 皮卡丘
+
+	todo 如果 入参的head 和之前fp中最后一个 block 的node 的 公共祖先存在 且 合法
 	 */
 	if n != nil {
 		// check if the node count is too high to add new nodes, discard oldest ones if necessary
-		locked := false
+		//
+		// 检查节点数是否太高而无法添加新节点，必要时丢弃最旧的节点
+		locked := false // 表示 是否 lock chain
 		for uint64(fp.nodeCnt)+head.Number-n.number > maxNodeCount && fp.root != nil {
+
+			/**
+			先将 chain 锁住,然后再操作
+			 */
 			if !locked {
 				f.chain.LockChain()
 				defer f.chain.UnlockChain()
 				locked = true
 			}
+
+
+			/**
+			下面就是调整 tree
+			因为 可能之前的tree 数据过久,则之前可能是 子节点的可能现在是 规范节点(规范节点需要用力啊做成根部)了
+			 */
+
 			// if one of root's children is canonical, keep it, delete other branches and root itself
+			//
+			// 如果根的子代之一是规范的，则保留该子代，删除其他分支和根自己
+			// todo 定义新的 root
 			var newRoot *fetcherTreeNode
+
+			// 遍历root 的所有 children
 			for i, nn := range fp.root.children {
+				// 判断该block是否是规范块
 				if rawdb.ReadCanonicalHash(f.pm.chainDb, nn.number) == nn.hash {
+
+					// 如果是 规范块,从tree中清除掉该block
 					fp.root.children = append(fp.root.children[:i], fp.root.children[i+1:]...)
+
+					// 将 该规范块 作为一颗新tree 的root
 					nn.parent = nil
 					newRoot = nn
 					break
 				}
 			}
+
+			// 从peer的fetcherPeerInfo 中删除节点及其子树
+			//  todo 从 fp中清掉root 对应的 tree
 			fp.deleteNode(fp.root)
+
+			// todo 使用新的 root
 			if n == fp.root {
 				n = newRoot
 			}
 			fp.root = newRoot
+
+
+			// checkKnownNode: 检查是否知道（下载并验证了）block tree node, 从之前的light chain中校验
+			// 省去做重复查询了
 			if newRoot == nil || !f.checkKnownNode(p, newRoot) {
 				fp.bestConfirmed = nil
 				fp.confirmedTd = nil
@@ -394,8 +443,14 @@ func (f *lightFetcher) announce(p *peer, head *announceData) {
 				break
 			}
 		}
+
+		// todo 来,如果新的 祖先不为 nil
 		if n != nil {
+
+			// n 是当前入参的 head 的祖先
 			for n.number < head.Number {
+
+				// 一直去构造 head 的祖先块
 				nn := &fetcherTreeNode{number: n.number + 1, parent: n}
 				n.children = append(n.children, nn)
 				n = nn
@@ -403,14 +458,26 @@ func (f *lightFetcher) announce(p *peer, head *announceData) {
 			}
 			n.hash = head.Hash
 			n.td = head.Td
+
+			// 将新的checkpoint 加入 map中
 			fp.nodeByHash[n.hash] = n
 		}
 	}
+
+
+
+	/**
+	todo  如果找不到 共同祖先
+	 */
 	if n == nil {
 		// could not find reorg common ancestor or had to delete entire tree, a new root and a resync is needed
+		// todo 找不到重新组织的共同祖先，或不得不删除整个树，需要新的根并需要重新同步
+		// 则, 清掉整颗tree
 		if fp.root != nil {
 			fp.deleteNode(fp.root)
 		}
+
+		// 以 入参的head作为root 构建新的树
 		n = &fetcherTreeNode{hash: head.Hash, number: head.Number, td: head.Td}
 		fp.root = n
 		fp.nodeCnt++
@@ -425,6 +492,9 @@ func (f *lightFetcher) announce(p *peer, head *announceData) {
 	fp.lastAnnounced = n
 	p.lock.Unlock()
 	f.checkUpdateStats(p, nil)
+
+	// todo 通知 light fetcher 获取新的拉取req
+	//  最终在,请求分发器的 loop中会调用 distReq的 request 函数, 里头会有去 GetBlockHeaders 的func
 	f.requestChn <- true
 }
 
@@ -612,7 +682,7 @@ func (f *lightFetcher) nextRequest() (*distReq, uint64) {
 
 				//
 				return func() {
-					// 根据Hash 去拿 header
+					// todo 根据Hash 去拿 header
 					p.RequestHeadersByHash(reqID, cost, bestHash, int(bestAmount), 0, true)
 				}
 			},
@@ -779,7 +849,7 @@ func (f *lightFetcher) checkSyncedHeaders(p *peer) {
 // checkKnownNode checks if a block tree node is known (downloaded and validated)
 // If it was not known previously but found in the database, sets its known flag
 //
-// checkKnownNode检查是否知道（下载并验证了）block tree node。如果以前未知但在数据库中找到它，则设置其已知标志
+// checkKnownNode: 检查是否知道（下载并验证了）block tree node。如果以前未知但在数据库中找到它，则设置其已知标志
 //
 func (f *lightFetcher) checkKnownNode(p *peer, n *fetcherTreeNode) bool {
 	if n.known {
@@ -812,8 +882,13 @@ func (f *lightFetcher) checkKnownNode(p *peer, n *fetcherTreeNode) bool {
 }
 
 // deleteNode deletes a node and its child subtrees from a peer's block tree
+//
+// deleteNode: 从peer的fetcherPeerInfo 中删除节点及其子树
 func (fp *fetcherPeerInfo) deleteNode(n *fetcherTreeNode) {
 	if n.parent != nil {
+
+		// 先整理下 tree, 如果自己的子节点就包含了自己
+		// 则,先清掉
 		for i, nn := range n.parent.children {
 			if nn == n {
 				n.parent.children = append(n.parent.children[:i], n.parent.children[i+1:]...)
@@ -821,14 +896,22 @@ func (fp *fetcherPeerInfo) deleteNode(n *fetcherTreeNode) {
 			}
 		}
 	}
+
+
 	for {
 		if n.td != nil {
+
+			// 删掉 对应的root
 			delete(fp.nodeByHash, n.hash)
 		}
+
+		// checkpoint 计数 减一
 		fp.nodeCnt--
 		if len(n.children) == 0 {
 			return
 		}
+
+		// 继续清理掉 新的root及下属子节点
 		for i, nn := range n.children {
 			if i == 0 {
 				n = nn
