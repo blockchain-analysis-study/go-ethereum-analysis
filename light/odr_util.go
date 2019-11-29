@@ -32,9 +32,14 @@ var sha3_nil = crypto.Keccak256Hash(nil)
 
 func GetHeaderByNumber(ctx context.Context, odr OdrBackend, number uint64) (*types.Header, error) {
 	db := odr.Database()
+
+	// todo 这里先根据 number 获取 规范block 的Hash, 再做一波尝试
 	hash := rawdb.ReadCanonicalHash(db, number)
+	// 如果本地有 规范block hash,则可以从 本地拉取  header
 	if (hash != common.Hash{}) {
 		// if there is a canonical hash, there is a header too
+		//
+		// 如果有规范的哈希，也肯定有 header
 		header := rawdb.ReadHeader(db, hash, number)
 		if header == nil {
 			panic("Canonical hash present but header not found")
@@ -42,27 +47,48 @@ func GetHeaderByNumber(ctx context.Context, odr OdrBackend, number uint64) (*typ
 		return header, nil
 	}
 
+
+	// todo 否则,去对端 server 上拉取 header
 	var (
 		chtCount, sectionHeadNum uint64
 		sectionHead              common.Hash
 	)
 	if odr.ChtIndexer() != nil {
+
+		//  成功索引到数据库中的section数
+		//  section中的最后一个的那个block number
+		//  最后一个 head的Hash
 		chtCount, sectionHeadNum, sectionHead = odr.ChtIndexer().Sections()
+
+		// 先获取最后一个hash
 		canonicalHash := rawdb.ReadCanonicalHash(db, sectionHeadNum)
 		// if the CHT was injected as a trusted checkpoint, we have no canonical hash yet so we accept zero hash too
+		//
+		// 如果将CHT注入 成为受信任的 checkpoint，则我们尚无规范哈希，因此我们也接受零哈希
 		for chtCount > 0 && canonicalHash != sectionHead && canonicalHash != (common.Hash{}) {
 			chtCount--
 			if chtCount > 0 {
+				// 一段一段的根据 chtCount <成功索引到数据库中的section数> 往回找
 				sectionHeadNum = chtCount*CHTFrequencyClient - 1
+
+				// todo 就是在找 这个 sectionHead
 				sectionHead = odr.ChtIndexer().SectionHead(chtCount - 1)
 				canonicalHash = rawdb.ReadCanonicalHash(db, sectionHeadNum)
 			}
 		}
 	}
+
+	// 如果, 当前 number > 所有已经 检查过的 section
+	// 则, 有问题啊
 	if number >= chtCount*CHTFrequencyClient {
 		return nil, ErrNoTrustedCht
 	}
+
+	// todo 如果,处于 checkpoint 的section中的
+	// 根据 odr trie 去拉
 	r := &ChtRequest{ChtRoot: GetChtRoot(db, chtCount-1, sectionHead), ChtNum: chtCount - 1, BlockNum: number}
+
+	// todo 这时候回去对端 peer 上拉取 这个 CHT section 区间的这个 header
 	if err := odr.Retrieve(ctx, r); err != nil {
 		return nil, err
 	}

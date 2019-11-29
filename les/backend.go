@@ -160,7 +160,7 @@ func New(ctx *node.ServiceContext, config *eth.Config) (*LightEthereum, error) {
 	// cht 是轻节点相关的 checkpoint 索引器
 	leth.chtIndexer = light.NewChtIndexer(chainDb, true, leth.odr)
 
-	// bloom树索引
+	// bloom trie 索引
 	leth.bloomTrieIndexer = light.NewBloomTrieIndexer(chainDb, true, leth.odr)
 	// SetIndexers向ODR backend添加必要的链索引器
 	leth.odr.SetIndexers(leth.chtIndexer, leth.bloomTrieIndexer, leth.bloomIndexer)
@@ -174,7 +174,7 @@ func New(ctx *node.ServiceContext, config *eth.Config) (*LightEthereum, error) {
 	}
 	// Note: AddChildIndexer starts the update process for the child
 	//
-	// 注意：AddChildIndexer启动子项的更新过程
+	// 注意：AddChildIndexer启动 子索引器 的更新过程
 	leth.bloomIndexer.AddChildIndexer(leth.bloomTrieIndexer)
 
 	/** todo 启动 checkpoint 索引器 */

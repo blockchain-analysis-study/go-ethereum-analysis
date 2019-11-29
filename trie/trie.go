@@ -93,6 +93,12 @@ func (t *Trie) newFlag() nodeFlag {
 // trie is initially empty and does not require a database. Otherwise,
 // New will panic if db is nil and returns a MissingNodeError if root does
 // not exist in the database. Accessing the trie loads nodes from db on demand.
+//
+//
+/**
+todo 这个方法超级重要
+从数据库加载一个已经存在的Trie树， 就调用trie.resolveHash方法来加载整颗Trie树
+ */
 func New(root common.Hash, db *Database) (*Trie, error) {
 	if db == nil {
 		panic("trie.New called without a database")
@@ -102,6 +108,8 @@ func New(root common.Hash, db *Database) (*Trie, error) {
 		originalRoot: root,
 	}
 	if root != (common.Hash{}) && root != emptyRoot {
+
+		// 加载整棵树,并返回rootNode
 		rootnode, err := trie.resolveHash(root[:], nil)
 		if err != nil {
 			return nil, err
@@ -215,60 +223,111 @@ func (t *Trie) TryUpdate(key, value []byte) error {
 	return nil
 }
 
+/**
+入参:
+prefix: key的前缀
+key: 完整的key
+value: 完整的value
+
+返回值:
+bool: 表示树是否有更改
+node: 插入完成后的子树的根节点
+ */
 func (t *Trie) insert(n node, prefix, key []byte, value node) (bool, node, error) {
 	if len(key) == 0 {
+		/**
+		其实这一个操作就是为了结束 insert的递归调用的
+		 */
 		if v, ok := n.(valueNode); ok {
 			return !bytes.Equal(v, value.(valueNode)), value, nil
 		}
 		return true, value, nil
 	}
+
+	// 这里才是每次都判断node 的类型
 	switch n := n.(type) {
+
+	// 当前是shortNode(也就是叶子节点)，
+	// 首先计算公共前缀，如果公共前缀就等于key，那么说明这两个key是一样的，
+	// 如果value也一样的(dirty == false)，那么返回。
+	// 如果没有错误就更新shortNode的值然后返回。
+	// 如果公共前缀不完全匹配，那么就需要把公共前缀提取出来形成一个独立的节点(扩展节点),
+	// 	扩展节点后面连接一个branch节点，branch节点后面看情况连接两个short节点。
+	// 	首先构建一个branch节点(branch := &fullNode{flags: t.newFlag()}),
+	// 	然后再branch节点的Children位置调用t.insert插入剩下的两个short节点.
 	case *shortNode:
 		matchlen := prefixLen(key, n.Key)
 		// If the whole key matches, keep this short node as is
 		// and only update the value.
+		//
+		// 如果整个key匹配，则保持此短节点不变，仅更新该value。
 		if matchlen == len(n.Key) {
 			dirty, nn, err := t.insert(n.Val, append(prefix, key[:matchlen]...), key[matchlen:], value)
+
+			// 如果value也一样(即: 树没有被更新,dirty==false;或者 有err, 都直接返回)
 			if !dirty || err != nil {
 				return false, n, err
 			}
 			return true, &shortNode{n.Key, nn, t.newFlag()}, nil
 		}
 		// Otherwise branch out at the index where they differ.
+		//
+		// 否则在它们 <入参的 node和key> 不同的索引处分支
+
+		// 可以知道我们可以将 node 和key之上创建一个 fullNode来连接它们
 		branch := &fullNode{flags: t.newFlag()}
 		var err error
+
+		// todo 插入 入参node
 		_, branch.Children[n.Key[matchlen]], err = t.insert(nil, append(prefix, n.Key[:matchlen+1]...), n.Key[matchlen+1:], n.Val)
 		if err != nil {
 			return false, nil, err
 		}
+		// todo 插入入参key和valu组成的shortNode
 		_, branch.Children[key[matchlen]], err = t.insert(nil, append(prefix, key[:matchlen+1]...), key[matchlen+1:], value)
 		if err != nil {
 			return false, nil, err
 		}
 		// Replace this shortNode with the branch if it occurs at index 0.
+		//
+		// 如果该shortNode出现在索引0处，则将其替换为分支。
 		if matchlen == 0 {
 			return true, branch, nil
 		}
 		// Otherwise, replace it with a short node leading up to the branch.
+		//
+		// 否则，将其替换为通向分支的短节点。
 		return true, &shortNode{key[:matchlen], branch, t.newFlag()}, nil
 
+
+	// 当前的节点是fullNode(也就是branch节点)，那么直接往对应的孩子节点调用insert方法,然后把对应的孩子节点指向新生成的节点.
 	case *fullNode:
 		dirty, nn, err := t.insert(n.Children[key[0]], append(prefix, key[0]), key[1:], value)
 		if !dirty || err != nil {
 			return false, n, err
 		}
 		n = n.copy()
-		n.flags = t.newFlag()
+		n.flags = t.newFlag() // 构建新的 nodeFlag, 其中 hash字段中的 hashNode 是nil的,只有在trie求Hash的时候才填充
 		n.Children[key[0]] = nn
 		return true, n, nil
 
+	// 节点类型是nil(一颗全新的Trie树的节点就是nil的),这个时候整颗树是空的，直接返回
 	case nil:
+		// 所有一颗新的单节点树,跟节点就是 shortNode
 		return true, &shortNode{key, value, t.newFlag()}, nil
 
+	// 当前节点是hashNode, hashNode的意思是当前节点还没有加载到内存里面来，
+	// todo 还是存放在数据库里面，那么首先调用 t.resolveHash(n, prefix)来加载到内存，
+	// 		然后对加载出来的节点调用insert方法来进行插入.
 	case hashNode:
 		// We've hit a part of the trie that isn't loaded yet. Load
 		// the node and insert into it. This leaves all child nodes on
 		// the path to the value in the trie.
+		//
+		// 我们已经找到了尚未加载的trie部分。 加载节点并将其插入。
+		// 这将所有子节点留在了到Trie中值的路径上。
+		//
+		// 现根据 hashNode 加载出 剩余的 subtrie
 		rn, err := t.resolveHash(n, prefix)
 		if err != nil {
 			return false, nil, err
@@ -453,10 +512,19 @@ func (t *Trie) Hash() common.Hash {
 
 // Commit writes all nodes to the trie's memory database, tracking the internal
 // and external (for account tries) references.
+//
+/**
+Commit:
+将所有node写入trie的内存数据库，跟踪内部和外部（用于帐户尝试）引用。
+ */
 func (t *Trie) Commit(onleaf LeafCallback) (root common.Hash, err error) {
 	if t.db == nil {
 		panic("commit called on trie with nil database")
 	}
+
+	// TODO 写入部分操作,在这里
+	// hash: 节点折叠后的 hashNode
+	// cached: 将 key 转成byte的shortNode/fullNode
 	hash, cached, err := t.hashRoot(t.db, onleaf)
 	if err != nil {
 		return common.Hash{}, err
@@ -466,11 +534,22 @@ func (t *Trie) Commit(onleaf LeafCallback) (root common.Hash, err error) {
 	return common.BytesToHash(hash.(hashNode)), nil
 }
 
+// 折叠node的入口是hasher.hash()，在执行中，hash()和hashChildren()相互调用以遍历整个MPT结构，
+// store()对节点作RLP哈希计算。折叠node的基本逻辑是：
+// 如果node没有子节点，那么直接返回；
+// 如果这个node带有子节点，那么首先将子节点折叠成hashNode。当这个node的子节点全都变成哈希值hashNode之后，
+// 再对这个node作RLP+哈希计算，得到它的哈希值，亦即hashNode。
+// 注意到hash()和hashChildren()返回两个node类型对象，第一个@hash是入参n经过折叠的hashNode哈希值，
+// 第二个@cached是没有经过折叠的n，并且n的hashNode还被赋值了。
 func (t *Trie) hashRoot(db *Database, onleaf LeafCallback) (node, node, error) {
 	if t.root == nil {
 		return hashNode(emptyRoot.Bytes()), nil, nil
 	}
 	h := newHasher(t.cachegen, t.cachelimit, onleaf)
 	defer returnHasherToPool(h)
+
+	// 这里才是真正 折叠node
+	// node: 节点折叠后的 hashNode
+	// node: 将 key 转成byte的shortNode/fullNode
 	return h.hash(t.root, db, true)
 }

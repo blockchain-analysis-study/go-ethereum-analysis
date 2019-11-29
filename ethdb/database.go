@@ -403,22 +403,29 @@ NewTable 函数
 func NewTable(db Database, prefix string) Database {
 	return &table{
 		db:     db,
+
+		// todo 注意: 存进leveldb 的都会自动加上 prefix
 		prefix: prefix,
 	}
 }
 
+
+// todo 注意: 存进leveldb 的都会自动加上 prefix
 func (dt *table) Put(key []byte, value []byte) error {
 	return dt.db.Put(append([]byte(dt.prefix), key...), value)
 }
 
+// todo 注意: 存进leveldb 的都会自动加上 prefix
 func (dt *table) Has(key []byte) (bool, error) {
 	return dt.db.Has(append([]byte(dt.prefix), key...))
 }
 
+// todo 注意: 存进leveldb 的都会自动加上 prefix
 func (dt *table) Get(key []byte) ([]byte, error) {
 	return dt.db.Get(append([]byte(dt.prefix), key...))
 }
 
+// todo 注意: 存进leveldb 的都会自动加上 prefix
 func (dt *table) Delete(key []byte) error {
 	return dt.db.Delete(append([]byte(dt.prefix), key...))
 }

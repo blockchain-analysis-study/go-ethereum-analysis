@@ -308,6 +308,8 @@ func (pool *TxPool) setNewHead(head *types.Header) {
 
 	txc, _ := pool.reorgOnNewHead(ctx, head)
 	m, r := txc.getLists()
+
+	// 轻节点相关
 	pool.relay.NewHead(pool.head, m, r)
 	pool.homestead = pool.config.IsHomestead(head.Number)
 	pool.signer = types.MakeSigner(pool.config, head.Number)
@@ -436,7 +438,8 @@ func (self *TxPool) Add(ctx context.Context, tx *types.Transaction) error {
 	if err := self.add(ctx, tx); err != nil {
 		return err
 	}
-	//fmt.Println("Send", tx.Hash())
+
+	// todo 发给 les 节点的对端 (server 端)
 	self.relay.Send(types.Transactions{tx})
 
 	self.chainDb.Put(tx.Hash().Bytes(), data)
@@ -456,6 +459,8 @@ func (self *TxPool) AddBatch(ctx context.Context, txs []*types.Transaction) {
 		}
 	}
 	if len(sendTx) > 0 {
+
+		// todo 发给轻节点的 server端
 		self.relay.Send(sendTx)
 	}
 }

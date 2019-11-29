@@ -66,25 +66,61 @@ type ChainIndexerChain interface {
 // section indexer. These child indexers receive new head notifications only
 // after an entire section has been finished or in case of rollbacks that might
 // affect already finished sections.
+//
+/**
+ChainIndexer:
+对 规范chain 的大小相等的 section（例如BlooomBits和CHT结构）进行 后置处理。
+通过在goroutine中启动 ChainEventLoop() ，ChainIndexer通过事件系统连接到区块链。
+
+
+可以添加其他子链索引器，这些子链索引器使用父 section索引器的输出。
+这些子索引器仅在整个 section 结束或回滚可能影响已经完成的 section 后才接收新的头通知。
+ */
 type ChainIndexer struct {
+
+	// lightchain的 db
 	chainDb  ethdb.Database      // Chain database to index the data from
+
+	// 用于将索引元数据 (light节点相关的索引) 写入数据库
 	indexDb  ethdb.Database      // Prefixed table-view of the db to write index metadata into
+
+	// 后台处理器生成索引数据内容
+	//
+	// todo 三种实现
+	// 		BloomIndexer
+	// 		BloomTrieIndexer
+	//    	ChtIndexer
 	backend  ChainIndexerBackend // Background processor generating the index data content
+
+	// 子索引器将链的更新关联起来
 	children []*ChainIndexer     // Child indexers to cascade chain updates to
 
+	// 标记事件循环是否已开始
 	active    uint32          // Flag whether the event loop was started
+
+	// 通知 headers 应处理的chan
 	update    chan struct{}   // Notification channel that headers should be processed
+
+	// 退出信号的chan
 	quit      chan chan error // Quit channel to tear down running goroutines
 	ctx       context.Context
 	ctxCancel func()
 
+	// 单个chain段中要处理的block数 (即: section 多少个block, 一般是 32768个)
 	sectionSize uint64 // Number of blocks in a single chain segment to process
+	// 处理完成的段之前的确认数 (block的确认数)
 	confirmsReq uint64 // Number of confirmations before processing a completed segment
 
+	// todo 成功索引到数据库中的section数
 	storedSections uint64 // Number of sections successfully indexed into the database
+
+	// 已知要完成的 section 数（按块计算）
 	knownSections  uint64 // Number of sections known to be complete (block wise)
+
+	// 最后完成的 section 的 Block number `级联` 到子索引器
 	cascadedHead   uint64 // Block number of the last completed section cascaded to subindexers
 
+	// 磁盘节流以防止大量升级占用资源
 	throttling time.Duration // Disk throttling to prevent a heavy upgrade from hogging resources
 
 	log  log.Logger
@@ -112,6 +148,9 @@ func NewChainIndexer(chainDb, indexDb ethdb.Database, backend ChainIndexerBacken
 		log:         log.New("type", kind),
 	}
 	// Initialize database dependent fields and start the updater
+	//
+	// 初始化数据库相关字段并启动更新程序
+	// todo 从索引数据库中读取有效 section 的数量
 	c.loadValidSections()
 	c.ctx, c.ctxCancel = context.WithCancel(context.Background())
 
@@ -231,27 +270,49 @@ func (c *ChainIndexer) eventLoop(currentHeader *types.Header, events chan ChainE
 }
 
 // newHead notifies the indexer about new chain heads and/or reorgs.
+//
+/**
+newHead:
+将新chain head 和/或 重组时都 通知索引器。
+ */
 func (c *ChainIndexer) newHead(head uint64, reorg bool) {
 	c.lock.Lock()
 	defer c.lock.Unlock()
 
 	// If a reorg happened, invalidate all sections until that point
+	//
+	// 如果发生重组，请在此之前使所有部分无效
 	if reorg {
 		// Revert the known section number to the reorg point
+		//
+		// 将已知的 section number 还原为重组点
 		changed := head / c.sectionSize
 		if changed < c.knownSections {
+
+			// 查看当前有多少个 已知的 需要完成的 section 数（按块计算）<这里头包含了已经 入库的和还未入库的>
 			c.knownSections = changed
 		}
 		// Revert the stored sections from the database to the reorg point
+		//
+		// 将已经存储的 sections 从数据库还原到重组点
 		if changed < c.storedSections {
+
+			// 将有效的 section 的数量写入索引数据库
 			c.setValidSections(changed)
 		}
 		// Update the new head number to the finalized section end and notify children
+		//
+		// 将新的 head number 更新到最终确定的  section 的末尾并通知子级 section
+		//
+		// 老外老喜欢做多余的动作 乘来除去的, 这里算到的head 就是入参的head 啊
 		head = changed * c.sectionSize
 
 		if head < c.cascadedHead {
+			// 变更 最后完成的 section 的 Block number
 			c.cascadedHead = head
 			for _, child := range c.children {
+
+				// todo 进入递归调整
 				child.newHead(c.cascadedHead, true)
 			}
 		}
@@ -274,6 +335,8 @@ func (c *ChainIndexer) newHead(head uint64, reorg bool) {
 
 // updateLoop is the main event loop of the indexer which pushes chain segments
 // down into the processing backend.
+//
+// updateLoop是索引器的主事件循环，该循环将链段 (section !?) 下推到 processing backend。
 func (c *ChainIndexer) updateLoop() {
 	var (
 		updating bool
@@ -289,17 +352,25 @@ func (c *ChainIndexer) updateLoop() {
 
 		case <-c.update:
 			// Section headers completed (or rolled back), update the index
+			//
+			// todo Section headers 完成（或回滚），更新索引
 			c.lock.Lock()
+
+			// 当已知需要完成的 section > 已经存储的section 时
 			if c.knownSections > c.storedSections {
 				// Periodically print an upgrade log message to the user
+				//
+				// 定期向用户打印升级日志消息
 				if time.Since(updated) > 8*time.Second {
 					if c.knownSections > c.storedSections+1 {
 						updating = true
-						c.log.Info("Upgrading chain index", "percentage", c.storedSections*100/c.knownSections)
+						c.log.Info("Upgrading chain index", "percentage", c.storedSections*100/c.knownSections) // 百分比: 已存储/需要完成 * %
 					}
 					updated = time.Now()
 				}
 				// Cache the current section count and head to allow unlocking the mutex
+				//
+				// 缓存当前的 section 和 head，以允许解锁互斥锁
 				section := c.storedSections
 				var oldHead common.Hash
 				if section > 0 {
@@ -364,64 +435,120 @@ func (c *ChainIndexer) updateLoop() {
 // ensuring the continuity of the passed headers. Since the chain mutex is not
 // held while processing, the continuity can be broken by a long reorg, in which
 // case the function returns with an error.
+//
+/**
+processSection:
+通过调用backend functions <注意: backend 有三种实现> 来处理整个 section，同时确保传递的 head 的连续性。
+由于在处理时不保留链互斥锁，因此长时间的重组可能会破坏连续性，在这种情况下，函数将返回错误。
+ */
 func (c *ChainIndexer) processSection(section uint64, lastHead common.Hash) (common.Hash, error) {
 	c.log.Trace("Processing new chain section", "section", section)
 
 	// Reset and partial processing
 	//
 	// 重置和部分处理
+	/**
+	这里会构建 发起 检索拉取 证明的 req
+
+	todo 主要是 2 种实现会这么做
+		BloomTrieIndexerBackend
+		ChtIndexerBackend
+	*/
 	if err := c.backend.Reset(c.ctx, section, lastHead); err != nil {
+		// 重置失败时, 将有效的 section 的数量写入索引数据库, 设置为 0
 		c.setValidSections(0)
 		return common.Hash{}, err
 	}
 
+
+	// eg. block number 从 1*32768 开始往 2*32768-1 处理
 	for number := section * c.sectionSize; number < (section+1)*c.sectionSize; number++ {
+
+		// 逐个拿这个 新的 section 内的 cht block 的hash
 		hash := rawdb.ReadCanonicalHash(c.chainDb, number)
 		if hash == (common.Hash{}) {
 			return common.Hash{}, fmt.Errorf("canonical block #%d unknown", number)
 		}
+
+		// 然后去 light chain 上拿 header
 		header := rawdb.ReadHeader(c.chainDb, hash, number)
 		if header == nil {
 			return common.Hash{}, fmt.Errorf("block #%d [%x…] not found", number, hash[:4])
 		} else if header.ParentHash != lastHead {
 			return common.Hash{}, fmt.Errorf("chain reorged during section processing")
 		}
+
+		/**
+		todo 超级重要
+		 */
 		if err := c.backend.Process(c.ctx, header); err != nil {
 			return common.Hash{}, err
 		}
 		lastHead = header.Hash()
 	}
+
+	// todo 重要
 	if err := c.backend.Commit(); err != nil {
 		return common.Hash{}, err
 	}
+
+	// 返回处理了 新的 section之后的最后一个 block head
 	return lastHead, nil
 }
 
 // Sections returns the number of processed sections maintained by the indexer
 // and also the information about the last header indexed for potential canonical
 // verifications.
+//
+/**
+Sections:
+	返回由索引器维护的已处理 section 的数量，以及有关为可能的 规范验证 而索引的最后一个 head Hash
+ */
 func (c *ChainIndexer) Sections() (uint64, uint64, common.Hash) {
 	c.lock.Lock()
 	defer c.lock.Unlock()
 
+	// todo 返回了
+	//  成功索引到数据库中的section数
+	//  section中的最后一个的那个block number
+	//  最后一个 head的Hash
 	return c.storedSections, c.storedSections*c.sectionSize - 1, c.SectionHead(c.storedSections - 1)
 }
 
 // AddChildIndexer adds a child ChainIndexer that can use the output of this one
+//
+/**
+AddChildIndexer:
+添加一个子ChainIndexer，可以使用此子项的输出
+ */
 func (c *ChainIndexer) AddChildIndexer(indexer *ChainIndexer) {
 	c.lock.Lock()
 	defer c.lock.Unlock()
 
+
+	// 添加新的 子索引器
 	c.children = append(c.children, indexer)
 
 	// Cascade any pending updates to new children too
+	//
+	// 也可以级联对新子级的所有待处理更新
 	if c.storedSections > 0 {
+
+		// 这里为什么需要递归调整!?
+		// 因为 一般每个 索引器存储处理 一个section也就是 一般是 32768个block !?
+		//
+		// todo 这里将 进入递归调整
 		indexer.newHead(c.storedSections*c.sectionSize-1, false)
 	}
 }
 
 // loadValidSections reads the number of valid sections from the index database
 // and caches is into the local state.
+//
+/**
+loadValidSections:
+从索引数据库中读取有效 section 的数量，并且缓存进入本地状态
+ */
 func (c *ChainIndexer) loadValidSections() {
 	data, _ := c.indexDb.Get([]byte("count"))
 	if len(data) == 8 {
@@ -430,22 +557,44 @@ func (c *ChainIndexer) loadValidSections() {
 }
 
 // setValidSections writes the number of valid sections to the index database
+//
+/**
+setValidSections:
+将有效的 section 的数量写入索引数据库
+ */
 func (c *ChainIndexer) setValidSections(sections uint64) {
 	// Set the current number of valid sections in the database
+	//
+	// 设置数据库中当前有效 sections 的数量
 	var data [8]byte
 	binary.BigEndian.PutUint64(data[:], sections)
 	c.indexDb.Put([]byte("count"), data[:])
 
 	// Remove any reorged sections, caching the valids in the mean time
+	//
+	// 删除所有重组的 sections ，同时缓存有效内容
 	for c.storedSections > sections {
+		// 如果field storedSections 的值 > sections, 说明之前技术记错了,这里应当修正
 		c.storedSections--
+
+		// 并且移除掉这些 section的 左后一个block hash
 		c.removeSectionHead(c.storedSections)
 	}
+
+	// 否则, new > old 时,更新
 	c.storedSections = sections // needed if new > old
 }
 
 // SectionHead retrieves the last block hash of a processed section from the
 // index database.
+//
+/**
+SectionHead:
+从索引数据库中检索已处理的 section 的最后一个block Hash。
+
+key: shead + sectionNum
+value: section last block hash
+ */
 func (c *ChainIndexer) SectionHead(section uint64) common.Hash {
 	var data [8]byte
 	binary.BigEndian.PutUint64(data[:], section)
@@ -459,6 +608,14 @@ func (c *ChainIndexer) SectionHead(section uint64) common.Hash {
 
 // setSectionHead writes the last block hash of a processed section to the index
 // database.
+//
+/**
+setSectionHead:
+将已处理的 section 的最后一个 block hash 写入索引数据库。
+
+key: shead + sectionNum
+value: section last block hash
+ */
 func (c *ChainIndexer) setSectionHead(section uint64, hash common.Hash) {
 	var data [8]byte
 	binary.BigEndian.PutUint64(data[:], section)
@@ -468,6 +625,14 @@ func (c *ChainIndexer) setSectionHead(section uint64, hash common.Hash) {
 
 // removeSectionHead removes the reference to a processed section from the index
 // database.
+//
+/**
+removeSectionHead:
+从索引数据库中删除对已处理的 section 的引用。
+
+key: shead + sectionNum
+value: section last block hash
+ */
 func (c *ChainIndexer) removeSectionHead(section uint64) {
 	var data [8]byte
 	binary.BigEndian.PutUint64(data[:], section)

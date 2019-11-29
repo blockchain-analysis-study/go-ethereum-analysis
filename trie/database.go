@@ -338,6 +338,7 @@ func (db *Database) insert(hash common.Hash, blob []byte, node node) {
 			c.parents++
 		}
 	}
+	// todo 放入cache中
 	db.nodes[hash] = entry
 
 	// Update the flush-list endpoints

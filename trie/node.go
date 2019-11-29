@@ -138,6 +138,7 @@ type nodeFlag struct {
 	// 缓存生成计数器
 	gen   uint16   // cache generation counter
 	// 节点是否具有必须写入数据库的更改 (一个标识位)
+	// 新创建并写入的节点的dirty值是为true的
 	dirty bool     // whether the node has changes that must be written to the database
 }
 

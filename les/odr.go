@@ -104,6 +104,8 @@ todo 二) ChtIndexer
  */
 func (odr *LesOdr) Retrieve(ctx context.Context, req light.OdrRequest) (err error) {
 
+	// 如果是BloomTrieIndexer的话, 那么 req是 `BloomRequest`
+	// 如果是ChtIndexer的话, 那么 req是 `ChtRequest`
 	// 类型强转处理
 	lreq := LesRequest(req)
 
@@ -120,19 +122,31 @@ func (odr *LesOdr) Retrieve(ctx context.Context, req light.OdrRequest) (err erro
 			p := dp.(*peer)
 			return lreq.CanSend(p)
 		},
+
+		// TODO 这个方法,最终会在 odr.loop() 中被调用
 		request: func(dp distPeer) func() {
 			p := dp.(*peer)
 			cost := lreq.GetCost(p)
 
-			// 对端server peer 的
+			// 对端server peer 的req排序!?
 			p.fcServer.QueueRequest(reqID, cost)
 
+
+			/**
+			TODO  ChtRequest 和 BloomRequest 都会发起 拉取Header 的req
+			 */
 			return func() { lreq.Request(reqID, p) }
 		},
 	}
 
+
+	/**
+	todo  将构建好的 req 发起拉取
+	 */
 	if err = odr.retriever.retrieve(ctx, reqID, rq, func(p distPeer, msg *Msg) error { return lreq.Validate(odr.db, msg) }, odr.stop); err == nil {
 		// retrieved from network, store in db
+		//
+		// todo 从网络检索，存储在数据库中
 		req.StoreResult(odr.db)
 	} else {
 		log.Debug("Failed to retrieve data from network", "err", err)

@@ -144,10 +144,21 @@ func (req *ReceiptsRequest) StoreResult(db ethdb.Database) {
 }
 
 // ChtRequest is the ODR request type for state/storage trie entries
+//
+/**
+ChtRequest:
+是 state/storage Trie条目的ODR req类型
+ */
 type ChtRequest struct {
 	OdrRequest
+	// ChtNum: 表示 section num <第几个章节, 从0开始>
+	// BlockNum: 表示被包含在 这 section 中的某个 blockNum
 	ChtNum, BlockNum uint64
+
+	// 本 章节的 Cht trie 的 root
 	ChtRoot          common.Hash
+
+	//
 	Header           *types.Header
 	Td               *big.Int
 	Proof            *NodeSet

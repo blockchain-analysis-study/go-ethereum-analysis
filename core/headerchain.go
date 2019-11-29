@@ -425,10 +425,14 @@ func (hc *HeaderChain) GetHeader(hash common.Hash, number uint64) *types.Header 
 // GetHeaderByHash retrieves a block header from the database by hash, caching it if
 // found.
 func (hc *HeaderChain) GetHeaderByHash(hash common.Hash) *types.Header {
+
+	// 根据Hash 拿 number
 	number := hc.GetBlockNumber(hash)
 	if number == nil {
 		return nil
 	}
+
+	// 根据 number 拿 header
 	return hc.GetHeader(hash, *number)
 }
 

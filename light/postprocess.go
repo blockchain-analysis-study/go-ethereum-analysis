@@ -38,24 +38,40 @@ import (
 
 const (
 	// CHTFrequencyClient is the block frequency for creating CHTs on the client side.
+	//
+	// TODO CHTFrequencyClient: 是在(轻节点)客户端上创建CHT的block频率
 	CHTFrequencyClient = 32768
 
 	// CHTFrequencyServer is the block frequency for creating CHTs on the server side.
 	// Eventually this can be merged back with the client version, but that requires a
 	// full database upgrade, so that should be left for a suitable moment.
+	//
+	// todo CHTFrequencyServer: 是在(轻节点)服务器端创建CHT的block频率
+	//  最终，可以将其与客户端版本合并，但是这需要对数据库进行全面升级，因此应保留适当的时间.
 	CHTFrequencyServer = 4096
 
 	// number of confirmations before a server is expected to have the given HelperTrie available
-	// 预期服务器使给定的HelperTrie可用之前的确认次数
+	//
+	// 预期服务器使给定的HelperTrie `可用` 之前的确认次数
+	// todo 因为: CHT仅在2048次确认后生成，以确保不会被链重组更改
 	HelperTrieConfirmations        = 2048
 	// number of confirmations before a HelperTrie is generated
-	// 生成HelperTrie之前的确认次数
+	//
+	// HelperTrie `生成` 之前的确认次数
 	HelperTrieProcessConfirmations = 256
 )
 
 // TrustedCheckpoint represents a set of post-processed trie roots (CHT and BloomTrie) associated with
 // the appropriate section index and head hash. It is used to start light syncing from this checkpoint
 // and avoid downloading the entire header chain while still being able to securely access old headers/logs.
+//
+/**
+TrustedCheckpoint:
+	表示一组与适当的 section 索引和 header hash 关联的后处理的trie根（CHT和BloomTrie）。
+	它用于从此 checkpoint 开始进行 light 同步，并避免下载整个 header chain，
+	同时仍然能够安全地访问旧的headers/logs.
+
+ */
 type TrustedCheckpoint struct {
 	name                            string
 	SectionIdx                      uint64
@@ -63,6 +79,8 @@ type TrustedCheckpoint struct {
 }
 
 // trustedCheckpoints associates each known checkpoint with the genesis hash of the chain it belongs to
+//
+// trustedCheckpoints: 将每个已知 checkpoint 与其所属 chain 的 genesis hash 关联
 var trustedCheckpoints = map[common.Hash]TrustedCheckpoint{
 	params.MainnetGenesisHash: {
 		name:        "mainnet",
@@ -91,8 +109,12 @@ var (
 	ErrNoTrustedCht       = errors.New("No trusted canonical hash trie")
 	ErrNoTrustedBloomTrie = errors.New("No trusted bloom trie")
 	ErrNoHeader           = errors.New("Header not found")
+
+	/**
+	todo 轻节点的 规范 hash trie 相关的key前缀
+	 */
 	chtPrefix             = []byte("chtRoot-") // chtPrefix + chtNum (uint64 big endian) -> trie root hash
-	ChtTablePrefix        = "cht-"
+	ChtTablePrefix        = "cht-"  // todo 规范hash trie 的相关node 的key的prefix
 )
 
 // ChtNode structures are stored in the Canonical Hash Trie in an RLP encoded format
@@ -103,6 +125,16 @@ type ChtNode struct {
 
 // GetChtRoot reads the CHT root assoctiated to the given section from the database
 // Note that sectionIdx is specified according to LES/1 CHT section size
+//
+/**
+GetChtRoot:
+从 db 中读取分配给给定 section 的CHT root。
+请注意，sectionIdx 是遵循 LES/1 CHT section 大小指定的
+
+入参 :
+	sectionIdx: 第几个 section !? (从 0 开始 !?)
+	sectionHead: section的第一个 block header Hash !?
+ */
 func GetChtRoot(db ethdb.Database, sectionIdx uint64, sectionHead common.Hash) common.Hash {
 	var encNumber [8]byte
 	binary.BigEndian.PutUint64(encNumber[:], sectionIdx)
@@ -112,6 +144,12 @@ func GetChtRoot(db ethdb.Database, sectionIdx uint64, sectionHead common.Hash) c
 
 // GetChtV2Root reads the CHT root assoctiated to the given section from the database
 // Note that sectionIdx is specified according to LES/2 CHT section size
+//
+/**
+GetChtV2Root:
+从数据库中读取分配给给定节的CHT根。请注意，sectionIdx是根据 LES/2 CHT section大小指定的
+
+ */
 func GetChtV2Root(db ethdb.Database, sectionIdx uint64, sectionHead common.Hash) common.Hash {
 	return GetChtRoot(db, (sectionIdx+1)*(CHTFrequencyClient/CHTFrequencyServer)-1, sectionHead)
 }
@@ -131,6 +169,8 @@ type ChtIndexerBackend struct {
 	triedb               *trie.Database
 	section, sectionSize uint64
 	lastHash             common.Hash
+
+	// 这颗是 CHT 数?
 	trie                 *trie.Trie
 }
 
@@ -163,10 +203,18 @@ func NewChtIndexer(db ethdb.Database, clientMode bool, odr OdrBackend) *core.Cha
 
 // fetchMissingNodes tries to retrieve the last entry of the latest trusted CHT from the
 // ODR backend in order to be able to add new entries and calculate subsequent root hashes
+//
+/**
+fetchMissingNodes:
+尝试从ODR后端检索最新的受信任CHT的最后一个条目，以便能够添加新条目并计算后续的根哈希.
+ */
 func (c *ChtIndexerBackend) fetchMissingNodes(ctx context.Context, section uint64, root common.Hash) error {
 	batch := c.trieTable.NewBatch()
 	r := &ChtRequest{ChtRoot: root, ChtNum: section - 1, BlockNum: section*c.sectionSize - 1}
 	for {
+		/**
+		构建 发起 检索拉取 证明的 req
+		*/
 		err := c.odr.Retrieve(ctx, r)
 		switch err {
 		case nil:
@@ -207,6 +255,9 @@ func (c *ChtIndexerBackend) Reset(ctx context.Context, section uint64, lastSecti
 }
 
 // Process implements core.ChainIndexerBackend
+//
+// 根据 header的 num, hash 和 td 插入 trie 中
+// key: num  -> value: hash+td
 func (c *ChtIndexerBackend) Process(ctx context.Context, header *types.Header) error {
 	hash, num := header.Hash(), header.Number.Uint64()
 	c.lastHash = hash
@@ -218,16 +269,22 @@ func (c *ChtIndexerBackend) Process(ctx context.Context, header *types.Header) e
 	var encNumber [8]byte
 	binary.BigEndian.PutUint64(encNumber[:], num)
 	data, _ := rlp.EncodeToBytes(ChtNode{hash, td})
+
+	// 更新树, key: num  -> value: hash+td
 	c.trie.Update(encNumber[:], data)
 	return nil
 }
 
 // Commit implements core.ChainIndexerBackend
 func (c *ChtIndexerBackend) Commit() error {
+
+	// 提交/更新/折叠　trie
 	root, err := c.trie.Commit(nil)
 	if err != nil {
 		return err
 	}
+
+	// 提交 node 至 db.nodes
 	c.triedb.Commit(root, false)
 
 	if ((c.section+1)*c.sectionSize)%CHTFrequencyClient == 0 {
@@ -263,6 +320,10 @@ func StoreBloomTrieRoot(db ethdb.Database, sectionIdx uint64, sectionHead, root 
 }
 
 // BloomTrieIndexerBackend implements core.ChainIndexerBackend
+//
+// todo 块分为固定长度的部分（LES BloomBits Trie的部分大小为32768块），
+//  BloomBits[bitIdx][sectionIdx]是一个32768位（4096字节）长的位向量，
+//  其中包含来自块范围的每个Bloom过滤器的单个位 sectionIdx*SectionSize ... (sectionIdx+1)*SectionSize-1
 type BloomTrieIndexerBackend struct {
 	diskdb, trieTable                          ethdb.Database
 	odr                                        OdrBackend
@@ -297,6 +358,11 @@ func NewBloomTrieIndexer(db ethdb.Database, clientMode bool, odr OdrBackend) *co
 
 // fetchMissingNodes tries to retrieve the last entries of the latest trusted bloom trie from the
 // ODR backend in order to be able to add new entries and calculate subsequent root hashes
+//
+/**
+fetchMissingNodes:
+尝试从ODR后端检索最新的可信任Bloom Trie的最后一个条目，以便能够添加新条目并计算后续的根哈希.
+ */
 func (b *BloomTrieIndexerBackend) fetchMissingNodes(ctx context.Context, section uint64, root common.Hash) error {
 	indexCh := make(chan uint, types.BloomBitLength)
 	type res struct {
@@ -309,6 +375,10 @@ func (b *BloomTrieIndexerBackend) fetchMissingNodes(ctx context.Context, section
 			for bitIndex := range indexCh {
 				r := &BloomRequest{BloomTrieRoot: root, BloomTrieNum: section - 1, BitIdx: bitIndex, SectionIdxList: []uint64{section - 1}}
 				for {
+
+					/**
+					构建 发起 检索拉取 证明的 req
+					 */
 					if err := b.odr.Retrieve(ctx, r); err == ErrNoPeers {
 						// if there are no peers to serve, retry later
 						select {
@@ -361,6 +431,9 @@ func (b *BloomTrieIndexerBackend) Reset(ctx context.Context, section uint64, las
 }
 
 // Process implements core.ChainIndexerBackend
+//
+// 这个就做一件事, 将 bloomtrie 旋转 90° !?
+// BloomBits结构通过Bloom过滤器的“按位90度旋转”来优化Bloom过滤器查找 !?
 func (b *BloomTrieIndexerBackend) Process(ctx context.Context, header *types.Header) error {
 	num := header.Number.Uint64() - b.section*BloomTrieFrequency
 	if (num+1)%b.parentSectionSize == 0 {
@@ -399,10 +472,14 @@ func (b *BloomTrieIndexerBackend) Commit() error {
 			b.trie.Delete(encKey[:])
 		}
 	}
+
+	// todo 超级重要  提交/更新/折叠 树
 	root, err := b.trie.Commit(nil)
 	if err != nil {
 		return err
 	}
+
+	// todo 重要 将node提交到 db.nodes
 	b.triedb.Commit(root, false)
 
 	sectionHead := b.sectionHeads[b.bloomTrieRatio-1]

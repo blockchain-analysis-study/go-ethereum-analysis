@@ -29,7 +29,7 @@ import (
 
 // ReadCanonicalHash retrieves the hash assigned to a canonical block number.
 //
-// ReadCanonicalHash: 检索分配给规范块号的哈希
+// ReadCanonicalHash: 检索分配给规范 block 的哈希
 func ReadCanonicalHash(db DatabaseReader, number uint64) common.Hash {
 	data, _ := db.Get(headerHashKey(number))
 	if len(data) == 0 {
@@ -40,7 +40,7 @@ func ReadCanonicalHash(db DatabaseReader, number uint64) common.Hash {
 
 // WriteCanonicalHash stores the hash assigned to a canonical block number.
 //
-// WriteCanonicalHash: 存储分配给规范块号的哈希
+// WriteCanonicalHash: 存储分配给规 block 的哈希
 func WriteCanonicalHash(db DatabaseWriter, hash common.Hash, number uint64) {
 	if err := db.Put(headerHashKey(number), hash.Bytes()); err != nil {
 		log.Crit("Failed to store number to hash mapping", "err", err)

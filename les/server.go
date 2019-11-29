@@ -53,6 +53,10 @@ type LesServer struct {
 	quitSync    chan struct{}
 }
 
+/**
+todo 创建 轻节点的server端
+
+ */
 func NewLesServer(eth *eth.Ethereum, config *eth.Config) (*LesServer, error) {
 	quitSync := make(chan struct{})
 
@@ -67,11 +71,17 @@ func NewLesServer(eth *eth.Ethereum, config *eth.Config) (*LesServer, error) {
 		lesTopics[i] = lesTopic(eth.BlockChain().Genesis().Hash(), pv)
 	}
 
+
+	// 一个 light server
 	srv := &LesServer{
 		lesCommons: lesCommons{
 			config:           config,
 			chainDb:          eth.ChainDb(),
+
+			// 构建一个 light 的 Cht索引器
 			chtIndexer:       light.NewChtIndexer(eth.ChainDb(), false, nil),
+
+			// 构建一个 light 的 BloomTrie索引器
 			bloomTrieIndexer: light.NewBloomTrieIndexer(eth.ChainDb(), false, nil),
 			protocolManager:  pm,
 		},
@@ -81,14 +91,19 @@ func NewLesServer(eth *eth.Ethereum, config *eth.Config) (*LesServer, error) {
 
 	logger := log.New()
 
+	// 索引器仍使用 LES/1 4k section大小来实现向后Server的兼容性
 	chtV1SectionCount, _, _ := srv.chtIndexer.Sections() // indexer still uses LES/1 4k section size for backwards server compatibility
 	chtV2SectionCount := chtV1SectionCount / (light.CHTFrequencyClient / light.CHTFrequencyServer)
 	if chtV2SectionCount != 0 {
 		// convert to LES/2 section
 		chtLastSection := chtV2SectionCount - 1
 		// convert last LES/2 section index back to LES/1 index for chtIndexer.SectionHead
+		//
+		// 将最后的 LES/2 section索引 转换回 chtIndexer.SectionHead的 LES/1 索引
 		chtLastSectionV1 := (chtLastSection+1)*(light.CHTFrequencyClient/light.CHTFrequencyServer) - 1
 		chtSectionHead := srv.chtIndexer.SectionHead(chtLastSectionV1)
+
+		// 从数据库中读取分配给给定节的CHT根。请注意，sectionIdx是根据 LES/2 CHT section大小指定的
 		chtRoot := light.GetChtV2Root(pm.chainDb, chtLastSection, chtSectionHead)
 		logger.Info("Loaded CHT", "section", chtLastSection, "head", chtSectionHead, "root", chtRoot)
 	}
@@ -96,10 +111,14 @@ func NewLesServer(eth *eth.Ethereum, config *eth.Config) (*LesServer, error) {
 	if bloomTrieSectionCount != 0 {
 		bloomTrieLastSection := bloomTrieSectionCount - 1
 		bloomTrieSectionHead := srv.bloomTrieIndexer.SectionHead(bloomTrieLastSection)
+
+		// 获取 bloomTrieRoot
 		bloomTrieRoot := light.GetBloomTrieRoot(pm.chainDb, bloomTrieLastSection, bloomTrieSectionHead)
 		logger.Info("Loaded bloom trie", "section", bloomTrieLastSection, "head", bloomTrieSectionHead, "root", bloomTrieRoot)
 	}
 
+
+	// 启动 CHT 索引器
 	srv.chtIndexer.Start(eth.BlockChain())
 
 	/** TODO  只有是开启了支持轻节点连接 Server 端的全节点，才会对 pm.server 赋值 */
@@ -140,6 +159,7 @@ func (s *LesServer) Start(srvr *p2p.Server) {
 	s.protocolManager.blockLoop()
 }
 
+// 添加 BloomBits 子索引器
 func (s *LesServer) SetBloomBitsIndexer(bloomIndexer *core.ChainIndexer) {
 	bloomIndexer.AddChildIndexer(s.bloomTrieIndexer)
 }

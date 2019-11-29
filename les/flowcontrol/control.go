@@ -186,7 +186,7 @@ const safetyMargin = time.Millisecond
 // Minimum Rate of Recharge
 //
 func (peer *ServerNode) canSend(maxCost uint64) (time.Duration, float64) {
-	peer.recalcBLE(mclock.Now())
+	peer.recalcBLE(mclock.Now()) // 客户总是对其电流有一个最低的估计BV，称为BLE
 	maxCost += uint64(safetyMargin) * peer.params.MinRecharge / uint64(fcTimeConst)
 	if maxCost > peer.params.BufLimit {
 		maxCost = peer.params.BufLimit
@@ -235,6 +235,11 @@ func (peer *ServerNode) QueueRequest(reqID, maxCost uint64) {
 
 // GotReply adjusts estimated buffer value according to the value included in
 // the latest request reply.
+//
+/**
+GotReply:
+根据最新请求回复中包含的值来调整估计的缓冲区值。
+ */
 func (peer *ServerNode) GotReply(reqID, bv uint64) {
 
 	peer.lock.Lock()

@@ -1395,7 +1395,7 @@ func RegisterEthService(stack *node.Node, cfg *eth.Config) {
 				/** 创建一个 轻节点Server实例 */  // 这个模式是指: 当前 全节点支持和轻节点链接(该全节点为轻节点的 Server 端)
 				ls, _ := les.NewLesServer(fullNode, cfg)
 
-				// 添加到全节点中
+				// todo  添加到全节点中
 				fullNode.AddLesServer(ls)
 			}
 			return fullNode, err

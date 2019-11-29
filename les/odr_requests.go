@@ -344,6 +344,8 @@ const (
 	auxHeader = 2
 )
 
+
+//
 type HelperTrieReq struct {
 	Type              uint
 	TrieIdx           uint64
@@ -358,6 +360,8 @@ type HelperTrieResps struct { // describes all responses, not just a single one
 
 // legacy LES/1
 type ChtReq struct {
+	// ChtNum: 拉取某个 section 中的head num
+	// BlockNum: 当前需要拉取的 block header num
 	ChtNum, BlockNum uint64
 	FromLevel        uint
 }
@@ -409,6 +413,11 @@ func (r *ChtRequest) Request(reqID uint64, peer *peer) error {
 // Valid processes an ODR request reply message from the LES network
 // returns true and stores results in memory if the message was a valid reply
 // to the request (implementation of LesOdrRequest)
+/**
+todo 超级重要
+	ChtRequest, 对 HeaderProof 和 HelperTrieProof 的校验及处理
+
+ */
 func (r *ChtRequest) Validate(db ethdb.Database, msg *Msg) error {
 	log.Debug("Validating CHT", "cht", r.ChtNum, "block", r.BlockNum)
 

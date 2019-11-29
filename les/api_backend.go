@@ -14,6 +14,10 @@
 // You should have received a copy of the GNU Lesser General Public License
 // along with the github.com/go-ethereum-analysis library. If not, see <http://www.gnu.org/licenses/>.
 
+
+/**
+todo 轻节点API 实现
+ */
 package les
 
 import (
@@ -39,7 +43,9 @@ import (
 )
 
 type LesApiBackend struct {
+	// light node 实例
 	eth *LightEthereum
+	// gasPrice 预言机实例
 	gpo *gasprice.Oracle
 }
 
@@ -56,10 +62,14 @@ func (b *LesApiBackend) SetHead(number uint64) {
 	b.eth.blockchain.SetHead(number)
 }
 
+
+// TODO light API
 func (b *LesApiBackend) HeaderByNumber(ctx context.Context, blockNr rpc.BlockNumber) (*types.Header, error) {
 	if blockNr == rpc.LatestBlockNumber || blockNr == rpc.PendingBlockNumber {
 		return b.eth.blockchain.CurrentHeader(), nil
 	}
+
+	// todo 根据 odr trie 去拉
 	return b.eth.blockchain.GetHeaderByNumberOdr(ctx, uint64(blockNr))
 }
 

@@ -483,7 +483,9 @@ func (pm *ProtocolManager) handleMsg(p *peer) error {
 	defer msg.Discard()
 
 
-	// 交付的消息
+	/**
+	todo 交付的消息
+	 */
 	var deliverMsg *Msg
 
 	// Handle the message depending on its contents
@@ -654,7 +656,7 @@ func (pm *ProtocolManager) handleMsg(p *peer) error {
 		p.Log().Trace("Received block header response message")
 		// A batch of headers arrived to one of our previous requests
 		var resp struct {
-			ReqID, BV uint64
+			ReqID, BV uint64   // BV: Buffer Value
 			Headers   []*types.Header
 		}
 		if err := msg.Decode(&resp); err != nil {
@@ -723,13 +725,19 @@ func (pm *ProtocolManager) handleMsg(p *peer) error {
 		p.Log().Trace("Received block bodies response")
 		// A batch of block bodies arrived to one of our previous requests
 		var resp struct {
-			ReqID, BV uint64
+			ReqID, BV uint64 // BV: Buffer Value
 			Data      []*types.Body
 		}
 		if err := msg.Decode(&resp); err != nil {
 			return errResp(ErrDecode, "msg %v: %v", msg, err)
 		}
+
+		// 调节 Server 资源
 		p.fcServer.GotReply(resp.ReqID, resp.BV)
+
+		/**
+		交付类型
+		 */
 		deliverMsg = &Msg{
 			MsgType: MsgBlockBodies,
 			ReqID:   resp.ReqID,
@@ -795,7 +803,7 @@ func (pm *ProtocolManager) handleMsg(p *peer) error {
 		p.Log().Trace("Received code response")
 		// A batch of node state data arrived to one of our previous requests
 		var resp struct {
-			ReqID, BV uint64
+			ReqID, BV uint64 // BV: Buffer Value
 			Data      [][]byte
 		}
 		if err := msg.Decode(&resp); err != nil {
@@ -867,7 +875,7 @@ func (pm *ProtocolManager) handleMsg(p *peer) error {
 		p.Log().Trace("Received receipts response")
 		// A batch of receipts arrived to one of our previous requests
 		var resp struct {
-			ReqID, BV uint64
+			ReqID, BV uint64 // BV: Buffer Value
 			Receipts  []types.Receipts
 		}
 		if err := msg.Decode(&resp); err != nil {
@@ -881,6 +889,7 @@ func (pm *ProtocolManager) handleMsg(p *peer) error {
 		}
 
 	/**
+	todo 应该是 (odr *LesOdr) Retrieve 调用过来的
 	获取 state 的proof
 	 */
 	case GetProofsV1Msg:
@@ -968,10 +977,12 @@ func (pm *ProtocolManager) handleMsg(p *peer) error {
 		bv, rcost := p.fcClient.RequestProcessed(costs.baseCost + uint64(reqCnt)*costs.reqCost)
 		pm.server.fcCostStats.update(msg.Code, uint64(reqCnt), rcost)
 
-		// 将本节点组装好的proof发回client
+		// todo 将本节点组装好的proof发回client
 		return p.SendProofs(req.ReqID, bv, proofs)
 
 	/**
+	LPV2
+	TODO 理论上基本都是走LPV2的了
 	从远程peer获取一批Merkle证明
 	 */
 	case GetProofsV2Msg:
@@ -1010,6 +1021,7 @@ func (pm *ProtocolManager) handleMsg(p *peer) error {
 			if statedb == nil || req.BHash != lastBHash {
 				statedb, root, lastBHash = nil, common.Hash{}, req.BHash
 
+				// 如果已经拉取足够的 state 的条目了,则停止拉取
 				if number := rawdb.ReadHeaderNumber(pm.chainDb, req.BHash); number != nil {
 					if header := rawdb.ReadHeader(pm.chainDb, req.BHash, *number); header != nil {
 						statedb, _ = pm.blockchain.State()
@@ -1021,6 +1033,8 @@ func (pm *ProtocolManager) handleMsg(p *peer) error {
 				continue
 			}
 			// Pull the account or storage trie of the request
+			//
+			// 提取请求的帐户或存储 trie
 			var trie state.Trie
 			if len(req.AccKey) > 0 {
 				account, err := pm.getAccount(statedb, root, common.BytesToHash(req.AccKey))
@@ -1035,6 +1049,14 @@ func (pm *ProtocolManager) handleMsg(p *peer) error {
 				continue
 			}
 			// Prove the user's request from the account or stroage trie
+			// 填充 nodes
+
+			// todo 来来来,这个贼重要
+			// trie的类型根据实际而定,
+			// todo State中的 trie是 cachedTrie
+			// todo Storage中的 trie是 SecureTrie
+			//
+			// todo 但是看了实现,最终的Prove 都是调用了 `SecureTrie.Prove`
 			trie.Prove(req.Key, req.FromLevel, nodes)
 			if nodes.DataSize() >= softResponseLimit {
 				break
@@ -1042,8 +1064,12 @@ func (pm *ProtocolManager) handleMsg(p *peer) error {
 		}
 		bv, rcost := p.fcClient.RequestProcessed(costs.baseCost + uint64(reqCnt)*costs.reqCost)
 		pm.server.fcCostStats.update(msg.Code, uint64(reqCnt), rcost)
+		// nodes.NodeList(): 将 nodes 转化成 nodeList
 		return p.SendProofsV2(req.ReqID, bv, nodes.NodeList())
 
+	/**
+	todo client处理 LPV1 的 merkle proof 响应
+	 */
 	case ProofsV1Msg:
 		if pm.odr == nil {
 			return errResp(ErrUnexpectedResponse, "")
@@ -1052,19 +1078,28 @@ func (pm *ProtocolManager) handleMsg(p *peer) error {
 		p.Log().Trace("Received proofs response")
 		// A batch of merkle proofs arrived to one of our previous requests
 		var resp struct {
-			ReqID, BV uint64
+			ReqID, BV uint64 // BV: Buffer Value
 			Data      []light.NodeList
 		}
 		if err := msg.Decode(&resp); err != nil {
 			return errResp(ErrDecode, "msg %v: %v", msg, err)
 		}
+
+		// TODO 根据最新请求回复中包含的值来调整估计的缓冲区值
 		p.fcServer.GotReply(resp.ReqID, resp.BV)
+
+		/**
+		需要被处理的交付信息
+		 */
 		deliverMsg = &Msg{
 			MsgType: MsgProofsV1,
 			ReqID:   resp.ReqID,
 			Obj:     resp.Data,
 		}
 
+	/**
+	todo client处理 LPV2 的 merkle proof 响应
+	 */
 	case ProofsV2Msg:
 		if pm.odr == nil {
 			return errResp(ErrUnexpectedResponse, "")
@@ -1073,19 +1108,33 @@ func (pm *ProtocolManager) handleMsg(p *peer) error {
 		p.Log().Trace("Received les/2 proofs response")
 		// A batch of merkle proofs arrived to one of our previous requests
 		var resp struct {
-			ReqID, BV uint64
+			ReqID, BV uint64 // BV: Buffer Value
 			Data      light.NodeList
 		}
 		if err := msg.Decode(&resp); err != nil {
 			return errResp(ErrDecode, "msg %v: %v", msg, err)
 		}
+
+		// TODO 根据最新请求回复中包含的值来调整估计的缓冲区值
 		p.fcServer.GotReply(resp.ReqID, resp.BV)
+
+		/**
+		需要被处理的交付信息
+		*/
 		deliverMsg = &Msg{
 			MsgType: MsgProofsV2,
 			ReqID:   resp.ReqID,
 			Obj:     resp.Data,
 		}
 
+
+	/**
+	Server 处理 header的proof   LPV1
+
+	todo
+		ChtRequest 和 BloomRequest 都会发起这个req
+
+	 */
 	case GetHeaderProofsMsg:
 		p.Log().Trace("Received headers proof request")
 		// Decode the retrieval message
@@ -1106,10 +1155,20 @@ func (pm *ProtocolManager) handleMsg(p *peer) error {
 			return errResp(ErrRequestRejected, "")
 		}
 		trieDb := trie.NewDatabase(ethdb.NewTable(pm.chainDb, light.ChtTablePrefix))
+
+
+		// 遍历 reqs
 		for _, req := range req.Reqs {
+
+			// 从当前 blockchain 中 <当前肯定是 全节点> 拉取 header
 			if header := pm.blockchain.GetHeaderByNumber(req.BlockNum); header != nil {
+
+				// 读取本地db中存储的 `CanonicalHash`
 				sectionHead := rawdb.ReadCanonicalHash(pm.chainDb, req.ChtNum*light.CHTFrequencyServer-1)
+				// 根据Hash拉取 CHTRoot
 				if root := light.GetChtRoot(pm.chainDb, req.ChtNum-1, sectionHead); root != (common.Hash{}) {
+
+					// 拉取 db 中的 Cht trie
 					trie, err := trie.New(root, trieDb)
 					if err != nil {
 						continue
@@ -1118,6 +1177,8 @@ func (pm *ProtocolManager) handleMsg(p *peer) error {
 					binary.BigEndian.PutUint64(encNumber[:], req.BlockNum)
 
 					var proof light.NodeList
+
+					// 填充数的 proof 路径
 					trie.Prove(encNumber[:], 0, &proof)
 
 					proofs = append(proofs, ChtResp{Header: header, Proof: proof})
@@ -1131,6 +1192,9 @@ func (pm *ProtocolManager) handleMsg(p *peer) error {
 		pm.server.fcCostStats.update(msg.Code, uint64(reqCnt), rcost)
 		return p.SendHeaderProofs(req.ReqID, bv, proofs)
 
+	/**
+	Server 处理 header的proof   LPV2
+	 */
 	case GetHelperTrieProofsMsg:
 		p.Log().Trace("Received helper trie proof request")
 		// Decode the retrieval message
@@ -1158,15 +1222,27 @@ func (pm *ProtocolManager) handleMsg(p *peer) error {
 			auxTrie  *trie.Trie
 		)
 		nodes := light.NewNodeSet()
+
+		// 遍历 所有 reqs
 		for _, req := range req.Reqs {
 			if auxTrie == nil || req.Type != lastType || req.TrieIdx != lastIdx {
 				auxTrie, lastType, lastIdx = nil, req.Type, req.TrieIdx
 
 				var prefix string
+				// 根据type 和 TrieIdx 获取
+				// todo req.Type 只会有两种
+				//      htBloomBits
+				// 		htCanonical
 				if root, prefix = pm.getHelperTrie(req.Type, req.TrieIdx); root != (common.Hash{}) {
 					auxTrie, _ = trie.New(root, trie.NewDatabase(ethdb.NewTable(pm.chainDb, prefix)))
 				}
 			}
+
+			/**
+			todo req.AuxReq 只有两种 type
+				auxRoot
+				auxHeader
+			 */
 			if req.AuxReq == auxRoot {
 				var data []byte
 				if root != (common.Hash{}) {
@@ -1192,6 +1268,11 @@ func (pm *ProtocolManager) handleMsg(p *peer) error {
 		pm.server.fcCostStats.update(msg.Code, uint64(reqCnt), rcost)
 		return p.SendHelperTrieProofs(req.ReqID, bv, HelperTrieResps{Proofs: nodes.NodeList(), AuxData: auxData})
 
+
+	/**
+	LPV1
+	Client 处理 headerProof 的resp
+	 */
 	case HeaderProofsMsg:
 		if pm.odr == nil {
 			return errResp(ErrUnexpectedResponse, "")
@@ -1199,19 +1280,29 @@ func (pm *ProtocolManager) handleMsg(p *peer) error {
 
 		p.Log().Trace("Received headers proof response")
 		var resp struct {
-			ReqID, BV uint64
+			ReqID, BV uint64 // BV: Buffer Value
 			Data      []ChtResp
 		}
 		if err := msg.Decode(&resp); err != nil {
 			return errResp(ErrDecode, "msg %v: %v", msg, err)
 		}
+
+		// 调节 server 的资源
 		p.fcServer.GotReply(resp.ReqID, resp.BV)
+
+		/**
+		交付类型
+		 */
 		deliverMsg = &Msg{
 			MsgType: MsgHeaderProofs,
 			ReqID:   resp.ReqID,
 			Obj:     resp.Data,
 		}
 
+	/**
+	LPV2
+	Client 处理 headerProof 的resp
+	 */
 	case HelperTrieProofsMsg:
 		if pm.odr == nil {
 			return errResp(ErrUnexpectedResponse, "")
@@ -1219,20 +1310,31 @@ func (pm *ProtocolManager) handleMsg(p *peer) error {
 
 		p.Log().Trace("Received helper trie proof response")
 		var resp struct {
-			ReqID, BV uint64
+			ReqID, BV uint64 // BV: Buffer Value
 			Data      HelperTrieResps
 		}
 		if err := msg.Decode(&resp); err != nil {
 			return errResp(ErrDecode, "msg %v: %v", msg, err)
 		}
 
+		/**
+		调节 server 的资源
+		 */
 		p.fcServer.GotReply(resp.ReqID, resp.BV)
+
+		/**
+		交付类型
+		 */
 		deliverMsg = &Msg{
 			MsgType: MsgHelperTrieProofs,
 			ReqID:   resp.ReqID,
 			Obj:     resp.Data,
 		}
 
+	/**
+	LPV1
+	Server 接收到 client 的txs 转发
+	 */
 	case SendTxMsg:
 		if pm.txpool == nil {
 			return errResp(ErrRequestRejected, "")
@@ -1251,6 +1353,10 @@ func (pm *ProtocolManager) handleMsg(p *peer) error {
 		_, rcost := p.fcClient.RequestProcessed(costs.baseCost + uint64(reqCnt)*costs.reqCost)
 		pm.server.fcCostStats.update(msg.Code, uint64(reqCnt), rcost)
 
+	/**
+	LPV2
+	Server 接收到 Client 的 txs req 转发
+	 */
 	case SendTxV2Msg:
 		if pm.txpool == nil {
 			return errResp(ErrRequestRejected, "")
@@ -1268,13 +1374,19 @@ func (pm *ProtocolManager) handleMsg(p *peer) error {
 			return errResp(ErrRequestRejected, "")
 		}
 
+		// 获取所有tx的Hash
 		hashes := make([]common.Hash, len(req.Txs))
 		for i, tx := range req.Txs {
 			hashes[i] = tx.Hash()
 		}
+
+		// 获取所有的 tx db的索引
 		stats := pm.txStatus(hashes)
 		for i, stat := range stats {
 			if stat.Status == core.TxStatusUnknown {
+
+				// 如果某些 tx 确实是 pool 和 db 都 unknown的
+				// 则,追加到 txpool中, 以 remote tx 的方式
 				if errs := pm.txpool.AddRemotes([]*types.Transaction{req.Txs[i]}); errs[0] != nil {
 					stats[i].Error = errs[0].Error()
 					continue
@@ -1283,12 +1395,17 @@ func (pm *ProtocolManager) handleMsg(p *peer) error {
 			}
 		}
 
+		// 调节 各种资源
 		bv, rcost := p.fcClient.RequestProcessed(costs.baseCost + uint64(reqCnt)*costs.reqCost)
 		pm.server.fcCostStats.update(msg.Code, uint64(reqCnt), rcost)
-
+		// TODO 将 tx的状态发送回去
+		// todo 下面的 `TxStatusMsg` 有用
 		return p.SendTxStatus(req.ReqID, bv, stats)
 
-	//
+	/**
+	LPV2
+	Server 收到 校验tx status 的req
+	 */
 	case GetTxStatusMsg:
 		if pm.txpool == nil {
 			return errResp(ErrUnexpectedResponse, "")
@@ -1308,8 +1425,16 @@ func (pm *ProtocolManager) handleMsg(p *peer) error {
 		bv, rcost := p.fcClient.RequestProcessed(costs.baseCost + uint64(reqCnt)*costs.reqCost)
 		pm.server.fcCostStats.update(msg.Code, uint64(reqCnt), rcost)
 
+		// 回应 tx Status
+		// todo 下面的 `TxStatusMsg` 有用
 		return p.SendTxStatus(req.ReqID, bv, pm.txStatus(req.Hashes))
 
+	/**
+	LPV2
+	Client 处理 jiaoyan tx status 的 resp
+
+	TODO  貌似没鸡吊 用
+	 */
 	case TxStatusMsg:
 		if pm.odr == nil {
 			return errResp(ErrUnexpectedResponse, "")
@@ -1317,13 +1442,14 @@ func (pm *ProtocolManager) handleMsg(p *peer) error {
 
 		p.Log().Trace("Received tx status response")
 		var resp struct {
-			ReqID, BV uint64
+			ReqID, BV uint64 // BV: Buffer Value
 			Status    []txStatus
 		}
 		if err := msg.Decode(&resp); err != nil {
 			return errResp(ErrDecode, "msg %v: %v", msg, err)
 		}
 
+		// 调整 server 的资源
 		p.fcServer.GotReply(resp.ReqID, resp.BV)
 
 	default:
@@ -1340,6 +1466,7 @@ func (pm *ProtocolManager) handleMsg(p *peer) error {
 		err := pm.retriever.deliver(p, deliverMsg)
 		if err != nil {
 			p.responseErrors++
+			// 为毛大于 50 个resp err时,返回最后一个 err !?
 			if p.responseErrors > maxResponseErrors {
 				return err
 			}
@@ -1379,6 +1506,9 @@ func (pm *ProtocolManager) getHelperTrie(id uint, idx uint64) (common.Hash, stri
 }
 
 // getHelperTrieAuxData returns requested auxiliary data for the given HelperTrie request
+//
+// getHelperTrieAuxData:
+// 返回给定HelperTrie请求的请求辅助数据
 func (pm *ProtocolManager) getHelperTrieAuxData(req HelperTrieReq) []byte {
 	if req.Type == htCanonical && req.AuxReq == auxHeader && len(req.Key) == 8 {
 		blockNum := binary.BigEndian.Uint64(req.Key)
@@ -1395,8 +1525,13 @@ func (pm *ProtocolManager) txStatus(hashes []common.Hash) []txStatus {
 		stats[i].Status = stat
 
 		// If the transaction is unknown to the pool, try looking it up locally
+		//
+		// 如果该交易在txpool中没找到,则尝试去db查找
 		if stat == core.TxStatusUnknown {
+			// 如果db可以找到得到
 			if block, number, index := rawdb.ReadTxLookupEntry(pm.chainDb, hashes[i]); block != (common.Hash{}) {
+
+				// 将status 标识为 Included, 已经包含在db中
 				stats[i].Status = core.TxStatusIncluded
 				stats[i].Lookup = &rawdb.TxLookupEntry{BlockHash: block, BlockIndex: number, Index: index}
 			}

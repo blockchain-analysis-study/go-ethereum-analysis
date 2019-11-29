@@ -40,7 +40,7 @@ import (
 
 func expectResponse(r p2p.MsgReader, msgcode, reqID, bv uint64, data interface{}) error {
 	type resp struct {
-		ReqID, BV uint64
+		ReqID, BV uint64 // BV: Buffer Value
 		Data      interface{}
 	}
 	return p2p.ExpectMsg(r, msgcode, resp{reqID, bv, data})

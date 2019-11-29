@@ -75,6 +75,11 @@ func (self *LesTxRelay) unregisterPeer(p *peer) {
 
 // send sends a list of transactions to at most a given number of peers at
 // once, never resending any particular transaction to the same peer twice
+//
+/**
+send:
+一次将 tx 列表最多发送给给定数量的 peer，而从未两次将任何特定 tx 重新发送给同一 peer
+ */
 func (self *LesTxRelay) send(txs types.Transactions, count int) {
 	sendTo := make(map[*peer]types.Transactions)
 
@@ -136,6 +141,8 @@ func (self *LesTxRelay) send(txs types.Transactions, count int) {
 				peer := dp.(*peer)
 				cost := peer.GetRequestCost(SendTxMsg, len(ll))
 				peer.fcServer.QueueRequest(reqID, cost)
+
+				// todo 发送一个 txs req
 				return func() { peer.SendTxs(reqID, cost, ll) }
 			},
 		}
@@ -147,6 +154,7 @@ func (self *LesTxRelay) Send(txs types.Transactions) {
 	self.lock.Lock()
 	defer self.lock.Unlock()
 
+	// todo 发给 对端peer (les server)
 	self.send(txs, 3)
 }
 
@@ -169,6 +177,8 @@ func (self *LesTxRelay) NewHead(head common.Hash, mined []common.Hash, rollback 
 			txs[i] = self.txSent[hash].tx
 			i++
 		}
+
+		// todo 发给对端 peer (les server)
 		self.send(txs, 1)
 	}
 }

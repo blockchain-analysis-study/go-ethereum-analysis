@@ -657,7 +657,7 @@ func (f *lightFetcher) nextRequest() (*distReq, uint64) {
 				return n != nil && !n.requested
 			},
 
-			//
+			// 重要
 			request: func(dp distPeer) func() {
 				p := dp.(*peer)
 				f.lock.Lock()
@@ -680,7 +680,13 @@ func (f *lightFetcher) nextRequest() (*distReq, uint64) {
 					f.timeoutChn <- reqID
 				}()
 
-				//
+				// // // // // // // //
+				// // // // // // // //
+				// todo 超级重要
+				// todo 超级重要
+				// todo 其实 这个就是 发起拉取  header 的请求
+				// // // // // // // //
+				// // // // // // // //
 				return func() {
 					// todo 根据Hash 去拿 header
 					p.RequestHeadersByHash(reqID, cost, bestHash, int(bestAmount), 0, true)

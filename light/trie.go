@@ -160,6 +160,7 @@ func (t *odrTrie) do(key []byte, fn func() error) error {
 			return err
 		}
 		r := &TrieRequest{Id: t.id, Key: key}
+		// todo 这里拉取 `GetProofsV1Msg` trie proof
 		if err := t.db.backend.Retrieve(t.db.ctx, r); err != nil {
 			return err
 		}
@@ -214,6 +215,7 @@ func (it *nodeIterator) do(fn func() error) {
 			return
 		}
 		lasthash = missing.NodeHash
+		// todo 这里拉取 `GetProofsV1Msg` trie proof
 		r := &TrieRequest{Id: it.t.id, Key: nibblesToKey(missing.Path)}
 		if it.err = it.t.db.backend.Retrieve(it.t.db.ctx, r); it.err != nil {
 			return

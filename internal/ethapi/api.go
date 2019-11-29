@@ -477,6 +477,12 @@ func (s *PrivateAccountAPI) SignAndSendTransaction(ctx context.Context, args Sen
 // PublicBlockChainAPI provides an API to access the Ethereum blockchain.
 // It offers only methods that operate on public data that is freely available to anyone.
 type PublicBlockChainAPI struct {
+
+	/**
+	TODO 主要就是这个的区别了
+		EthAPIBackend
+		LesAPIBackend
+	 */
 	b Backend
 }
 

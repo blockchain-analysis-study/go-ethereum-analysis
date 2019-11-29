@@ -59,29 +59,29 @@ const (
 // les protocol message codes
 const (
 	// Protocol messages belonging to LPV1
-	StatusMsg          = 0x00
-	AnnounceMsg        = 0x01
-	GetBlockHeadersMsg = 0x02
-	BlockHeadersMsg    = 0x03
-	GetBlockBodiesMsg  = 0x04
-	BlockBodiesMsg     = 0x05
-	GetReceiptsMsg     = 0x06
-	ReceiptsMsg        = 0x07
-	GetProofsV1Msg     = 0x08
-	ProofsV1Msg        = 0x09
-	GetCodeMsg         = 0x0a
-	CodeMsg            = 0x0b
-	SendTxMsg          = 0x0c
-	GetHeaderProofsMsg = 0x0d
-	HeaderProofsMsg    = 0x0e
+	StatusMsg          = 0x00 // P2P 握手信号
+	AnnounceMsg        = 0x01 // 拉取header 的hash, num, td 等
+	GetBlockHeadersMsg = 0x02 // 拉取Header 的req
+	BlockHeadersMsg    = 0x03 // 处理Header拉取的resp
+	GetBlockBodiesMsg  = 0x04 // 拉取bodies 的req
+	BlockBodiesMsg     = 0x05 // 处理bodies 的resp
+	GetReceiptsMsg     = 0x06 // 拉取 receipt的req
+	ReceiptsMsg        = 0x07 // 处理 receipt 拉取的resp
+	GetProofsV1Msg     = 0x08 // 拉取 merkle proof LPV1  TODO (应该是 (odr *LesOdr) Retrieve 调用过来的)
+	ProofsV1Msg        = 0x09 // client处理 LPV1 的 merkle proof 响应
+	GetCodeMsg         = 0x0a // 拉取Code的req
+	CodeMsg            = 0x0b // 处理Code拉取的resp
+	SendTxMsg          = 0x0c // 发出 tx 的广播 LPV1
+	GetHeaderProofsMsg = 0x0d // LPV1: 不管是 ChtIndexer的`ChtRequest` 或者是 BloomTrieIndexer的`BloomRequest` 都走这个
+	HeaderProofsMsg    = 0x0e // Client 处理 headerProof 的resp
 	// Protocol messages belonging to LPV2
-	GetProofsV2Msg         = 0x0f
-	ProofsV2Msg            = 0x10
-	GetHelperTrieProofsMsg = 0x11
-	HelperTrieProofsMsg    = 0x12
-	SendTxV2Msg            = 0x13
-	GetTxStatusMsg         = 0x14
-	TxStatusMsg            = 0x15
+	GetProofsV2Msg         = 0x0f // 拉取 merkle proof LPV2 TODO (应该是 (odr *LesOdr) Retrieve 调用过来的)
+	ProofsV2Msg            = 0x10  // client处理 LPV2 的 merkle proof 响应
+	GetHelperTrieProofsMsg = 0x11  // LPV2: 不管是 ChtIndexer的`ChtRequest` 或者是 BloomTrieIndexer的`BloomRequest` 都走这个
+	HelperTrieProofsMsg    = 0x12  // Client 处理 headerProof 的resp
+	SendTxV2Msg            = 0x13  // 发出 tx 的广播 LPV2  (会将 txs 的 status 回应给 client)
+	GetTxStatusMsg         = 0x14  // 校验 tx status 的req
+	TxStatusMsg            = 0x15  // 校验 tx status 的 resp
 )
 
 type errCode int

@@ -298,7 +298,7 @@ func (p *testPeer) handshake(t *testing.T, td *big.Int, head common.Hash, headNu
 	expList = expList.add("serveChainSince", uint64(0))
 	expList = expList.add("serveStateSince", uint64(0))
 	expList = expList.add("txRelay", nil)
-	expList = expList.add("flowControl/BL", testBufLimit)
+	expList = expList.add("flowControl/BL", testBufLimit) // 握手的 Buffer Limit
 	expList = expList.add("flowControl/MRR", uint64(1))
 	expList = expList.add("flowControl/MRC", testRCL())
 

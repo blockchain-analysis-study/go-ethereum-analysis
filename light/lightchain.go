@@ -455,9 +455,13 @@ func (self *LightChain) GetHeaderByNumber(number uint64) *types.Header {
 // GetHeaderByNumberOdr retrieves a block header from the database or network
 // by number, caching it (associated with its hash) if found.
 func (self *LightChain) GetHeaderByNumberOdr(ctx context.Context, number uint64) (*types.Header, error) {
+
+	// 根据 number 拿header
 	if header := self.hc.GetHeaderByNumber(number); header != nil {
 		return header, nil
 	}
+
+	// todo 否则, 拉取 odr
 	return GetHeaderByNumber(ctx, self.odr, number)
 }
 

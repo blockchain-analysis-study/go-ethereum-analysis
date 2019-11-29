@@ -96,6 +96,8 @@ type Ethereum struct {
 
 func (s *Ethereum) AddLesServer(ls LesServer) {
 	s.lesServer = ls
+
+	// 添加 BloomBits 子索引器
 	ls.SetBloomBitsIndexer(s.bloomIndexer)
 }
 

@@ -174,7 +174,7 @@ func sendRequest(w p2p.MsgWriter, msgcode, reqID, cost uint64, data interface{})
 
 func sendResponse(w p2p.MsgWriter, msgcode, reqID, bv uint64, data interface{}) error {
 	type resp struct {
-		ReqID, BV uint64
+		ReqID, BV uint64 // BV: Buffer Value
 		Data      interface{}
 	}
 	return p2p.Send(w, msgcode, resp{reqID, bv, data})
@@ -311,6 +311,8 @@ func (p *peer) RequestProofs(reqID, cost uint64, reqs []ProofReq) error {
 //
 /**
 RequestHelperTrieProofs: 从远程节点获取一批HelperTrie merkle证明.
+
+todo 不管是 ChtIndexer的`ChtRequest` 或者是 BloomTrieIndexer的`BloomRequest` 都走这个
  */
 func (p *peer) RequestHelperTrieProofs(reqID, cost uint64, reqs []HelperTrieReq) error {
 	p.Log().Debug("Fetching batch of HelperTrie proofs", "count", len(reqs))
@@ -338,18 +340,32 @@ func (p *peer) RequestHelperTrieProofs(reqID, cost uint64, reqs []HelperTrieReq)
 }
 
 // RequestTxStatus fetches a batch of transaction status records from a remote node.
+//
+/**
+ todo RequestTxStatus:
+		从远程 peer 获取一批 txs 状态记录  (貌似没人调用)
+ */
 func (p *peer) RequestTxStatus(reqID, cost uint64, txHashes []common.Hash) error {
 	p.Log().Debug("Requesting transaction status", "count", len(txHashes))
 	return sendRequest(p.rw, GetTxStatusMsg, reqID, cost, txHashes)
 }
 
 // SendTxStatus sends a batch of transactions to be added to the remote transaction pool.
+//
+/**
+todo
+	SendTxStatus发送一批要添加到远程 peer的 txpool中的 txs
+ */
 func (p *peer) SendTxs(reqID, cost uint64, txs types.Transactions) error {
 	p.Log().Debug("Fetching batch of transactions", "count", len(txs))
 	switch p.version {
 	case lpv1:
+
+		// 旧 msg 格式不包含reqID
 		return p2p.Send(p.rw, SendTxMsg, txs) // old message format does not include reqID
 	case lpv2:
+
+		// todo 后面以太坊都用这个
 		return sendRequest(p.rw, SendTxV2Msg, reqID, cost, txs)
 	default:
 		panic(nil)

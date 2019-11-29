@@ -39,7 +39,12 @@ type requestDistributor struct {
 	lastReqOrder     uint64
 	peers            map[distPeer]struct{}
 	peerLock         sync.RWMutex
+
+	// stopChn: 接收停止 loop 的信号
+	// loopChn: 接收启动 loop 的信号
 	stopChn, loopChn chan struct{}
+
+	// 默认初始化为 false
 	loopNextSent     bool
 	lock             sync.Mutex
 }
@@ -99,7 +104,10 @@ type distReq struct {
 }
 
 // newRequestDistributor creates a new request distributor
-// 创建一个 请求分发器
+/**
+todo 超级重要
+创建一个 请求分发器
+ */
 func newRequestDistributor(peers *peerSet, stopChn chan struct{}) *requestDistributor {
 	d := &requestDistributor{
 		// 初始化请求的队列
@@ -149,6 +157,9 @@ func (d *requestDistributor) registerTestPeer(p distPeer) {
 const distMaxWait = time.Millisecond * 10
 
 // main event loop
+/**
+TODO 重要 请求分发器 处理各种 distReq 的 request 方法
+ */
 func (d *requestDistributor) loop() {
 	for {
 		select {
@@ -168,11 +179,13 @@ func (d *requestDistributor) loop() {
 			d.lock.Unlock()
 			return
 
-		// 接收到 loop 信号
+		// TODO 接收到 loop 信号
 		case <-d.loopChn:
 			d.lock.Lock()
 
-			// 先初始化 标识位 `loopNextSent`
+			// todo 先初始化 标识位 `loopNextSent` 只有是 false 的时候在 分发器的 queue() 即请求入队的方法中会触发 loopChn 的信号
+			// 		(所以,第一次接收到 loop 信号来自 req 入队!?) 因为在 new 分发器的时候 `d.loopNextSent = false` 允许接收第一次req 入队的loop信号
+			// 		看 queue() 函数即可~
 			d.loopNextSent = false
 		loop:
 			// 一直清空队列中的请求req
@@ -183,7 +196,11 @@ func (d *requestDistributor) loop() {
 					chn := req.sentChn // save sentChn because remove sets it to nil   保存sendChn，因为remove将其设置为nil
 					d.remove(req)
 
+					// todo 来来来
+					// todo 就是这里了
+					// todo 处理轻节点的各种拉取请求
 					// todo 获取 各自的 sendFunc
+					/////////////////////////////////////////////////// todo 这里就是调用函数啊, 我叼
 					send := req.request(peer)
 					if send != nil {
 						peer.queueSend(send)
@@ -313,9 +330,10 @@ func (d *requestDistributor) nextRequest() (distPeer, *distReq, time.Duration) {
 // If the request is cancelled or timed out without suitable peers, the channel is
 // closed without sending any peer references to it.
 /**
+todo 超级重要, 这个就是 调用 请求分发器 将 req 入队
 queue:
-将请求添加到分发队列，返回一个通道，
-在该通道中，发送请求后将发送接收对等方（返回请求回调）。
+将 req 添加到分发队列，返回一个 chan，
+在该通道中，发送 req 后将发送接收 peer（返回请求回调）。
 如果在没有合适的对端peer的情况下取消或超时了该请求，
 则该通道将关闭，而不发送任何对端peer的引用。
 
@@ -337,11 +355,15 @@ func (d *requestDistributor) queue(r *distReq) chan distPeer {
 		for before.Value.(*distReq).reqOrder < r.reqOrder {
 			before = before.Next()
 		}
+
+		// todo 请求 插入队列
 		r.element = d.reqQueue.InsertBefore(r, before)
 	}
 
 	if !d.loopNextSent {
 		d.loopNextSent = true
+
+		// todo req 入队的时候,就发起 loop 信号了
 		d.loopChn <- struct{}{}
 	}
 
