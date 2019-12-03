@@ -211,12 +211,30 @@ func (n *Node) Start() error {
 		}
 		services[kind] = service
 	}
+	// todo ##############################
+	// todo ##############################
+	// todo ##############################
+	// todo ##############################
+	// todo ##############################
+	// todo ##############################
+	//
 	// Gather the protocols and start the freshly assembled P2P server
 	//
 	// todo 收集协议并启动新组装的P2P服务器, 逐个启动
+	// todo 各类节点都走这里启动 peer 实例
+	//
+	// todo ##############################
+	// todo ##############################
+	// todo ##############################
+	// todo ##############################
+	// todo ##############################
+	// todo ##############################
 	for _, service := range services {
 		running.Protocols = append(running.Protocols, service.Protocols()...)
 	}
+
+	//
+	// todo 这里启动 p2p 服务, 不是 peer 实例哦
 	if err := running.Start(); err != nil {
 		return convertFileLockError(err)
 	}
@@ -224,6 +242,10 @@ func (n *Node) Start() error {
 	started := []reflect.Type{}
 	for kind, service := range services {
 		// Start the next service, stopping all previous upon failure
+		//
+		// 启动下一个服务，一旦失败就停止所有先前的服务
+		//
+		// todo 这里 逐个 启动各个 peer 实例
 		if err := service.Start(running); err != nil {
 			for _, kind := range started {
 				services[kind].Stop()

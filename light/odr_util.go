@@ -68,7 +68,7 @@ func GetHeaderByNumber(ctx context.Context, odr OdrBackend, number uint64) (*typ
 		for chtCount > 0 && canonicalHash != sectionHead && canonicalHash != (common.Hash{}) {
 			chtCount--
 			if chtCount > 0 {
-				// 一段一段的根据 chtCount <成功索引到数据库中的section数> 往回找
+				//  todo 一段一段的根据 chtCount <成功索引到数据库中的section数> 往回找
 				sectionHeadNum = chtCount*CHTFrequencyClient - 1
 
 				// todo 就是在找 这个 sectionHead
@@ -84,7 +84,7 @@ func GetHeaderByNumber(ctx context.Context, odr OdrBackend, number uint64) (*typ
 		return nil, ErrNoTrustedCht
 	}
 
-	// todo 如果,处于 checkpoint 的section中的
+	// todo 如果,处于 checkpoint 的section中的 (section从0开始, chtCount - 1)
 	// 根据 odr trie 去拉
 	r := &ChtRequest{ChtRoot: GetChtRoot(db, chtCount-1, sectionHead), ChtNum: chtCount - 1, BlockNum: number}
 
@@ -200,7 +200,11 @@ func GetBlockLogs(ctx context.Context, odr OdrBackend, hash common.Hash, number 
 }
 
 // GetBloomBits retrieves a batch of compressed bloomBits vectors belonging to the given bit index and section indexes
+//
+// GetBloomBits: 检索一批属于给 定位索引 <given bit index> 和 section索引的 压缩bloomBits 集合
 func GetBloomBits(ctx context.Context, odr OdrBackend, bitIdx uint, sectionIdxList []uint64) ([][]byte, error) {
+
+	// 先拿本地的 odrDB
 	db := odr.Database()
 	result := make([][]byte, len(sectionIdxList))
 	var (
@@ -212,32 +216,82 @@ func GetBloomBits(ctx context.Context, odr OdrBackend, bitIdx uint, sectionIdxLi
 		bloomTrieCount, sectionHeadNum uint64
 		sectionHead                    common.Hash
 	)
+
+
+	// todo 返回Bloom Trie链索引器
 	if odr.BloomTrieIndexer() != nil {
+
+		/**
+		todo 注意了
+			bloomTrieCount: 从索引器上获取 Section的数目(bloomTrie是Section的bloomTrie, 所以Section的数目就是bloomTrieCount)
+			sectionHeadNum: section中的最后一个的那个block number
+			sectionHead: 最后一个 head的Hash
+		 */
 		bloomTrieCount, sectionHeadNum, sectionHead = odr.BloomTrieIndexer().Sections()
+
+		// 先去本地 db 根据 num查Hash
 		canonicalHash := rawdb.ReadCanonicalHash(db, sectionHeadNum)
 		// if the BloomTrie was injected as a trusted checkpoint, we have no canonical hash yet so we accept zero hash too
+		//
+		// 如果将BloomTrie注入为受信任的 checkpoint，则我们尚无规范哈希，因此我们也接受零哈希
+		//
+		// TODO 即:
+		// 		当 bloomTrieCount > 0, 存在 section 时,
+		// 		且 存在本地存储的 canonicalHash (`h` + num (uint64 big endian) + hash -> header)
+		// 		和  bloom索引器记录在本地的 sectionHead Hash (`shead` + section index (uint64 big endian) -> header Hash)
+		//		不一致时
 		for bloomTrieCount > 0 && canonicalHash != sectionHead && canonicalHash != (common.Hash{}) {
+			// 则, 将section一直往前找 (这时候,可能 只是更新了 bloom 中的 hash 而 存储 db的却还是旧的)
 			bloomTrieCount--
 			if bloomTrieCount > 0 {
+
+				// 重新拿 新的一个section的最后一个blocknum
 				sectionHeadNum = bloomTrieCount*BloomTrieFrequency - 1
+
+				// 分别取回 bloom中的 sectionHead Hash
 				sectionHead = odr.BloomTrieIndexer().SectionHead(bloomTrieCount - 1)
+				// 和本地存储的 canonicalHash
 				canonicalHash = rawdb.ReadCanonicalHash(db, sectionHeadNum)
 			}
 		}
+
+		//  todo 就这么一直找到最后, 也不管最终有没有找到了, 找到哪,是哪
 	}
 
+
+	// todo 这里又根据 入参的 section index集做处理
+	//
+	// 遍历sectionId集
 	for i, sectionIdx := range sectionIdxList {
+
+		// 现在本地获取对应的 CanonicalHash
+		//
+		// what? 这里为什么使用 sectionIdx+1 !?
 		sectionHead := rawdb.ReadCanonicalHash(db, (sectionIdx+1)*BloomTrieFrequency-1)
 		// if we don't have the canonical hash stored for this section head number, we'll still look for
 		// an entry with a zero sectionHead (we store it with zero section head too if we don't know it
 		// at the time of the retrieval)
+		//
+		/**
+		如果我们没有为该  section head num 存储的 CanonicalHash,
+		我们仍将寻找一个带有 零sectionHead hash 的条目
+		[如果在检索时我们不知道它,我们也将其存储为零 section head]
+		 */
+		// 检索来自给定section和bit索引的压缩bloom bit vector (入参, bit index sectionindex, CanonicalHash)
 		bloomBits, err := rawdb.ReadBloomBits(db, bitIdx, sectionIdx, sectionHead)
 		if err == nil {
 			result[i] = bloomBits
 		} else {
+
+			// 如果 没查到或者报错了, 首先校验下 sectionIndex 是不是 大于 本地第bloomTrieCount section的num
+			//
+			// 如果 >= 则,报错,因为没有本地并没有存到 trust checkpoint 的 section 相关信息
 			if sectionIdx >= bloomTrieCount {
 				return nil, ErrNoTrustedBloomTrie
 			}
+
+			// 否则,表示 有trustcheckpoint 但是只是自己本地没查到对应的 bloom bit (可能之前么在本地做过查询该 section bloom 的操作)
+			// 则,需要发起 req去server 端 查询
 			reqList = append(reqList, sectionIdx)
 			reqIdx = append(reqIdx, i)
 		}
@@ -246,13 +300,19 @@ func GetBloomBits(ctx context.Context, odr OdrBackend, bitIdx uint, sectionIdxLi
 		return result, nil
 	}
 
+
+	// TODO 构建 需要server 端查询的 bloomindex req
 	r := &BloomRequest{BloomTrieRoot: GetBloomTrieRoot(db, bloomTrieCount-1, sectionHead), BloomTrieNum: bloomTrieCount - 1, BitIdx: bitIdx, SectionIdxList: reqList}
+
+	// todo 发起查询并存储result (里面调用了 StoreResult())
 	if err := odr.Retrieve(ctx, r); err != nil {
 		return nil, err
 	} else {
 		for i, idx := range reqIdx {
 			result[idx] = r.BloomBits[i]
 		}
+
+		// 并将result 返回出去
 		return result, nil
 	}
 }

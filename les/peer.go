@@ -481,21 +481,46 @@ func (p *peer) Handshake(td *big.Int, head common.Hash, headNum uint64, genesis 
 
 	// 收集 各种握手时的参数
 	var send keyValueList
-	send = send.add("protocolVersion", uint64(p.version))
-	send = send.add("networkId", p.network)
-	send = send.add("headTd", td)
-	send = send.add("headHash", head)
-	send = send.add("headNum", headNum)
-	send = send.add("genesisHash", genesis)
+	send = send.add("protocolVersion", uint64(p.version))   // 协议的版本
+	send = send.add("networkId", p.network)		// 网络Id
+	send = send.add("headTd", td)			// 最佳chain head的总难度
+	send = send.add("headHash", head)   // 最佳的 head 的 hash
+	send = send.add("headNum", headNum) // 最佳的 head 的 num
+	send = send.add("genesisHash", genesis) // genesisHash
 	if server != nil {
-		send = send.add("serveHeaders", nil)
-		send = send.add("serveChainSince", uint64(0))
-		send = send.add("serveStateSince", uint64(0))
-		send = send.add("txRelay", nil)
-		send = send.add("flowControl/BL", server.defParams.BufLimit)    // TODO 握手的 Buffer Limit
-		send = send.add("flowControl/MRR", server.defParams.MinRecharge)// TODO 握手时 Minimum Rate of Recharge
+		send = send.add("serveHeaders", nil) // （空值）：如果 对端peer 可以提供标题链下载，则显示
+		send = send.add("serveChainSince", uint64(0)) // 存在，如果 对端peer 可以从给定的 block num 开始服务于 header / receipt 的ODR请求
+		send = send.add("serveStateSince", uint64(0)) // 存在，如果 对端peer 可以从给定的 block num 开始服务于 proof / code 的ODR请求
+		send = send.add("txRelay", nil)  // （无值）：如果 对端peer 可以将交易中继到ETH网络，则显示
+		send = send.add("flowControl/BL", server.defParams.BufLimit)    // TODO 握手的 Buffer Limit   缓冲区限制
+		send = send.add("flowControl/MRR", server.defParams.MinRecharge)// TODO 握手时 Minimum Rate of Recharge   最小充电率
 		list := server.fcCostStats.getCurrentList()
-		send = send.add("flowControl/MRC", list)   // TODO 握手时的 Maximum Request Cost table
+		// todo 此参数的值是一个表，该表为LES协议中的每个按需检索消息分配成本值。该表被编码为整数三元组的列表：[[MsgCode, BaseCost, ReqCost], ...]
+		send = send.add("flowControl/MRC", list)   // TODO 握手时的 Maximum Request Cost table    最大请求费用表
+
+		/**
+		todo Server:
+			当客户端连接时，服务器将客户端的初始Buffer Value（BV）设置为BL, BL在Status中进行声明。
+			从客户端收到请求后， server会根据自己的估算值计算成本
+			（但不高于MaxCost，等于  BaseCost + ReqCost * N ，其中N是请求中所请求的单个元素的数量），
+			然后从中扣除BV。
+			如果结果为BV负，则丢弃对等方，否则开始处理请求。
+			回复消息中包含一个BV值，该值是先前计算的值BV加上在服务时间中所充值的金额。
+			请注意，由于 Server 始终可以确定请求的最大费用（不超过MaxCost）（并且客户端不应承担其他费用）.
+			如果在BV <MaxCost时收到消息，Server可以拒绝一条消息而不对其进行处理，因为这已经是流控制违规.
+
+
+
+		todo Client:
+				Client始终对其当前BV具有最低的估计值，称为BLE
+					1) 将BLE设置为Status中收到的BL
+					2) BLE <MaxCost时，不向服务器发送任何请求
+					3) MaxCost在发送请求时推断
+					4) 小于BL时以MRR速率对BLE充电
+				当收到具有新的BV值的回复消息, 它将BLE设置为BV-Sum（MaxCost），对属于此回复的请求之后发送的请求的MaxCost值求和
+		 */
+
+
 		p.fcCosts = list.decode()
 	} else {
 
@@ -554,7 +579,7 @@ func (p *peer) Handshake(td *big.Int, head common.Hash, headNum uint64, genesis 
 
 
 	// 根据条件 选择性的获取 参数
-	// todo 如果当前本地节点是 server (即: 全节点)
+	// todo 如果 `当前` 本地节点是 server (即: 全节点)
 	if server != nil {
 		// until we have a proper peer connectivity API, allow LES connection to other servers
 		/*if recv.get("serveStateSince", nil) == nil {

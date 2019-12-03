@@ -441,6 +441,8 @@ func (s *Ethereum) Protocols() []p2p.Protocol {
 	if s.lesServer == nil {
 		return s.protocolManager.SubProtocols
 	}
+
+	// todo 将 轻节点 Server 端协议追加到全节点的协议中
 	return append(s.protocolManager.SubProtocols, s.lesServer.Protocols()...)
 }
 
@@ -463,6 +465,15 @@ func (s *Ethereum) Start(srvr *p2p.Server) error {
 	}
 	// Start the networking layer and the light server if requested
 	s.protocolManager.Start(maxPeers)
+
+	// todo #############################
+	// todo #############################
+	// todo #############################
+	// todo #############################
+	// todo #############################
+	// todo #############################
+	//
+	// TODO 启动 轻节点的Server端
 	if s.lesServer != nil {
 		s.lesServer.Start(srvr)
 	}

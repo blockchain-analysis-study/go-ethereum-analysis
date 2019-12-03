@@ -30,9 +30,12 @@ type bytesBacked interface {
 
 const (
 	// BloomByteLength represents the number of bytes used in a header log bloom.
+	//
+	// 表示一个 Bloom具备多少个byte
 	BloomByteLength = 256
 
 	// BloomBitLength represents the number of bits used in a header log bloom.
+	// 表示一个Bloom 多少个bit
 	BloomBitLength = 8 * BloomByteLength
 )
 

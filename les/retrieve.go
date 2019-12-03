@@ -163,7 +163,7 @@ retrieve:
  */
 func (rm *retrieveManager) retrieve(ctx context.Context, reqID uint64, req *distReq, val validatorFunc, shutdown chan struct{}) error {
 
-	// todo 创建 拉取 req
+	// todo 创建 拉取 req, 在这里面会发送 loop信号
 	sentReq := rm.sendReq(reqID, req, val)
 	select {
 	case <-sentReq.stopCh:
@@ -222,6 +222,7 @@ func (rm *retrieveManager) sendReq(reqID uint64, req *distReq, val validatorFunc
 
 	/**
 	TODO 超级重要, 这个就是 sendReq 自我处理, 即各种请求重试, 请求调整
+	todo 在这里面会发送 loop信号
 	 */
 	go r.retrieveLoop()
 	return r
@@ -257,6 +258,7 @@ func (r *sentReq) retrieveLoop() {
 	tryRequest:
 	尝试将 req 发送到新 peer，并等待 req成功或超时（如果已发送）.
 	它还将适当的reqPeerEvent消息发送到请求的事件通道。
+	todo 在这里面会发送 loop信号
 	*/
 	go r.tryRequest()
 
@@ -392,6 +394,7 @@ tryRequest:
 func (r *sentReq) tryRequest() {
 
 	// todo 将 req 入队,并发起 分发器 的loop 信号
+	// todo 在这里面会发送 loop信号
 	sent := r.rm.dist.queue(r.req)
 	var p distPeer
 	select {
@@ -493,10 +496,24 @@ func (r *sentReq) deliver(peer distPeer, msg *Msg) error {
 	其实是
 	lreq.Validate(odr.db, msg)
 
+	todo #################################################################
+	todo #################################################################
+	todo #################################################################
+	todo #################################################################
+	todo #################################################################
+	todo #################################################################
+
 	todo lreq 有多种实现
 		ChtRequest
 		BloomRequest
 		等等
+
+	todo #################################################################
+	todo #################################################################
+	todo #################################################################
+	todo #################################################################
+	todo #################################################################
+	todo #################################################################
 	 */
 	valid := r.validate(peer, msg) == nil
 

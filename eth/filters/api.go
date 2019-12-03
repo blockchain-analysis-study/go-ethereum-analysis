@@ -342,6 +342,8 @@ func (api *PublicFilterAPI) GetLogs(ctx context.Context, crit FilterCriteria) ([
 		filter = NewRangeFilter(api.backend, begin, end, crit.Addresses, crit.Topics)
 	}
 	// Run the filter and return all the logs
+	//
+	// 运行过滤器并返回所有日志
 	logs, err := filter.Logs(ctx)
 	if err != nil {
 		return nil, err
@@ -397,6 +399,8 @@ func (api *PublicFilterAPI) GetFilterLogs(ctx context.Context, id rpc.ID) ([]*ty
 		filter = NewRangeFilter(api.backend, begin, end, f.crit.Addresses, f.crit.Topics)
 	}
 	// Run the filter and return all the logs
+	//
+	// 运行过滤器并返回所有日志
 	logs, err := filter.Logs(ctx)
 	if err != nil {
 		return nil, err

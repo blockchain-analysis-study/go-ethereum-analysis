@@ -232,6 +232,9 @@ func (pm *ProtocolManager) removePeer(id string) {
 	}
 }
 
+/**
+todo 启动 全节点的 pm
+ */
 func (pm *ProtocolManager) Start(maxPeers int) {
 	pm.maxPeers = maxPeers
 

@@ -475,6 +475,12 @@ loop:
 			// If we're currently waiting idle (nothing to look up), give the ticket store a
 			// chance to start it sooner. This should speed up convergence of the radius
 			// determination for new topics.
+			//
+			/**
+			如果我们当前正在等待空闲状态（什么都不想查找），请给售票处一个机会，尽快启动它。
+			这应加快新主题半径确定的收敛性.
+
+			 */
 			// if topicRegisterLookupDone == nil {
 			if topicRegisterLookupTarget.target == (common.Hash{}) {
 				log.Trace("topicRegisterLookupTarget == null")

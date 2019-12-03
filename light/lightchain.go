@@ -99,6 +99,25 @@ func NewLightChain(odr OdrBackend, config *params.ChainConfig, engine consensus.
 		return nil, core.ErrNoGenesis
 	}
 	if cp, ok := trustedCheckpoints[bc.genesisBlock.Hash()]; ok {
+
+		/**
+		todo ##########################
+		todo ##########################
+		todo ##########################
+		todo ##########################
+		todo ##########################
+		todo ##########################
+
+		TODO 添加 trust checkpoint
+
+		todo ##########################
+		todo ##########################
+		todo ##########################
+		todo ##########################
+		todo ##########################
+		todo ##########################
+
+		*/
 		bc.addTrustedCheckpoint(cp)
 	}
 	if err := bc.loadLastState(); err != nil {
@@ -116,16 +135,45 @@ func NewLightChain(odr OdrBackend, config *params.ChainConfig, engine consensus.
 }
 
 // addTrustedCheckpoint adds a trusted checkpoint to the blockchain
+//
+/**
+todo ##########################
+todo ##########################
+todo ##########################
+todo ##########################
+todo ##########################
+todo ##########################
+
+TODO 添加 trust checkpoint
+
+todo ##########################
+todo ##########################
+todo ##########################
+todo ##########################
+todo ##########################
+todo ##########################
+
+ */
 func (self *LightChain) addTrustedCheckpoint(cp TrustedCheckpoint) {
 	if self.odr.ChtIndexer() != nil {
+
+		// 设置 CHT root
 		StoreChtRoot(self.chainDb, cp.SectionIdx, cp.SectionHead, cp.CHTRoot)
+		// 更新最后一个section head:   `shead` + section (uint64 BigEndian) -> hash
+		// 设置数据库中当前有效 sections 的数量
 		self.odr.ChtIndexer().AddKnownSectionHead(cp.SectionIdx, cp.SectionHead)
 	}
 	if self.odr.BloomTrieIndexer() != nil {
+
+		// 设置 BloomTrieRoot
 		StoreBloomTrieRoot(self.chainDb, cp.SectionIdx, cp.SectionHead, cp.BloomRoot)
+		// 更新最后一个section head:   `shead` + section (uint64 BigEndian) -> hash
+		// 设置数据库中当前有效 sections 的数量
 		self.odr.BloomTrieIndexer().AddKnownSectionHead(cp.SectionIdx, cp.SectionHead)
 	}
 	if self.odr.BloomIndexer() != nil {
+		// 更新最后一个section head:   `shead` + section (uint64 BigEndian) -> hash
+		// 设置数据库中当前有效 sections 的数量
 		self.odr.BloomIndexer().AddKnownSectionHead(cp.SectionIdx, cp.SectionHead)
 	}
 	log.Info("Added trusted checkpoint", "chain", cp.name, "block", (cp.SectionIdx+1)*CHTFrequencyClient-1, "hash", cp.SectionHead)

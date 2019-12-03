@@ -160,6 +160,8 @@ func ReadHeader(db DatabaseReader, hash common.Hash, number uint64) *types.Heade
 
 // WriteHeader stores a block header into the database and also stores the hash-
 // to-number mapping.
+//
+// WriteHeader: 将 block header 存储到 db中，还存储 hash 到  num 的映射
 func WriteHeader(db DatabaseWriter, header *types.Header) {
 	// Write the hash -> number mapping
 	var (
@@ -167,6 +169,9 @@ func WriteHeader(db DatabaseWriter, header *types.Header) {
 		number  = header.Number.Uint64()
 		encoded = encodeBlockNumber(number)
 	)
+
+	// Hash 到 num的映射
+	// todo `H` + hash -> num (uint64 big endian)
 	key := headerNumberKey(hash)
 	if err := db.Put(key, encoded); err != nil {
 		log.Crit("Failed to store hash to number mapping", "err", err)
@@ -176,6 +181,8 @@ func WriteHeader(db DatabaseWriter, header *types.Header) {
 	if err != nil {
 		log.Crit("Failed to RLP encode header", "err", err)
 	}
+	// num+hash -> header的映射
+	// todo `h` + num (uint64 big endian) + hash -> header
 	key = headerKey(number, hash)
 	if err := db.Put(key, data); err != nil {
 		log.Crit("Failed to store header", "err", err)

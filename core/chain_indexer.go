@@ -114,7 +114,7 @@ type ChainIndexer struct {
 	// todo 成功索引到数据库中的section数
 	storedSections uint64 // Number of sections successfully indexed into the database
 
-	// 已知要完成的 section 数（按块计算）
+	// todo 已知要完成的 section 数（按块计算）
 	knownSections  uint64 // Number of sections known to be complete (block wise)
 
 	// 最后完成的 section 的 Block number `级联` 到子索引器
@@ -133,7 +133,12 @@ type ChainIndexer struct {
 /**
 NewChainIndexer 函数：
 创建一个新的链索引器，在经过一定数量的确认后，
-对给定大小的链段进行后台处理。 限制参数可用于防止数据库抖动。
+对给定大小的链段进行 `backend` 处理。 限制参数可用于防止数据库抖动。
+
+todo `backend` 主要3种实现
+		BloomIndexer
+		ChtIndexer  <轻节点需要>
+		BloomTrieIndexer <轻节点需要>
  */
 func NewChainIndexer(chainDb, indexDb ethdb.Database, backend ChainIndexerBackend, section, confirm uint64, throttling time.Duration, kind string) *ChainIndexer {
 	c := &ChainIndexer{
@@ -154,6 +159,9 @@ func NewChainIndexer(chainDb, indexDb ethdb.Database, backend ChainIndexerBacken
 	c.loadValidSections()
 	c.ctx, c.ctxCancel = context.WithCancel(context.Background())
 
+
+	// TODO 这里就是 server 和 client 间的相互同步更新的起点
+	// todo 实时的处理 新的Bloom Trie 和 CHT Trie
 	go c.updateLoop()
 
 	return c
@@ -168,17 +176,30 @@ func (c *ChainIndexer) AddKnownSectionHead(section uint64, shead common.Hash) {
 	if section < c.storedSections {
 		return
 	}
+
+	// 更新最后一个section head:   `shead` + section (uint64 BigEndian) -> hash
 	c.setSectionHead(section, shead)
+	// 设置数据库中当前有效 sections 的数量
 	c.setValidSections(section + 1)
 }
 
 // Start creates a goroutine to feed chain head events into the indexer for
 // cascading background processing. Children do not need to be started, they
 // are notified about new events by their parents.
+//
+/**
+Start:
+创建一个goroutine，将 chain head event 馈入 索引器以进行级联后台处理。
+孩子不需要开始，父母会通知他们新的活动
+ */
 func (c *ChainIndexer) Start(chain ChainIndexerChain) {
 	events := make(chan ChainEvent, 10)
+
+	// 订阅 new chain header event
 	sub := chain.SubscribeChainEvent(events)
 
+
+	// TODO 监听 update 更新本地 CHT 和 BloomTrie 信号
 	go c.eventLoop(chain.CurrentHeader(), events, sub)
 }
 
@@ -231,6 +252,8 @@ func (c *ChainIndexer) eventLoop(currentHeader *types.Header, events chan ChainE
 	defer sub.Unsubscribe()
 
 	// Fire the initial new head event to start any outstanding processing
+	//
+	// TODO 这里 会发 update 信号
 	c.newHead(currentHeader.Number.Uint64(), false)
 
 	var (
@@ -252,6 +275,9 @@ func (c *ChainIndexer) eventLoop(currentHeader *types.Header, events chan ChainE
 				return
 			}
 			header := ev.Block.Header()
+
+
+			// 先找到 公共祖先
 			if header.ParentHash != prevHash {
 				// Reorg to the common ancestor (might not exist in light sync mode, skip reorg then)
 				// TODO(karalabe, zsfelfoldi): This seems a bit brittle, can we detect this case explicitly?
@@ -259,9 +285,12 @@ func (c *ChainIndexer) eventLoop(currentHeader *types.Header, events chan ChainE
 				// TODO(karalabe): This operation is expensive and might block, causing the event system to
 				// potentially also lock up. We need to do with on a different thread somehow.
 				if h := rawdb.FindCommonAncestor(c.chainDb, prevHeader, header); h != nil {
+					// TODO 这里 会发 update 信号
 					c.newHead(h.Number.Uint64(), true)
 				}
 			}
+
+			// TODO 这里 会发 update 信号
 			c.newHead(header.Number.Uint64(), false)
 
 			prevHeader, prevHash = header, header.Hash()
@@ -272,8 +301,31 @@ func (c *ChainIndexer) eventLoop(currentHeader *types.Header, events chan ChainE
 // newHead notifies the indexer about new chain heads and/or reorgs.
 //
 /**
-newHead:
-将新chain head 和/或 重组时都 通知索引器。
+todo #####################################################
+todo #####################################################
+todo #####################################################
+todo #####################################################
+todo #####################################################
+todo #####################################################
+todo #####################################################
+todo #####################################################
+todo #####################################################
+
+todo
+	newHead:
+	将新chain head 和/或 重组时都 通知索引器。
+
+todo 这里的 update 信号最终会导致,去对端 peer 上拉取 CHT 和 BloomTrie 并更新本地
+
+todo #####################################################
+todo #####################################################
+todo #####################################################
+todo #####################################################
+todo #####################################################
+todo #####################################################
+todo #####################################################
+todo #####################################################
+todo #####################################################
  */
 func (c *ChainIndexer) newHead(head uint64, reorg bool) {
 	c.lock.Lock()
@@ -312,6 +364,7 @@ func (c *ChainIndexer) newHead(head uint64, reorg bool) {
 			c.cascadedHead = head
 			for _, child := range c.children {
 
+				// TODO 这里 会发 update 信号
 				// todo 进入递归调整
 				child.newHead(c.cascadedHead, true)
 			}
@@ -326,6 +379,21 @@ func (c *ChainIndexer) newHead(head uint64, reorg bool) {
 			c.knownSections = sections
 
 			select {
+			// todo ############################################
+			// todo ############################################
+			// todo ############################################
+			// todo ############################################
+			// todo ############################################
+			// todo ############################################
+			//
+			// todo 发起 更新 bloomtrie 和 CHT trie 的更新信号
+			//
+			// todo ############################################
+			// todo ############################################
+			// todo ############################################
+			// todo ############################################
+			// todo ############################################
+			// todo ############################################
 			case c.update <- struct{}{}:
 			default:
 			}
@@ -350,13 +418,30 @@ func (c *ChainIndexer) updateLoop() {
 			errc <- nil
 			return
 
+		/**
+		TODO ##################################
+		TODO ##################################
+		TODO ##################################
+		TODO ##################################
+		TODO ##################################
+
+		TODO 接收到 update 信号时
+
+		TODO ##################################
+		TODO ##################################
+		TODO ##################################
+		TODO ##################################
+		TODO ##################################
+
+		TODO 这里就是 server 和 client 间的相互同步更新的起点
+		 */
 		case <-c.update:
 			// Section headers completed (or rolled back), update the index
 			//
 			// todo Section headers 完成（或回滚），更新索引
 			c.lock.Lock()
 
-			// 当已知需要完成的 section > 已经存储的section 时
+			// todo 当已知的,需要完成的 section数 > 成功检索到db的section数
 			if c.knownSections > c.storedSections {
 				// Periodically print an upgrade log message to the user
 				//
@@ -374,13 +459,37 @@ func (c *ChainIndexer) updateLoop() {
 				section := c.storedSections
 				var oldHead common.Hash
 				if section > 0 {
+
+					// 向前查找上一个 section 的head
 					oldHead = c.SectionHead(section - 1)
 				}
 				// Process the newly defined section in the background
 				c.lock.Unlock()
 
 				/**
+				todo #######################################
+				todo #######################################
+				todo #######################################
+				todo #######################################
+				todo #######################################
+				todo #######################################
+				todo #######################################
+				todo #######################################
+
 				TODO 处理轻节点的  section
+
+				todo 主要是 2 种实现会这么做
+					BloomTrieIndexerBackend
+					ChtIndexerBackend
+
+				todo #######################################
+				todo #######################################
+				todo #######################################
+				todo #######################################
+				todo #######################################
+				todo #######################################
+				todo #######################################
+				todo #######################################
 				 */
 				newHead, err := c.processSection(section, oldHead)
 				if err != nil {
@@ -406,6 +515,8 @@ func (c *ChainIndexer) updateLoop() {
 					c.cascadedHead = c.storedSections*c.sectionSize - 1
 					for _, child := range c.children {
 						c.log.Trace("Cascading chain index update", "head", c.cascadedHead)
+
+						// TODO 这里 会发 update 信号
 						child.newHead(c.cascadedHead, false)
 					}
 				} else {
@@ -417,10 +528,14 @@ func (c *ChainIndexer) updateLoop() {
 			// If there are still further sections to process, reschedule
 			//
 			// 如果还有其他部分要处理，请重新安排时间
+			//
+			// todo 当已知的,需要完成的 section数 > 成功检索到db的section数
 			if c.knownSections > c.storedSections {
 				// todo 经过短暂的延迟后,发送 更新 section 的信号
 				time.AfterFunc(c.throttling, func() {
 					select {
+
+					// todo  超时时, 发起 更新 BloomTrie 和 CHT trie 的信号
 					case c.update <- struct{}{}:
 					default:
 					}
@@ -448,7 +563,25 @@ func (c *ChainIndexer) processSection(section uint64, lastHead common.Hash) (com
 	//
 	// 重置和部分处理
 	/**
-	这里会构建 发起 检索拉取 证明的 req
+	todo #######################################
+	todo #######################################
+	todo #######################################
+	todo #######################################
+	todo #######################################
+	todo #######################################
+	todo #######################################
+	todo #######################################
+
+	todo  这里会构建 发起 检索拉取 证明的 req
+
+	todo #######################################
+	todo #######################################
+	todo #######################################
+	todo #######################################
+	todo #######################################
+	todo #######################################
+	todo #######################################
+	todo #######################################
 
 	todo 主要是 2 种实现会这么做
 		BloomTrieIndexerBackend
@@ -479,15 +612,31 @@ func (c *ChainIndexer) processSection(section uint64, lastHead common.Hash) (com
 		}
 
 		/**
-		todo 超级重要
+		todo 超级重要 一般就是 更新 trie (CHTIndexer 和 BloomIndexer)
 		 */
 		if err := c.backend.Process(c.ctx, header); err != nil {
 			return common.Hash{}, err
 		}
 		lastHead = header.Hash()
 	}
+	// todo ##########################################
+	// todo ##########################################
+	// todo ##########################################
+	// todo ##########################################
+	// todo ##########################################
+	// todo ##########################################
+	//
+	// 这里 server 变更 CHT 这棵树
+	//
+	// todo 重要Commit 对应的 indexer (CHTIndexer 和 BloomIndexer)
+	//
+	// todo ##########################################
+	// todo ##########################################
+	// todo ##########################################
+	// todo ##########################################
+	// todo ##########################################
+	// todo ##########################################
 
-	// todo 重要
 	if err := c.backend.Commit(); err != nil {
 		return common.Hash{}, err
 	}
@@ -537,6 +686,7 @@ func (c *ChainIndexer) AddChildIndexer(indexer *ChainIndexer) {
 		// 这里为什么需要递归调整!?
 		// 因为 一般每个 索引器存储处理 一个section也就是 一般是 32768个block !?
 		//
+		// TODO 这里 会发 update 信号
 		// todo 这里将 进入递归调整
 		indexer.newHead(c.storedSections*c.sectionSize-1, false)
 	}
@@ -591,6 +741,9 @@ func (c *ChainIndexer) setValidSections(sections uint64) {
 /**
 SectionHead:
 从索引数据库中检索已处理的 section 的最后一个block Hash。
+
+section是从0开始的
+
 
 key: shead + sectionNum
 value: section last block hash

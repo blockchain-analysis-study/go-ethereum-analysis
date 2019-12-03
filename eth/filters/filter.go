@@ -116,6 +116,8 @@ func newFilter(backend Backend, addresses []common.Address, topics [][]common.Ha
 
 // Logs searches the blockchain for matching log entries, returning all from the
 // first block that contains matches, updating the start of the filter accordingly.
+//
+// TODO 注意: 这里会用到 BloomIndex
 func (f *Filter) Logs(ctx context.Context) ([]*types.Log, error) {
 	// If we're doing singleton block filtering, execute and return
 	if f.block != (common.Hash{}) {
@@ -165,6 +167,9 @@ func (f *Filter) Logs(ctx context.Context) ([]*types.Log, error) {
 
 // indexedLogs returns the logs matching the filter criteria based on the bloom
 // bits indexed available locally or via the network.
+//
+// indexedLogs:
+// 根据本地索引或通过网络索引的bloom位返回与过滤条件匹配的日志
 func (f *Filter) indexedLogs(ctx context.Context, end uint64) ([]*types.Log, error) {
 	// Create a matcher session and request servicing from the backend
 	matches := make(chan uint64, 64)

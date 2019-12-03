@@ -40,7 +40,7 @@ const (
 	// CHTFrequencyClient is the block frequency for creating CHTs on the client side.
 	//
 	// TODO CHTFrequencyClient: 是在(轻节点)客户端上创建CHT的block频率
-	CHTFrequencyClient = 32768
+	CHTFrequencyClient = 32768  // todo 用于Client
 
 	// CHTFrequencyServer is the block frequency for creating CHTs on the server side.
 	// Eventually this can be merged back with the client version, but that requires a
@@ -48,17 +48,20 @@ const (
 	//
 	// todo CHTFrequencyServer: 是在(轻节点)服务器端创建CHT的block频率
 	//  最终，可以将其与客户端版本合并，但是这需要对数据库进行全面升级，因此应保留适当的时间.
-	CHTFrequencyServer = 4096
+	CHTFrequencyServer = 4096  // todo 用于 Server
 
 	// number of confirmations before a server is expected to have the given HelperTrie available
 	//
 	// 预期服务器使给定的HelperTrie `可用` 之前的确认次数
 	// todo 因为: CHT仅在2048次确认后生成，以确保不会被链重组更改
-	HelperTrieConfirmations        = 2048
+	/**
+	CHT仅在2048次确认后生成，以确保不会被链重组更改
+	 */
+	HelperTrieConfirmations        = 2048  // todo 主要用于 Client 端 !?
 	// number of confirmations before a HelperTrie is generated
 	//
 	// HelperTrie `生成` 之前的确认次数
-	HelperTrieProcessConfirmations = 256
+	HelperTrieProcessConfirmations = 256  // todo 重要用于 Server 端?
 )
 
 // TrustedCheckpoint represents a set of post-processed trie roots (CHT and BloomTrie) associated with
@@ -156,6 +159,8 @@ func GetChtV2Root(db ethdb.Database, sectionIdx uint64, sectionHead common.Hash)
 
 // StoreChtRoot writes the CHT root assoctiated to the given section into the database
 // Note that sectionIdx is specified according to LES/1 CHT section size
+//
+// todo 重要
 func StoreChtRoot(db ethdb.Database, sectionIdx uint64, sectionHead, root common.Hash) {
 	var encNumber [8]byte
 	binary.BigEndian.PutUint64(encNumber[:], sectionIdx)
@@ -170,18 +175,26 @@ type ChtIndexerBackend struct {
 	section, sectionSize uint64
 	lastHash             common.Hash
 
-	// 这颗是 CHT 数?
+	// 这颗就是 CHT 树
 	trie                 *trie.Trie
 }
 
-// NewBloomTrieIndexer creates a BloomTrie chain indexer
+
 func NewChtIndexer(db ethdb.Database, clientMode bool, odr OdrBackend) *core.ChainIndexer {
 	var sectionSize, confirmReq uint64
+
+	// TODO 设置 Client 和 server 记录CHT 区别
 	if clientMode {
+
+		// Client  每 32768 一次记录
 		sectionSize = CHTFrequencyClient
+		// 需要等 2048 块才算确认
 		confirmReq = HelperTrieConfirmations
 	} else {
+
+		// Server 每4096 一次记录
 		sectionSize = CHTFrequencyServer
+		// 需要 256 块才算确认
 		confirmReq = HelperTrieProcessConfirmations
 	}
 	idb := ethdb.NewTable(db, "chtIndex-")
@@ -198,6 +211,8 @@ func NewChtIndexer(db ethdb.Database, clientMode bool, odr OdrBackend) *core.Cha
 		triedb:      trie.NewDatabase(trieTable),
 		sectionSize: sectionSize,
 	}
+
+	// TODO 启动 ChtIndexer
 	return core.NewChainIndexer(db, idb, backend, sectionSize, confirmReq, time.Millisecond*100, "cht")
 }
 
@@ -213,11 +228,13 @@ func (c *ChtIndexerBackend) fetchMissingNodes(ctx context.Context, section uint6
 	r := &ChtRequest{ChtRoot: root, ChtNum: section - 1, BlockNum: section*c.sectionSize - 1}
 	for {
 		/**
-		构建 发起 检索拉取 证明的 req
+		todo 构建 发起 检索拉取 证明的 req 并将 result 存储在本地 <里面调用了 StoreResult()>
 		*/
 		err := c.odr.Retrieve(ctx, r)
 		switch err {
 		case nil:
+
+			// todo 并将 proof 写入db
 			r.Proof.Store(batch)
 			return batch.Write()
 		case ErrNoPeers:
@@ -270,7 +287,8 @@ func (c *ChtIndexerBackend) Process(ctx context.Context, header *types.Header) e
 	binary.BigEndian.PutUint64(encNumber[:], num)
 	data, _ := rlp.EncodeToBytes(ChtNode{hash, td})
 
-	// 更新树, key: num  -> value: hash+td
+	// todo 更新树, key: num  -> value: hash+td
+	// todo 这个就是  CHT 数的 k-v
 	c.trie.Update(encNumber[:], data)
 	return nil
 }
@@ -290,12 +308,17 @@ func (c *ChtIndexerBackend) Commit() error {
 	if ((c.section+1)*c.sectionSize)%CHTFrequencyClient == 0 {
 		log.Info("Storing CHT", "section", c.section*c.sectionSize/CHTFrequencyClient, "head", fmt.Sprintf("%064x", c.lastHash), "root", fmt.Sprintf("%064x", root))
 	}
+
+	// todo 在Commit 时 提交root
 	StoreChtRoot(c.diskdb, c.section, c.lastHash, root)
 	return nil
 }
 
 const (
+	// 这个是 Client 每隔 32768 组一个 BloomTrie
 	BloomTrieFrequency  = 32768
+
+	// 这个是 Server 每隔 4096 组一个 BloomTrie
 	ethBloomBitsSection = 4096
 )
 
@@ -329,11 +352,16 @@ type BloomTrieIndexerBackend struct {
 	odr                                        OdrBackend
 	triedb                                     *trie.Database
 	section, parentSectionSize, bloomTrieRatio uint64
+
+	// 这颗是 BloomTrie
 	trie                                       *trie.Trie
+	// 这里记录 section 的所有 head !?
 	sectionHeads                               []common.Hash
 }
 
 // NewBloomTrieIndexer creates a BloomTrie chain indexer
+//
+// NewBloomTrieIndexer: 创建一个BloomTrie链索引器
 func NewBloomTrieIndexer(db ethdb.Database, clientMode bool, odr OdrBackend) *core.ChainIndexer {
 	trieTable := ethdb.NewTable(db, BloomTrieTablePrefix)
 
@@ -347,12 +375,17 @@ func NewBloomTrieIndexer(db ethdb.Database, clientMode bool, odr OdrBackend) *co
 	idb := ethdb.NewTable(db, "bltIndex-")
 
 	if clientMode {
+
+		// 这个是 Client 每隔 32768 组一个 BloomTrie
 		backend.parentSectionSize = BloomTrieFrequency
 	} else {
+		// 这个是 Server 每隔 4096 组一个 BloomTrie
 		backend.parentSectionSize = ethBloomBitsSection
 	}
 	backend.bloomTrieRatio = BloomTrieFrequency / backend.parentSectionSize
 	backend.sectionHeads = make([]common.Hash, backend.bloomTrieRatio)
+
+	// TODO 启动 `BloomTrieIndexer`
 	return core.NewChainIndexer(db, idb, backend, BloomTrieFrequency, 0, time.Millisecond*100, "bloomtrie")
 }
 
@@ -372,12 +405,15 @@ func (b *BloomTrieIndexerBackend) fetchMissingNodes(ctx context.Context, section
 	resCh := make(chan res, types.BloomBitLength)
 	for i := 0; i < 20; i++ {
 		go func() {
+
+			// 根据 chan中传过来 bit 的索引,构建req
 			for bitIndex := range indexCh {
+				// todo 查看当前 section <section - 1: 表示 section的索引是从0开始的> 中的 各个 bit
 				r := &BloomRequest{BloomTrieRoot: root, BloomTrieNum: section - 1, BitIdx: bitIndex, SectionIdxList: []uint64{section - 1}}
 				for {
 
 					/**
-					构建 发起 检索拉取 证明的 req
+					todo 构建 发起 检索拉取 证明的 req 并将result存储在本地 (里面调用了 StoreResult())
 					 */
 					if err := b.odr.Retrieve(ctx, r); err == ErrNoPeers {
 						// if there are no peers to serve, retry later
@@ -389,6 +425,8 @@ func (b *BloomTrieIndexerBackend) fetchMissingNodes(ctx context.Context, section
 							// stay in the loop and try again
 						}
 					} else {
+
+						// 将 proof 发送 resCh <往下的代码有用>
 						resCh <- res{r.Proofs, err}
 						break
 					}
@@ -397,6 +435,7 @@ func (b *BloomTrieIndexerBackend) fetchMissingNodes(ctx context.Context, section
 		}()
 	}
 
+	// 按照 Bloom 的bit,一个一个的遍历
 	for i := uint(0); i < types.BloomBitLength; i++ {
 		indexCh <- i
 	}
@@ -407,6 +446,8 @@ func (b *BloomTrieIndexerBackend) fetchMissingNodes(ctx context.Context, section
 		if res.err != nil {
 			return res.err
 		}
+
+		// 最后将  nodeSet <proof: 也是由这个额转换而成的> 写入 db
 		res.nodes.Store(batch)
 	}
 	return batch.Write()

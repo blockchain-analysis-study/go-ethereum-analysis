@@ -77,6 +77,12 @@ const (
 	// Protocol messages belonging to LPV2
 	GetProofsV2Msg         = 0x0f // 拉取 merkle proof LPV2 TODO (应该是 (odr *LesOdr) Retrieve 调用过来的)
 	ProofsV2Msg            = 0x10  // client处理 LPV2 的 merkle proof 响应
+
+	/**
+	LES服务器为每32768个块生成CHT，CHT[i]其中包含block 的数据0..i * 32768-1。
+	如果客户端知道的根哈希，CHT[i]并希望获取标头号N（其中N < i * 32768），
+	则可以通过GetHelperTrieProofs请求获取标头和CHT的相应Merkle证明.
+	 */
 	GetHelperTrieProofsMsg = 0x11  // LPV2: 不管是 ChtIndexer的`ChtRequest` 或者是 BloomTrieIndexer的`BloomRequest` 都走这个
 	HelperTrieProofsMsg    = 0x12  // Client 处理 headerProof 的resp
 	SendTxV2Msg            = 0x13  // 发出 tx 的广播 LPV2  (会将 txs 的 status 回应给 client)

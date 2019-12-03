@@ -107,9 +107,11 @@ func (req *TrieRequest) StoreResult(db ethdb.Database) {
 // CodeRequest is the ODR request type for retrieving contract code
 type CodeRequest struct {
 	OdrRequest
+
+	// 引用帐户的存储树
 	Id   *TrieID // references storage trie of the account
-	Hash common.Hash
-	Data []byte
+	Hash common.Hash // 这个是对端节点发回来的code hash
+	Data []byte // 这个是对端节点发回来的 Code 内容
 }
 
 // StoreResult stores the retrieved data in local database
@@ -158,40 +160,81 @@ type ChtRequest struct {
 	// 本 章节的 Cht trie 的 root
 	ChtRoot          common.Hash
 
-	//
+	// 这个就是去请求的header 引用,最终根据这个的 num 和 hash 进行存储
 	Header           *types.Header
 	Td               *big.Int
 	Proof            *NodeSet
 }
 
 // StoreResult stores the retrieved data in local database
+//
+// StoreResult: 将检索到的 <ChtRequest> 数据存储在本地数据库中
 func (req *ChtRequest) StoreResult(db ethdb.Database) {
 	hash, num := req.Header.Hash(), req.Header.Number.Uint64()
 
+	// 往db中写 block Header
 	rawdb.WriteHeader(db, req.Header)
+	// 往db中写 td
 	rawdb.WriteTd(db, hash, num, req.Td)
+
+	// 往db中写 CanonicalHash
+	// todo `h` + num (uint64 big endian) + `n` -> hash
 	rawdb.WriteCanonicalHash(db, hash, num)
 }
 
 // BloomRequest is the ODR request type for retrieving bloom filters from a CHT structure
+//
+// BloomRequest: 是ODR请求类型，用于从CHT结构中检索的 Bloom过滤器
 type BloomRequest struct {
+	// 这个只是为了继承 OdrRequest 的方法
+	// 但是并没有看到赋值的地方
 	OdrRequest
-	BloomTrieNum   uint64
-	BitIdx         uint
-	SectionIdxList []uint64
-	BloomTrieRoot  common.Hash
-	BloomBits      [][]byte
-	Proofs         *NodeSet
+	BloomTrieNum   uint64  // 表示第几个section所对应的 bloomtrie
+	BitIdx         uint    // 表示 查询该 bloom 中的bit 的index
+	SectionIdxList []uint64// 表示Section的index
+	BloomTrieRoot  common.Hash // trie 的 root
+	BloomBits      [][]byte // 整个 bloom bit vector
+	Proofs         *NodeSet  // 校验结果的 proof
 }
 
 // StoreResult stores the retrieved data in local database
+//
+// StoreResult: 将检索到的 <BloomRequest> 数据存储在本地数据库中
+// todo 这里做旋转!?
 func (req *BloomRequest) StoreResult(db ethdb.Database) {
+
+	// 遍历所有 sectionId
 	for i, sectionIdx := range req.SectionIdxList {
+
+		// TODO 这里为什么 sectionIdx+1 !?
 		sectionHead := rawdb.ReadCanonicalHash(db, (sectionIdx+1)*BloomTrieFrequency-1)
 		// if we don't have the canonical hash stored for this section head number, we'll still store it under
 		// a key with a zero sectionHead. GetBloomBits will look there too if we still don't have the canonical
 		// hash. In the unlikely case we've retrieved the section head hash since then, we'll just retrieve the
 		// bit vector again from the network.
+		//
+		/**
+		如果我们没有为该section head number存储canonical hash，
+		则仍将其存储在具有零section head的键下。
+
+		如果我们仍然没有 canonical hash，GetBloomBits也会在那寻找。
+		从那时起，在极少数情况下，我们将检索 section head hash，我们将仅从网络中再次检索 bit vector <位图>。
+		 */
+		/**
+		BloomBits数据结构通过进行按位转换来优化日志搜索，这使得检索与特定过滤器相关的Bloom过滤器数据更便宜.
+
+		在较长的块历史记录中进行搜索时，我们正在检查每个查询地址/主题的每个布隆过滤器的三个特定位.
+
+
+
+		BloomBits结构通过Bloom过滤器的“按位90度旋转”来优化Bloom过滤器查找。
+		块分为固定长度的部分（LES BloomBits Trie的部分大小为32768块），
+		BloomBits[bitIdx][sectionIdx]是一个32768位（4096字节）长的位向量，
+		其中包含来自块范围的每个Bloom过滤器的单个位sectionIdx*SectionSize ... (sectionIdx+1)*SectionSize-1。
+		由于布隆过滤器通常比较稀疏，因此简单的数据压缩使该结构更加有效，尤其是按需检索。
+		通过读取和对三个BloomBits部分进行二进制“与”运算，
+		我们可以一次过滤32768个块中的地址/主题（二进制AND结果均值Bloom匹配中的“ 1”位.
+		*/
 		rawdb.WriteBloomBits(db, req.BitIdx, sectionIdx, sectionHead, req.BloomBits[i])
 	}
 }

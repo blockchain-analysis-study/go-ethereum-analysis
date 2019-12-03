@@ -205,8 +205,17 @@ func (b *LesApiBackend) BloomStatus() (uint64, uint64) {
 	return light.BloomTrieFrequency, sections
 }
 
+
+// 轻节点的 client 端
+// todo 这个就是实时去拉取 bloom
 func (b *LesApiBackend) ServiceFilter(ctx context.Context, session *bloombits.MatcherSession) {
+
+	// 是每个过滤器本地用于将请求多路复用到全局服务goroutine的goroutine的数量
+	//
+	// 默认起了 3 个 routine
 	for i := 0; i < bloomFilterThreads; i++ {
+
+		// 构造req 去拉去 对应的bloom
 		go session.Multiplex(bloomRetrievalBatch, bloomRetrievalWait, b.eth.bloomRequests)
 	}
 }

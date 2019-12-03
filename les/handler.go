@@ -90,8 +90,8 @@ type txPool interface {
 }
 
 type ProtocolManager struct {
-	// 是否是 轻节点 同步模式
-	lightSync   bool
+	// 是否是 轻节点
+	lightSync   bool // Client: true,  Server: false
 	txpool      txPool
 	txrelay     *LesTxRelay
 	networkId   uint64
@@ -138,7 +138,9 @@ type ProtocolManager struct {
 func NewProtocolManager(chainConfig *params.ChainConfig, lightSync bool, networkId uint64, mux *event.TypeMux, engine consensus.Engine, peers *peerSet, blockchain BlockChain, txpool txPool, chainDb ethdb.Database, odr *LesOdr, txrelay *LesTxRelay, serverPool *serverPool, quitSync chan struct{}, wg *sync.WaitGroup) (*ProtocolManager, error) {
 	// Create the protocol manager with the base fields
 	manager := &ProtocolManager{
-		lightSync:   lightSync,
+
+		// 在当前 pm 中赋值当前节点是否为 light 节点
+		lightSync:   lightSync, // todo 注意: server 端这个值 为 false
 		eventMux:    mux,
 		blockchain:  blockchain,
 		chainConfig: chainConfig,
@@ -184,14 +186,20 @@ func (pm *ProtocolManager) removePeer(id string) {
 	pm.peers.Unregister(id)
 }
 
+
+/**
+TODO 启动 轻节点的 pm (Server/Client)
+ */
 func (pm *ProtocolManager) Start(maxPeers int) {
 	pm.maxPeers = maxPeers
 
 
-	// todo 如果是轻节点同步的话
+	// todo 当前是Client端的话
 	if pm.lightSync {
 		go pm.syncer()
 	} else {
+
+		// todo 如果当前是 Server端的话
 		pm.clientPool = newFreeClientPool(pm.chainDb, maxPeers, 10000, mclock.System{})
 		go func() {
 			for range pm.newPeerCh {
@@ -228,7 +236,7 @@ func (pm *ProtocolManager) Stop() {
 
 // runPeer is the p2p protocol run function for the given version.
 //
-// runPeer: 是给定版本的p2p协议运行功能
+// todo  runPeer: 是给定版本的p2p协议运行功能
 func (pm *ProtocolManager) runPeer(version uint, p *p2p.Peer, rw p2p.MsgReadWriter) error {
 	var entry *poolEntry
 
@@ -284,7 +292,7 @@ func (pm *ProtocolManager) handle(p *peer) error {
 	// In server mode we try to check into the client pool after handshake
 	//
 	/**
-	如果是 light 模式 且 和对端的链接数越界 且对端不是可信任节点的话，
+	如果是 client端 且 和对端的链接数越界 且对端不是可信任节点的话，
 	则，直接返回错误
 	 */
 	if pm.lightSync && pm.peers.Len() >= pm.maxPeers && !p.Peer.Info().Network.Trusted {
@@ -321,7 +329,10 @@ func (pm *ProtocolManager) handle(p *peer) error {
 
 
 	/**
-	在 握手完了之后, todo 其实这个是干嘛的我也不懂
+	在 握手完了之后
+
+	如果当前 节点 是 server 端
+	且对端节点不可信,则将本地 peerSet 中的对端p移除
 
 	 */
 	if !pm.lightSync && !p.Peer.Info().Network.Trusted {
@@ -421,6 +432,7 @@ func (pm *ProtocolManager) handle(p *peer) error {
 	}
 }
 
+// TODO 轻节点的请求 集
 var reqList = []uint64{GetBlockHeadersMsg, GetBlockBodiesMsg, GetCodeMsg, GetReceiptsMsg, GetProofsV1Msg, SendTxMsg, SendTxV2Msg, GetTxStatusMsg, GetHeaderProofsMsg, GetProofsV2Msg, GetHelperTrieProofsMsg}
 
 // handleMsg is invoked whenever an inbound message is received from a remote
@@ -494,7 +506,21 @@ func (pm *ProtocolManager) handleMsg(p *peer) error {
 	switch msg.Code {
 
 	/**
+	todo #################################
+	todo #################################
+	todo #################################
+	todo #################################
+	todo #################################
+	todo #################################
+
 	todo 这里是接收到 握手时发起的状态查询msg
+
+	todo #################################
+	todo #################################
+	todo #################################
+	todo #################################
+	todo #################################
+	todo #################################
 	 */
 	case StatusMsg:
 		p.Log().Trace("Received status message")
@@ -506,7 +532,21 @@ func (pm *ProtocolManager) handleMsg(p *peer) error {
 
 	// Block header query, collect the requested headers and reply
 	/**
+	todo #################################
+	todo #################################
+	todo #################################
+	todo #################################
+	todo #################################
+	todo #################################
+
 	block header 的查询，收集请求的headers并回复
+
+	todo #################################
+	todo #################################
+	todo #################################
+	todo #################################
+	todo #################################
+	todo #################################
 	 */
 	case AnnounceMsg:
 		p.Log().Trace("Received announce message")
@@ -541,8 +581,22 @@ func (pm *ProtocolManager) handleMsg(p *peer) error {
 		}
 
 	/**
+	todo #################################
+	todo #################################
+	todo #################################
+	todo #################################
+	todo #################################
+	todo #################################
+
 	获取 header 的req
 	这个是 server 才会收到的
+
+	todo #################################
+	todo #################################
+	todo #################################
+	todo #################################
+	todo #################################
+	todo #################################
 	 */
 	case GetBlockHeadersMsg:
 		p.Log().Trace("Received block header request")
@@ -640,13 +694,31 @@ func (pm *ProtocolManager) handleMsg(p *peer) error {
 			}
 		}
 
+
+		// 计算对端client 在当前节点剩余的 资源 BV
 		bv, rcost := p.fcClient.RequestProcessed(costs.baseCost + query.Amount*costs.reqCost)
 		pm.server.fcCostStats.update(msg.Code, query.Amount, rcost)
+
+		// reqId, BV, headers
 		return p.SendBlockHeaders(req.ReqID, bv, headers)
 
 	/**
+	todo #################################
+	todo #################################
+	todo #################################
+	todo #################################
+	todo #################################
+	todo #################################
+
 	接收 header 的resp
 	这个是client 端接收到的
+
+	todo #################################
+	todo #################################
+	todo #################################
+	todo #################################
+	todo #################################
+	todo #################################
 	 */
 	case BlockHeadersMsg:
 		if pm.downloader == nil {
@@ -663,11 +735,16 @@ func (pm *ProtocolManager) handleMsg(p *peer) error {
 			return errResp(ErrDecode, "msg %v: %v", msg, err)
 		}
 
-		// 根据对端节点的 server
+		// 根据对端节点的 server 调整消耗
 		p.fcServer.GotReply(resp.ReqID, resp.BV)
+
+
+		// 将resp 回来的header做交付, 可能是将 header 入链
 		if pm.fetcher != nil && pm.fetcher.requestedID(resp.ReqID) {
 			pm.fetcher.deliverHeaders(p, resp.ReqID, resp.Headers)
 		} else {
+
+			// todo 这里交付给 downloader 去插 header了
 			err := pm.downloader.DeliverHeaders(p.id, resp.Headers)
 			if err != nil {
 				log.Debug(fmt.Sprint(err))
@@ -817,7 +894,21 @@ func (pm *ProtocolManager) handleMsg(p *peer) error {
 		}
 
 	/**
+	todo #################################
+	todo #################################
+	todo #################################
+	todo #################################
+	todo #################################
+	todo #################################
+
 	获取 rceipt 的req
+
+	todo #################################
+	todo #################################
+	todo #################################
+	todo #################################
+	todo #################################
+	todo #################################
 	 */
 	case GetReceiptsMsg:
 		p.Log().Trace("Received receipts request")
@@ -865,7 +956,21 @@ func (pm *ProtocolManager) handleMsg(p *peer) error {
 		return p.SendReceiptsRLP(req.ReqID, bv, receipts)
 
 	/**
+	todo #################################
+	todo #################################
+	todo #################################
+	todo #################################
+	todo #################################
+	todo #################################
+
 	处理 receipt 的resp
+
+	todo #################################
+	todo #################################
+	todo #################################
+	todo #################################
+	todo #################################
+	todo #################################
 	 */
 	case ReceiptsMsg:
 		if pm.odr == nil {
@@ -889,8 +994,24 @@ func (pm *ProtocolManager) handleMsg(p *peer) error {
 		}
 
 	/**
+	todo #################################
+	todo #################################
+	todo #################################
+	todo #################################
+	todo #################################
+	todo #################################
+
 	todo 应该是 (odr *LesOdr) Retrieve 调用过来的
 	获取 state 的proof
+
+	todo #################################
+	todo #################################
+	todo #################################
+	todo #################################
+	todo #################################
+	todo #################################
+
+	TODO 已经弃用 LPV2 用 ``
 	 */
 	case GetProofsV1Msg:
 		p.Log().Trace("Received proofs request")
@@ -981,9 +1102,23 @@ func (pm *ProtocolManager) handleMsg(p *peer) error {
 		return p.SendProofs(req.ReqID, bv, proofs)
 
 	/**
+	todo #################################
+	todo #################################
+	todo #################################
+	todo #################################
+	todo #################################
+	todo #################################
+
 	LPV2
 	TODO 理论上基本都是走LPV2的了
 	从远程peer获取一批Merkle证明
+
+	todo #################################
+	todo #################################
+	todo #################################
+	todo #################################
+	todo #################################
+	todo #################################
 	 */
 	case GetProofsV2Msg:
 		p.Log().Trace("Received les/2 proofs request")
@@ -1057,6 +1192,8 @@ func (pm *ProtocolManager) handleMsg(p *peer) error {
 			// todo Storage中的 trie是 SecureTrie
 			//
 			// todo 但是看了实现,最终的Prove 都是调用了 `SecureTrie.Prove`
+
+			// todo fromLevel大于零，则可以从证明中省略最接近根的给定数量的trie节点
 			trie.Prove(req.Key, req.FromLevel, nodes)
 			if nodes.DataSize() >= softResponseLimit {
 				break
@@ -1068,7 +1205,21 @@ func (pm *ProtocolManager) handleMsg(p *peer) error {
 		return p.SendProofsV2(req.ReqID, bv, nodes.NodeList())
 
 	/**
+	todo #################################
+	todo #################################
+	todo #################################
+	todo #################################
+	todo #################################
+	todo #################################
+
 	todo client处理 LPV1 的 merkle proof 响应
+
+	todo #################################
+	todo #################################
+	todo #################################
+	todo #################################
+	todo #################################
+	todo #################################
 	 */
 	case ProofsV1Msg:
 		if pm.odr == nil {
@@ -1098,7 +1249,21 @@ func (pm *ProtocolManager) handleMsg(p *peer) error {
 		}
 
 	/**
+	todo #################################
+	todo #################################
+	todo #################################
+	todo #################################
+	todo #################################
+	todo #################################
+
 	todo client处理 LPV2 的 merkle proof 响应
+
+	todo #################################
+	todo #################################
+	todo #################################
+	todo #################################
+	todo #################################
+	todo #################################
 	 */
 	case ProofsV2Msg:
 		if pm.odr == nil {
@@ -1129,10 +1294,36 @@ func (pm *ProtocolManager) handleMsg(p *peer) error {
 
 
 	/**
+	todo #################################
+	todo #################################
+	todo #################################
+	todo #################################
+	todo #################################
+	todo #################################
+
 	Server 处理 header的proof   LPV1
 
 	todo
 		ChtRequest 和 BloomRequest 都会发起这个req
+
+	todo #################################
+	todo #################################
+	todo #################################
+	todo #################################
+	todo #################################
+	todo #################################
+
+	TODO 这个已经弃用, LPV2 用 `GetHelperTrieProofs`
+
+
+
+
+	todo  CHT (0)：从Canonical Hash Trie请求密钥。如果auxReq为2，则所属标头返回为auxData。
+			key是编码为8字节大字节序的块号。请注意，CHT的节大小已提高到32k，而不是4k块.
+
+	todo  BloomBits (1)：从BloomBits Trie请求密钥。在这个Trie key中，它的长度为10个字节，
+			它由将bloom bit index 编码为2字节的大字节序组成，然后是将 section index编码为8字节的大字节序。
+			返回的值是相应的压缩bloom bit vector.
 
 	 */
 	case GetHeaderProofsMsg:
@@ -1163,9 +1354,11 @@ func (pm *ProtocolManager) handleMsg(p *peer) error {
 			// 从当前 blockchain 中 <当前肯定是 全节点> 拉取 header
 			if header := pm.blockchain.GetHeaderByNumber(req.BlockNum); header != nil {
 
-				// 读取本地db中存储的 `CanonicalHash`
+				// todo 注意, server 端也是提供 CanonicalHash 的
+				//
+				// 读取本地db中存储的 `CanonicalHash` server 这边每隔 `4096` 去拿
 				sectionHead := rawdb.ReadCanonicalHash(pm.chainDb, req.ChtNum*light.CHTFrequencyServer-1)
-				// 根据Hash拉取 CHTRoot
+				// 根据Hash拉取 CHTRoot (之所以 req.ChtNum-1是因为 section的索引从0开始)
 				if root := light.GetChtRoot(pm.chainDb, req.ChtNum-1, sectionHead); root != (common.Hash{}) {
 
 					// 拉取 db 中的 Cht trie
@@ -1178,7 +1371,7 @@ func (pm *ProtocolManager) handleMsg(p *peer) error {
 
 					var proof light.NodeList
 
-					// 填充数的 proof 路径
+					// todo 填充数的 proof 路径
 					trie.Prove(encNumber[:], 0, &proof)
 
 					proofs = append(proofs, ChtResp{Header: header, Proof: proof})
@@ -1193,7 +1386,30 @@ func (pm *ProtocolManager) handleMsg(p *peer) error {
 		return p.SendHeaderProofs(req.ReqID, bv, proofs)
 
 	/**
+	todo #################################
+	todo #################################
+	todo #################################
+	todo #################################
+	todo #################################
+	todo #################################
+
 	Server 处理 header的proof   LPV2
+
+
+	TODO 对于 CHT
+	LES服务器为每32768个块生成CHT，CHT[i]其中包含block 的数据0..i * 32768-1。
+	如果客户端知道的根哈希，CHT[i]并希望获取标头号N（其中N < i * 32768），
+	则可以通过GetHelperTrieProofs请求获取标头和CHT的相应Merkle证明.
+
+	TODO 对于 BloomBit
+	为了使此数据结构可按需从轻客户端获取，我们将生成的向量放在trie中。可以使用GetHelperTrieProofs消息检索此部分的部分
+
+	todo #################################
+	todo #################################
+	todo #################################
+	todo #################################
+	todo #################################
+	todo #################################
 	 */
 	case GetHelperTrieProofsMsg:
 		p.Log().Trace("Received helper trie proof request")
@@ -1233,6 +1449,8 @@ func (pm *ProtocolManager) handleMsg(p *peer) error {
 				// todo req.Type 只会有两种
 				//      htBloomBits
 				// 		htCanonical
+
+				// 这里根据  num -> CanonicalHash -> CHTRoot 或者 BloomTrieRoot
 				if root, prefix = pm.getHelperTrie(req.Type, req.TrieIdx); root != (common.Hash{}) {
 					auxTrie, _ = trie.New(root, trie.NewDatabase(ethdb.NewTable(pm.chainDb, prefix)))
 				}
@@ -1242,6 +1460,8 @@ func (pm *ProtocolManager) handleMsg(p *peer) error {
 			todo req.AuxReq 只有两种 type
 				auxRoot
 				auxHeader
+
+				这里很奇妙, 如果你拉的不是 root 那么就一定是拉 header
 			 */
 			if req.AuxReq == auxRoot {
 				var data []byte
@@ -1255,6 +1475,8 @@ func (pm *ProtocolManager) handleMsg(p *peer) error {
 					auxTrie.Prove(req.Key, req.FromLevel, nodes)
 				}
 				if req.AuxReq != 0 {
+
+					// 这里 根据 num -> CanonicalHash -> header
 					data := pm.getHelperTrieAuxData(req)
 					auxData = append(auxData, data)
 					auxBytes += len(data)
@@ -1270,8 +1492,23 @@ func (pm *ProtocolManager) handleMsg(p *peer) error {
 
 
 	/**
+	todo #################################
+	todo #################################
+	todo #################################
+	todo #################################
+	todo #################################
+	todo #################################
+
 	LPV1
 	Client 处理 headerProof 的resp
+
+
+	todo #################################
+	todo #################################
+	todo #################################
+	todo #################################
+	todo #################################
+	todo #################################
 	 */
 	case HeaderProofsMsg:
 		if pm.odr == nil {
@@ -1300,8 +1537,25 @@ func (pm *ProtocolManager) handleMsg(p *peer) error {
 		}
 
 	/**
+	todo #################################
+	todo #################################
+	todo #################################
+	todo #################################
+	todo #################################
+	todo #################################
+
 	LPV2
 	Client 处理 headerProof 的resp
+
+	todo #################################
+	todo #################################
+	todo #################################
+	todo #################################
+	todo #################################
+	todo #################################
+
+	todo  auxData在GetHelperTrieProofs中返回一个 proof 集和一组 req。
+			auxData列表的长度等于非零的请求数auxReq.
 	 */
 	case HelperTrieProofsMsg:
 		if pm.odr == nil {
@@ -1332,8 +1586,22 @@ func (pm *ProtocolManager) handleMsg(p *peer) error {
 		}
 
 	/**
+	todo #################################
+	todo #################################
+	todo #################################
+	todo #################################
+	todo #################################
+	todo #################################
+
 	LPV1
 	Server 接收到 client 的txs 转发
+
+	todo #################################
+	todo #################################
+	todo #################################
+	todo #################################
+	todo #################################
+	todo #################################
 	 */
 	case SendTxMsg:
 		if pm.txpool == nil {
@@ -1348,14 +1616,30 @@ func (pm *ProtocolManager) handleMsg(p *peer) error {
 		if reject(uint64(reqCnt), MaxTxSend) {
 			return errResp(ErrRequestRejected, "")
 		}
+
+		// 将新的 txs 追加到 txpool remote 中
 		pm.txpool.AddRemotes(txs)
 
 		_, rcost := p.fcClient.RequestProcessed(costs.baseCost + uint64(reqCnt)*costs.reqCost)
 		pm.server.fcCostStats.update(msg.Code, uint64(reqCnt), rcost)
 
 	/**
+	todo #################################
+	todo #################################
+	todo #################################
+	todo #################################
+	todo #################################
+	todo #################################
+
 	LPV2
 	Server 接收到 Client 的 txs req 转发
+
+	todo #################################
+	todo #################################
+	todo #################################
+	todo #################################
+	todo #################################
+	todo #################################
 	 */
 	case SendTxV2Msg:
 		if pm.txpool == nil {
@@ -1403,8 +1687,26 @@ func (pm *ProtocolManager) handleMsg(p *peer) error {
 		return p.SendTxStatus(req.ReqID, bv, stats)
 
 	/**
+	todo #################################
+	todo #################################
+	todo #################################
+	todo #################################
+	todo #################################
+	todo #################################
+
 	LPV2
 	Server 收到 校验tx status 的req
+
+
+	todo #################################
+	todo #################################
+	todo #################################
+	todo #################################
+	todo #################################
+	todo #################################
+
+	要求 对端peer 返回包含所引用 tx status 的TxStatus消息。
+	该消息旨在查询客户过去发送的txs。 请注意，不需要服务器使每个tx无限期可用.
 	 */
 	case GetTxStatusMsg:
 		if pm.txpool == nil {
@@ -1460,7 +1762,7 @@ func (pm *ProtocolManager) handleMsg(p *peer) error {
 
 
 	/**
-	这里是 将被需要交付的 data做处理
+	todo 这里是 将被需要交付的 data做处理
 	 */
 	if deliverMsg != nil {
 		err := pm.retriever.deliver(p, deliverMsg)

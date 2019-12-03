@@ -230,6 +230,8 @@ func (b *EthAPIBackend) BloomStatus() (uint64, uint64) {
 	return params.BloomBitsBlocks, sections
 }
 
+
+// 轻节点的server端 (全节点)
 func (b *EthAPIBackend) ServiceFilter(ctx context.Context, session *bloombits.MatcherSession) {
 	for i := 0; i < bloomFilterThreads; i++ {
 		go session.Multiplex(bloomRetrievalBatch, bloomRetrievalWait, b.eth.bloomRequests)

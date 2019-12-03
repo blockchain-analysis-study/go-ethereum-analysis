@@ -60,14 +60,30 @@ todo 创建 轻节点的server端
 func NewLesServer(eth *eth.Ethereum, config *eth.Config) (*LesServer, error) {
 	quitSync := make(chan struct{})
 
-
+	// todo ##################################
+	// todo ##################################
+	// todo ##################################
+	// todo ##################################
+	// todo ##################################
+	// todo ##################################
+	//
+	// todo 这个是 轻节点的Server端的 pm
+	//
+	// todo ##################################
+	// todo ##################################
+	// todo ##################################
+	// todo ##################################
+	// todo ##################################
+	// todo ##################################
 	pm, err := NewProtocolManager(eth.BlockChain().Config(), false, config.NetworkId, eth.EventMux(), eth.Engine(), newPeerSet(), eth.BlockChain(), eth.TxPool(), eth.ChainDb(), nil, nil, nil, quitSync, new(sync.WaitGroup))
 	if err != nil {
 		return nil, err
 	}
 
 	lesTopics := make([]discv5.Topic, len(AdvertiseProtocolVersions))
-	for i, pv := range AdvertiseProtocolVersions {
+	for i, pv := range AdvertiseProtocolVersions { // pv 是 ProtocolVersion
+
+		// 区分 版本 LES1 还是 LES2
 		lesTopics[i] = lesTopic(eth.BlockChain().Genesis().Hash(), pv)
 	}
 
@@ -78,10 +94,10 @@ func NewLesServer(eth *eth.Ethereum, config *eth.Config) (*LesServer, error) {
 			config:           config,
 			chainDb:          eth.ChainDb(),
 
-			// 构建一个 light 的 Cht索引器
+			// TODO 构建一个 light 的 Cht索引器 <和轻节点相呼应>
 			chtIndexer:       light.NewChtIndexer(eth.ChainDb(), false, nil),
 
-			// 构建一个 light 的 BloomTrie索引器
+			// todo 构建一个 light 的 BloomTrie索引器 <和轻节点相呼应>
 			bloomTrieIndexer: light.NewBloomTrieIndexer(eth.ChainDb(), false, nil),
 			protocolManager:  pm,
 		},
@@ -119,6 +135,7 @@ func NewLesServer(eth *eth.Ethereum, config *eth.Config) (*LesServer, error) {
 
 
 	// 启动 CHT 索引器
+	// todo 这里面会调用 newHead(), 会引发 update 信号,会更新 CHT
 	srv.chtIndexer.Start(eth.BlockChain())
 
 	/** TODO  只有是开启了支持轻节点连接 Server 端的全节点，才会对 pm.server 赋值 */
@@ -136,12 +153,22 @@ func NewLesServer(eth *eth.Ethereum, config *eth.Config) (*LesServer, error) {
 	return srv, nil
 }
 
+// todo ##############################
+// todo ##############################
+// todo ##############################
+// todo ##############################
+//
+// todo 启动 轻节点 Server 端
 func (s *LesServer) Protocols() []p2p.Protocol {
 	return s.makeProtocols(ServerProtocolVersions)
 }
 
 // Start starts the LES server
+//
+// todo 启动 轻节点 Server端
 func (s *LesServer) Start(srvr *p2p.Server) {
+
+	// 启动 轻节点的 pm
 	s.protocolManager.Start(s.config.LightPeers)
 	if srvr.DiscV5 != nil {
 		for _, topic := range s.lesTopics {
@@ -151,6 +178,7 @@ func (s *LesServer) Start(srvr *p2p.Server) {
 				logger.Info("Starting topic registration")
 				defer logger.Info("Terminated topic registration")
 
+				// todo
 				srvr.DiscV5.RegisterTopic(topic, s.quitSync)
 			}()
 		}

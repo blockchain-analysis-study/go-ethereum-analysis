@@ -540,6 +540,7 @@ func (bc *BlockChain) insert(block *types.Block) {
 	updateHeads := rawdb.ReadCanonicalHash(bc.db, block.NumberU64()) != block.Hash()
 
 	// Add the block to the canonical chain number scheme and mark as the head
+	// todo 这里我们可以看出来 server 端在 insertchain 时 一起写入了 CanonicalHash
 	rawdb.WriteCanonicalHash(bc.db, block.Hash(), block.NumberU64())
 	rawdb.WriteHeadBlockHash(bc.db, block.Hash())
 

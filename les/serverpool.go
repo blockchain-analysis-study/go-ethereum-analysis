@@ -181,6 +181,8 @@ func (pool *serverPool) start(server *p2p.Server, topic discv5.Topic) {
 		pool.discSetPeriod = make(chan time.Duration, 1)
 		pool.discNodes = make(chan *discv5.Node, 100)
 		pool.discLookups = make(chan bool, 100)
+
+		// 这里是查找 topic 为 LES1 和 LES2的
 		go pool.server.DiscV5.SearchTopic(pool.topic, pool.discSetPeriod, pool.discNodes, pool.discLookups)
 	}
 	pool.checkDial()

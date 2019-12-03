@@ -157,10 +157,10 @@ func New(ctx *node.ServiceContext, config *eth.Config) (*LightEthereum, error) {
 	// 处理ODR检索类型的后端服务
 	leth.odr = NewLesOdr(chainDb, leth.retriever)
 
-	// cht 是轻节点相关的 checkpoint 索引器
+	// todo cht 是轻节点相关的 checkpoint 索引器
 	leth.chtIndexer = light.NewChtIndexer(chainDb, true, leth.odr)
 
-	// bloom trie 索引
+	// todo 轻节点相关的 bloom trie 索引器
 	leth.bloomTrieIndexer = light.NewBloomTrieIndexer(chainDb, true, leth.odr)
 	// SetIndexers向ODR backend添加必要的链索引器
 	leth.odr.SetIndexers(leth.chtIndexer, leth.bloomTrieIndexer, leth.bloomIndexer)
@@ -178,8 +178,10 @@ func New(ctx *node.ServiceContext, config *eth.Config) (*LightEthereum, error) {
 	leth.bloomIndexer.AddChildIndexer(leth.bloomTrieIndexer)
 
 	/** todo 启动 checkpoint 索引器 */
+	// todo  这里可能 调用 newHead(), 引起 update 信号,更新 CHT
 	leth.chtIndexer.Start(leth.blockchain)
 	/** todo 启动 bloom 索引器 */
+	// todo  这里可能 调用 newHead(), 引起 update 信号,更新 BloomTrie
 	leth.bloomIndexer.Start(leth.blockchain)
 
 	// Rewind the chain in case of an incompatible config upgrade.
@@ -287,6 +289,13 @@ func (s *LightEthereum) EventMux() *event.TypeMux           { return s.eventMux 
 
 // Protocols implements node.Service, returning all the currently configured
 // network protocols to start.
+// todo ##############################
+// todo ##############################
+// todo ##############################
+// todo ##############################
+// todo ##############################
+// todo ##############################
+// todo 启动轻节点 Client 端
 func (s *LightEthereum) Protocols() []p2p.Protocol {
 
 	// 这边才是创建
@@ -296,12 +305,18 @@ func (s *LightEthereum) Protocols() []p2p.Protocol {
 // Start implements node.Service, starting all internal goroutines needed by the
 // Ethereum protocol implementation.
 func (s *LightEthereum) Start(srvr *p2p.Server) error {
+	// todo 启动Bloom过滤器 <这是轻节点的bloom过滤器和block中的那个不是一回事>
+	// todo 这个bloom是为了检索 `Canonical Hash Trie` 的
 	s.startBloomHandlers()
 	log.Warn("Light client mode is an experimental feature")
 	s.netRPCService = ethapi.NewPublicNetAPI(srvr, s.networkId)
 	// clients are searching for the first advertised protocol in the list
 	protocolVersion := AdvertiseProtocolVersions[0]
+
+	// todo 启动 当前Client 中记录的 Serverpool
 	s.serverPool.start(srvr, lesTopic(s.blockchain.Genesis().Hash(), protocolVersion))
+
+	// todo 启动轻节点的 Client 端
 	s.protocolManager.Start(s.config.LightPeers)
 	return nil
 }

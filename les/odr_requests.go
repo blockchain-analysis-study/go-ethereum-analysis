@@ -96,6 +96,32 @@ func (r *BlockRequest) Request(reqID uint64, peer *peer) error {
 // Valid processes an ODR request reply message from the LES network
 // returns true and stores results in memory if the message was a valid reply
 // to the request (implementation of LesOdrRequest)
+
+/**
+todo ##################################
+todo ##################################
+todo ##################################
+todo ##################################
+todo ##################################
+todo ##################################
+todo ##################################
+todo ##################################
+
+todo 超级重要
+	BlockRequest, 对 BlockBodies 的校验及处理
+
+todo 这个,就是最终对 proof 做校验了
+
+todo ##################################
+todo ##################################
+todo ##################################
+todo ##################################
+todo ##################################
+todo ##################################
+todo ##################################
+todo ##################################
+ */
+
 func (r *BlockRequest) Validate(db ethdb.Database, msg *Msg) error {
 	log.Debug("Validating block body", "hash", r.Hash)
 
@@ -110,13 +136,18 @@ func (r *BlockRequest) Validate(db ethdb.Database, msg *Msg) error {
 	body := bodies[0]
 
 	// Retrieve our stored header and validate block content against it
+	//
+	// 检索我们存储的 header 并针对它验证 对端Server返回的 block body
 	header := rawdb.ReadHeader(db, r.Hash, r.Number)
 	if header == nil {
 		return errHeaderUnavailable
 	}
+	// todo 校验tx的root
 	if header.TxHash != types.DeriveSha(types.Transactions(body.Transactions)) {
 		return errTxHashMismatch
 	}
+
+	// todo 校验 uncles
 	if header.UncleHash != types.CalcUncleHash(body.Uncles) {
 		return errUncleHashMismatch
 	}
@@ -152,10 +183,37 @@ func (r *ReceiptsRequest) Request(reqID uint64, peer *peer) error {
 // Valid processes an ODR request reply message from the LES network
 // returns true and stores results in memory if the message was a valid reply
 // to the request (implementation of LesOdrRequest)
+//
+/**
+todo ##################################
+todo ##################################
+todo ##################################
+todo ##################################
+todo ##################################
+todo ##################################
+todo ##################################
+todo ##################################
+
+todo 超级重要
+	ReceiptsRequest, 对 Receipts 的校验及处理
+
+todo 这个,就是最终对 proof 做校验了
+
+todo ##################################
+todo ##################################
+todo ##################################
+todo ##################################
+todo ##################################
+todo ##################################
+todo ##################################
+todo ##################################
+ */
 func (r *ReceiptsRequest) Validate(db ethdb.Database, msg *Msg) error {
 	log.Debug("Validating block receipts", "hash", r.Hash)
 
 	// Ensure we have a correct message with a single block receipt
+	//
+	// 确保我们收到正确的 msg，是 receipt 类型的msg
 	if msg.MsgType != MsgReceipts {
 		return errInvalidMessageType
 	}
@@ -166,6 +224,9 @@ func (r *ReceiptsRequest) Validate(db ethdb.Database, msg *Msg) error {
 	receipt := receipts[0]
 
 	// Retrieve our stored header and validate receipt content against it
+	//
+	// 检索我们存储的 header 并针对它验证 receipt 内容
+	// todo 主要是校验  receipt root
 	header := rawdb.ReadHeader(db, r.Hash, r.Number)
 	if header == nil {
 		return errHeaderUnavailable
@@ -174,6 +235,8 @@ func (r *ReceiptsRequest) Validate(db ethdb.Database, msg *Msg) error {
 		return errReceiptHashMismatch
 	}
 	// Validations passed, store and return
+	//
+	// 验证通过，存储并返回
 	r.Receipts = receipt
 	return nil
 }
@@ -228,6 +291,31 @@ func (r *TrieRequest) Request(reqID uint64, peer *peer) error {
 // Valid processes an ODR request reply message from the LES network
 // returns true and stores results in memory if the message was a valid reply
 // to the request (implementation of LesOdrRequest)
+//
+/**
+todo ##################################
+todo ##################################
+todo ##################################
+todo ##################################
+todo ##################################
+todo ##################################
+todo ##################################
+todo ##################################
+
+todo 超级重要
+	TrieRequest, 对 merkle trie Proofs 的校验及处理
+
+todo 这个,就是最终对 proof 做校验了
+
+todo ##################################
+todo ##################################
+todo ##################################
+todo ##################################
+todo ##################################
+todo ##################################
+todo ##################################
+todo ##################################
+ */
 func (r *TrieRequest) Validate(db ethdb.Database, msg *Msg) error {
 	log.Debug("Validating trie proof", "root", r.Id.Root, "key", r.Key)
 
@@ -239,6 +327,10 @@ func (r *TrieRequest) Validate(db ethdb.Database, msg *Msg) error {
 		}
 		nodeSet := proofs[0].NodeSet()
 		// Verify the proof and store if checks out
+		//
+		// 验证证明并存储（如果签出）
+		//
+		// todo 根据对端 server 返回的proof对 Merkle 做校验 LPV1
 		if _, _, err := trie.VerifyProof(r.Id.Root, r.Key, nodeSet); err != nil {
 			return fmt.Errorf("merkle proof verification failed: %v", err)
 		}
@@ -248,8 +340,14 @@ func (r *TrieRequest) Validate(db ethdb.Database, msg *Msg) error {
 	case MsgProofsV2:
 		proofs := msg.Obj.(light.NodeList)
 		// Verify the proof and store if checks out
+		//
+		// 验证证明并存储（如果签出）
 		nodeSet := proofs.NodeSet()
 		reads := &readTraceDB{db: nodeSet}
+
+
+		//
+		// todo 根据对端 server 返回的proof对 Merkle 做校验 LPV2
 		if _, _, err := trie.VerifyProof(r.Id.Root, r.Key, reads); err != nil {
 			return fmt.Errorf("merkle proof verification failed: %v", err)
 		}
@@ -297,6 +395,31 @@ func (r *CodeRequest) Request(reqID uint64, peer *peer) error {
 // Valid processes an ODR request reply message from the LES network
 // returns true and stores results in memory if the message was a valid reply
 // to the request (implementation of LesOdrRequest)
+
+/**
+todo ##################################
+todo ##################################
+todo ##################################
+todo ##################################
+todo ##################################
+todo ##################################
+todo ##################################
+todo ##################################
+
+todo 超级重要
+	CodeRequest, 对 code 的校验及处理
+
+todo 这个,就是最终对 proof 做校验了
+
+todo ##################################
+todo ##################################
+todo ##################################
+todo ##################################
+todo ##################################
+todo ##################################
+todo ##################################
+todo ##################################
+ */
 func (r *CodeRequest) Validate(db ethdb.Database, msg *Msg) error {
 	log.Debug("Validating code data", "hash", r.Hash)
 
@@ -311,6 +434,9 @@ func (r *CodeRequest) Validate(db ethdb.Database, msg *Msg) error {
 	data := reply[0]
 
 	// Verify the data and store if checks out
+	// 验证数据并存储是否签出
+	//
+	// todo  只是简单的将
 	if hash := crypto.Keccak256Hash(data); r.Hash != hash {
 		return errDataHashMismatch
 	}
@@ -414,8 +540,28 @@ func (r *ChtRequest) Request(reqID uint64, peer *peer) error {
 // returns true and stores results in memory if the message was a valid reply
 // to the request (implementation of LesOdrRequest)
 /**
+todo ##################################
+todo ##################################
+todo ##################################
+todo ##################################
+todo ##################################
+todo ##################################
+todo ##################################
+todo ##################################
+
 todo 超级重要
 	ChtRequest, 对 HeaderProof 和 HelperTrieProof 的校验及处理
+
+todo 这个,就是最终对 proof 做校验了
+
+todo ##################################
+todo ##################################
+todo ##################################
+todo ##################################
+todo ##################################
+todo ##################################
+todo ##################################
+todo ##################################
 
  */
 func (r *ChtRequest) Validate(db ethdb.Database, msg *Msg) error {
@@ -433,6 +579,8 @@ func (r *ChtRequest) Validate(db ethdb.Database, msg *Msg) error {
 		var encNumber [8]byte
 		binary.BigEndian.PutUint64(encNumber[:], r.BlockNum)
 
+
+		// todo 根据 对端server 返回的 proof 进行 CHT 校验, 这个是校验 Header
 		value, _, err := trie.VerifyProof(r.ChtRoot, encNumber[:], light.NodeList(proof.Proof).NodeSet())
 		if err != nil {
 			return err
@@ -468,6 +616,8 @@ func (r *ChtRequest) Validate(db ethdb.Database, msg *Msg) error {
 		binary.BigEndian.PutUint64(encNumber[:], r.BlockNum)
 
 		reads := &readTraceDB{db: nodeSet}
+
+		// todo 根据 对端server 返回的 proof 进行 CHT 校验, 这个是校验  Trie <Merkle Trie>
 		value, _, err := trie.VerifyProof(r.ChtRoot, encNumber[:], reads)
 		if err != nil {
 			return fmt.Errorf("merkle proof verification failed: %v", err)
@@ -542,10 +692,38 @@ func (r *BloomRequest) Request(reqID uint64, peer *peer) error {
 // Valid processes an ODR request reply message from the LES network
 // returns true and stores results in memory if the message was a valid reply
 // to the request (implementation of LesOdrRequest)
+
+/**
+todo ##################################
+todo ##################################
+todo ##################################
+todo ##################################
+todo ##################################
+todo ##################################
+todo ##################################
+todo ##################################
+
+todo 超级重要
+	BloomRequest, 对 HelperTrieProofs 的校验及处理
+
+todo 这个,就是最终对 proof 做校验了
+
+todo ##################################
+todo ##################################
+todo ##################################
+todo ##################################
+todo ##################################
+todo ##################################
+todo ##################################
+todo ##################################
+ */
+
 func (r *BloomRequest) Validate(db ethdb.Database, msg *Msg) error {
 	log.Debug("Validating BloomBits", "bloomTrie", r.BloomTrieNum, "bitIdx", r.BitIdx, "sections", r.SectionIdxList)
 
 	// Ensure we have a correct message with a single proof element
+	//
+	// 确保我们使用单个证明元素发送正确的消息
 	if msg.MsgType != MsgHelperTrieProofs {
 		return errInvalidMessageType
 	}
@@ -557,11 +735,16 @@ func (r *BloomRequest) Validate(db ethdb.Database, msg *Msg) error {
 	r.BloomBits = make([][]byte, len(r.SectionIdxList))
 
 	// Verify the proofs
+	//
+	// 验证证明
 	var encNumber [10]byte
 	binary.BigEndian.PutUint16(encNumber[:2], uint16(r.BitIdx))
 
 	for i, idx := range r.SectionIdxList {
 		binary.BigEndian.PutUint64(encNumber[2:], idx)
+		/**
+		TODO 逐个校验 各个section的 Bloom trie
+		 */
 		value, _, err := trie.VerifyProof(r.BloomTrieRoot, encNumber[:], reads)
 		if err != nil {
 			return err

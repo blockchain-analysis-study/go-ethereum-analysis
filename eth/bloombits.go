@@ -42,15 +42,19 @@ const (
 	// bloomFilterThreads is the number of goroutines used locally per filter to
 	// multiplex requests onto the global servicing goroutines.
 	//
-	//
+	// bloomFilterThreads: 是每个过滤器本地用于将请求多路复用到全局服务goroutine的goroutine的数量
 	bloomFilterThreads = 3
 
 	// bloomRetrievalBatch is the maximum number of bloom bit retrievals to service
 	// in a single batch.
+	//
+	// bloomRetrievalBatch: 是单个 batch处理中可服务的最大bloom位检索数
 	bloomRetrievalBatch = 16
 
 	// bloomRetrievalWait is the maximum time to wait for enough bloom bit requests
 	// to accumulate request an entire batch (avoiding hysteresis).
+	//
+	// bloomRetrievalWait: 是等待足够的bloom位请求以累积整个 batch次请求的最大时间（避免滞后）
 	bloomRetrievalWait = time.Duration(0)
 )
 
@@ -143,6 +147,10 @@ func (b *BloomIndexer) Process(ctx context.Context, header *types.Header) error 
 
 // Commit implements core.ChainIndexerBackend, finalizing the bloom section and
 // writing it out into the database.
+//
+/**
+Commit: 实现core.ChainIndexerBackend，完成Bloom section 并将其写到db中
+ */
 func (b *BloomIndexer) Commit() error {
 	batch := b.db.NewBatch()
 	for i := 0; i < types.BloomBitLength; i++ {
@@ -150,6 +158,11 @@ func (b *BloomIndexer) Commit() error {
 		if err != nil {
 			return err
 		}
+
+
+		/**
+		BloomBits数据结构通过进行按位转换来优化日志搜索，这使得检索与特定过滤器相关的Bloom过滤器数据更便宜.
+		 */
 		rawdb.WriteBloomBits(batch, uint(i), b.section, b.head, bitutil.CompressBytes(bits))
 	}
 	return batch.Write()

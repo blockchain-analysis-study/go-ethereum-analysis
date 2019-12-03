@@ -66,11 +66,15 @@ func (odr *LesOdr) ChtIndexer() *core.ChainIndexer {
 }
 
 // BloomTrieIndexer returns the bloom trie chain indexer
+//
+// BloomTrieIndexer: 返回Bloom Trie链索引器
 func (odr *LesOdr) BloomTrieIndexer() *core.ChainIndexer {
 	return odr.bloomTrieIndexer
 }
 
 // BloomIndexer returns the bloombits chain indexer
+//
+// BloomIndexer: 返回Bloombits链索引器
 func (odr *LesOdr) BloomIndexer() *core.ChainIndexer {
 	return odr.bloomIndexer
 }
@@ -128,7 +132,7 @@ func (odr *LesOdr) Retrieve(ctx context.Context, req light.OdrRequest) (err erro
 			p := dp.(*peer)
 			cost := lreq.GetCost(p)
 
-			// 对端server peer 的req排序!?
+			// 调整下 server 端的资源
 			p.fcServer.QueueRequest(reqID, cost)
 
 
@@ -141,12 +145,25 @@ func (odr *LesOdr) Retrieve(ctx context.Context, req light.OdrRequest) (err erro
 
 
 	/**
-	todo  将构建好的 req 发起拉取
+	todo  将构建好的 req 发起拉取, 并且对 proof 做校验
 	 */
 	if err = odr.retriever.retrieve(ctx, reqID, rq, func(p distPeer, msg *Msg) error { return lreq.Validate(odr.db, msg) }, odr.stop); err == nil {
 		// retrieved from network, store in db
 		//
+		// todo #####################################
+		// todo #####################################
+		// todo #####################################
+		// todo #####################################
+		// todo #####################################
+		// todo 极度重要
+		// todo
 		// todo 从网络检索，存储在数据库中
+		//
+		// todo #####################################
+		// todo #####################################
+		// todo #####################################
+		// todo #####################################
+		// todo #####################################
 		req.StoreResult(odr.db)
 	} else {
 		log.Debug("Failed to retrieve data from network", "err", err)

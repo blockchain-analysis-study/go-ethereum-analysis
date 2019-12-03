@@ -72,17 +72,37 @@ type Retrieval struct {
 // Matcher is a pipelined system of schedulers and logic matchers which perform
 // binary AND/OR operations on the bit-streams, creating a stream of potential
 // blocks to inspect for data content.
+//
+/**
+Matcher:
+是调度程序和逻辑匹配器的流水线系统，它们对bit流执行二进制 AND / OR 操作，创建潜在 block 流以检查数据内容
+ */
 type Matcher struct {
+
+	// 要过滤的数据 batch的大小
 	sectionSize uint64 // Size of the data batches to filter on
 
+
+	// 过滤系统匹配的
 	filters    [][]bloomIndexes    // Filter the system is matching for
+
+	// 检索调度程序，用于加载bloom bit
 	schedulers map[uint]*scheduler // Retrieval schedulers for loading bloom bits
 
+
+	// 检索程序正在等待 bit分配
 	retrievers chan chan uint       // Retriever processes waiting for bit allocations
+
+	// 检索器进程正在等待任务计数报告
 	counters   chan chan uint       // Retriever processes waiting for task count reports
+
+	// 检索进程等待任务分配
 	retrievals chan chan *Retrieval // Retriever processes waiting for task allocations
+
+	// 检索进程等待任务响应传递 (交付)
 	deliveries chan *Retrieval      // Retriever processes waiting for task response deliveries
 
+	// 原子标记会话是否在线
 	running uint32 // Atomic flag whether a session is live or not
 }
 
@@ -379,6 +399,9 @@ func (m *Matcher) subMatch(source chan *partialMatches, dist chan *request, bloo
 
 // distributor receives requests from the schedulers and queues them into a set
 // of pending requests, which are assigned to retrievers wanting to fulfil them.
+//
+// distributor 分发程序:
+// 从调度程序接收req，并将它们排队到一组挂起的请求中，这些请求被分配给想要实现这些请求的检索器
 func (m *Matcher) distributor(dist chan *request, session *MatcherSession) {
 	defer session.pend.Done()
 
@@ -450,8 +473,15 @@ func (m *Matcher) distributor(dist chan *request, session *MatcherSession) {
 			// New task count request arrives, return number of items
 			fetcher <- uint(len(requests[<-fetcher]))
 
+		/**
+
+		 */
 		case fetcher := <-m.retrievals:
 			// New fetcher waiting for tasks to retrieve, assign
+			//
+			// 新的提取程序正在等待任务检索，分配
+			//
+			// todo 这个 chan 是 chan中的chan, 飞来飞去的,看不懂了
 			task := <-fetcher
 			if want := len(task.Sections); want >= len(requests[task.Bit]) {
 				task.Sections = requests[task.Bit]
@@ -579,6 +609,9 @@ func (s *MatcherSession) AllocateSections(bit uint, count int) []uint64 {
 	select {
 	case <-s.quit:
 		return nil
+
+	// TODO 	s.matcher.retrievals 是 chan  chan
+	// 	飞来飞去的,看不懂了
 	case s.matcher.retrievals <- fetcher:
 		task := &Retrieval{
 			Bit:      bit,
@@ -608,15 +641,21 @@ func (s *MatcherSession) DeliverSections(bit uint, sections []uint64, bitsets []
 func (s *MatcherSession) Multiplex(batch int, wait time.Duration, mux chan chan *Retrieval) {
 	for {
 		// Allocate a new bloom bit index to retrieve data for, stopping when done
+		//
+		// 分配新的bloom bit索引以检索数据，完成后停止
 		bit, ok := s.AllocateRetrieval()
 		if !ok {
 			return
 		}
 		// Bit allocated, throttle a bit if we're below our batch limit
+		//
+		// 已分配 bit，如果我们低于 batch处理限制，请稍作调整
 		if s.PendingSections(bit) < batch {
 			select {
 			case <-s.quit:
 				// Session terminating, we can't meaningfully service, abort
+				//
+				// 会话终止，我们无法有意义地服务，中止
 				s.AllocateSections(bit, 0)
 				s.DeliverSections(bit, []uint64{}, [][]byte{})
 				return
@@ -626,6 +665,8 @@ func (s *MatcherSession) Multiplex(batch int, wait time.Duration, mux chan chan 
 			}
 		}
 		// Allocate as much as we can handle and request servicing
+		//
+		// todo 分配尽可能多的我们可以处理和req服务
 		sections := s.AllocateSections(bit, batch)
 		request := make(chan *Retrieval)
 
@@ -635,6 +676,10 @@ func (s *MatcherSession) Multiplex(batch int, wait time.Duration, mux chan chan 
 			s.DeliverSections(bit, sections, make([][]byte, len(sections)))
 			return
 
+		/**
+		TODO 超级重要,
+			这里发送查找 req
+		 */
 		case mux <- request:
 			// Retrieval accepted, something must arrive before we're aborting
 			request <- &Retrieval{Bit: bit, Sections: sections, Context: s.ctx}
