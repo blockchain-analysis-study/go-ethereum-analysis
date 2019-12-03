@@ -178,7 +178,7 @@ func (s *LesServer) Start(srvr *p2p.Server) {
 				logger.Info("Starting topic registration")
 				defer logger.Info("Terminated topic registration")
 
-				// todo
+				// todo 注册 DiscV5 的 topic
 				srvr.DiscV5.RegisterTopic(topic, s.quitSync)
 			}()
 		}
