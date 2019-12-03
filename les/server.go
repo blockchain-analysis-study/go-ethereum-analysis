@@ -184,6 +184,12 @@ func (s *LesServer) Start(srvr *p2p.Server) {
 		}
 	}
 	s.privateKey = srvr.PrivateKey
+
+	/**
+	TODO 超级重要~
+
+	todo 这里头通过监听到 new head 事件, 去更新  本地的 header (轻节点 Server 端)
+	*/
 	s.protocolManager.blockLoop()
 }
 
@@ -377,6 +383,11 @@ func (s *requestCostStats) update(msgCode, reqCnt, cost uint64) {
 	c.add(float64(reqCnt), float64(cost))
 }
 
+/**
+TODO 超级重要~
+
+todo 这里头通过监听到 new head 事件, 去更新  本地的 header
+ */
 func (pm *ProtocolManager) blockLoop() {
 	pm.wg.Add(1)
 	headCh := make(chan core.ChainHeadEvent, 10)
