@@ -73,7 +73,7 @@ type peer struct {
 
 	announceChn chan announceData
 
-	// 一个 func 队列
+	//  todo 一个 func 队列
 	sendQueue   *execQueue
 
 	// poolEntry: 代表 服务器节点 <light的server端> 并存储其当前状态和统计信息

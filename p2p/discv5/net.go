@@ -67,7 +67,11 @@ type Network struct {
 	queryReq         chan *findnodeQuery // lookups submit findnode queries on this channel
 	tableOpReq       chan func()
 	tableOpResp      chan struct{}
+
+	// todo les server 使用
 	topicRegisterReq chan topicRegisterReq
+
+	// todo les client 使用
 	topicSearchReq   chan topicSearchReq
 
 	// State of the main loop.
@@ -465,6 +469,12 @@ loop:
 			net.tableOpResp <- struct{}{}
 
 		// Topic registration stuff.
+
+		/**
+		todo 轻节点的 Server 和 Client 相互查找 `节点发现` 的处理方式
+
+		todo 这里是 轻节点 Server 处理 `srvr.DiscV5.RegisterTopic` 过来的
+		 */
 		case req := <-net.topicRegisterReq:
 			log.Trace("<-net.topicRegisterReq")
 			if !req.add {
@@ -522,6 +532,12 @@ loop:
 			//fmt.Println("sendTopicRegister", nextTicket.t.node.addr().String(), nextTicket.t.topics, nextTicket.idx, nextTicket.t.pong)
 			net.conn.sendTopicRegister(nextTicket.t.node, nextTicket.t.topics, nextTicket.idx, nextTicket.t.pong)
 
+
+		/**
+		todo 轻节点的 Server 和 Client 相互查找 `节点发现` 的处理方式
+
+		todo 这里是轻节点 处理 `pool.server.DiscV5.SearchTopic` 过来的
+		 */
 		case req := <-net.topicSearchReq:
 			if refreshDone == nil {
 				log.Trace("<-net.topicSearchReq")
