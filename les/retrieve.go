@@ -56,7 +56,7 @@ type retrieveManager struct {
 
 	lock     sync.RWMutex
 
-	// todo 请求分发器中的所有 sendReq
+	// todo 请求分发器中的所有 sendReq, 主要用来一一对应的处理resp
 	sentReqs map[uint64]*sentReq
 }
 

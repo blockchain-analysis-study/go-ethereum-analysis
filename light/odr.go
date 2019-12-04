@@ -162,6 +162,8 @@ type ChtRequest struct {
 
 	// 这个就是去请求的header 引用,最终根据这个的 num 和 hash 进行存储
 	Header           *types.Header
+
+	// 下面这两个值基本是对应的resp回来时被回填的
 	Td               *big.Int
 	Proof            *NodeSet
 }

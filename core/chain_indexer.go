@@ -99,6 +99,7 @@ type ChainIndexer struct {
 	active    uint32          // Flag whether the event loop was started
 
 	// 通知 headers 应处理的chan
+	// 在 `(c *ChainIndexer) newHead()` 和 `(c *ChainIndexer) updateLoop()` 均有发送这个 update 信号
 	update    chan struct{}   // Notification channel that headers should be processed
 
 	// 退出信号的chan

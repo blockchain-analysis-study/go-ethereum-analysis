@@ -34,9 +34,12 @@ requestDistributor
  */
 // peerSetNotify 的一个实现
 type requestDistributor struct {
-	// 一个队列
+	// todo 一个 sendReq 队列, 最终 分发器会将这里面的 req 发送出去
 	reqQueue         *list.List
+
+	// 一个 req 的计数器, 也是索引计数器
 	lastReqOrder     uint64
+	// 和req一一对应的 peer
 	peers            map[distPeer]struct{}
 	peerLock         sync.RWMutex
 
@@ -94,12 +97,22 @@ distReq是分发服务器使用的请求抽象。 它基于三个回调函数：
 
  */
 type distReq struct {
+
+	// 计算当前 req 的资源和流量
 	getCost func(distPeer) uint64
+	// 是否可以被发送
 	canSend func(distPeer) bool
+
+	// todo 这个操作真正发送 p2p 请求的回调
 	request func(distPeer) func()
 
+
+	// req 在分发器队列中的索引 !?
 	reqOrder uint64
+
+	// 用于接收 `getCost`, `canSend`, `request` 三个回调的入参 peer
 	sentChn  chan distPeer
+	// 这个是分发器的的真实req引用
 	element  *list.Element
 }
 

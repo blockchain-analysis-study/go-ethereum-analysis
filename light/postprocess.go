@@ -169,10 +169,17 @@ func StoreChtRoot(db ethdb.Database, sectionIdx uint64, sectionHead, root common
 
 // ChtIndexerBackend implements core.ChainIndexerBackend
 type ChtIndexerBackend struct {
+	// diskdb: 操作 Root 和存储 Hash 的db
+	// trieTable: 这个操作存储 Proof的 db
 	diskdb, trieTable    ethdb.Database
 	odr                  OdrBackend
+	// 这个操作 trie 的db
 	triedb               *trie.Database
+
+	// section: 目前最新 section
+	// sectionSize: 当前每个章节的宽度
 	section, sectionSize uint64
+	// 本section 中的最后一个block的hash
 	lastHash             common.Hash
 
 	// 这颗就是 CHT 树
@@ -348,9 +355,16 @@ func StoreBloomTrieRoot(db ethdb.Database, sectionIdx uint64, sectionHead, root 
 //  BloomBits[bitIdx][sectionIdx]是一个32768位（4096字节）长的位向量，
 //  其中包含来自块范围的每个Bloom过滤器的单个位 sectionIdx*SectionSize ... (sectionIdx+1)*SectionSize-1
 type BloomTrieIndexerBackend struct {
+
+	// diskdb: 操作 Root 和 Hash 的db
+	// trieTable: 操作 proof 的db
 	diskdb, trieTable                          ethdb.Database
+
+	// 这个重要, 按需检索的实例
 	odr                                        OdrBackend
+	// 这个是操作树的db
 	triedb                                     *trie.Database
+	//
 	section, parentSectionSize, bloomTrieRatio uint64
 
 	// 这颗是 BloomTrie
