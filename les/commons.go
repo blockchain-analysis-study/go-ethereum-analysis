@@ -31,6 +31,11 @@ import (
 )
 
 // lesCommons contains fields needed by both server and client.
+//
+/**
+lesCommons:
+todo  包含轻节点的 Server 和 Client都需要的字段
+ */
 type lesCommons struct {
 	config                       *eth.Config
 	chainDb                      ethdb.Database
