@@ -154,7 +154,7 @@ func New(ctx *node.ServiceContext, config *eth.Config) (*LightEthereum, error) {
 	// 猎犬管理器 (额,请求分发器的更上一层)
 	leth.retriever = newRetrieveManager(peers, leth.reqDist, leth.serverPool)
 
-	// 处理ODR检索类型的后端服务
+	// todo 处理ODR检索类型的后端服务 （这个只有 Client 端才会有）
 	leth.odr = NewLesOdr(chainDb, leth.retriever)
 
 	// todo cht 是轻节点相关的 checkpoint 索引器

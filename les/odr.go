@@ -27,9 +27,13 @@ import (
 
 // LesOdr implements light.OdrBackend
 type LesOdr struct {
+	// 操作 odr 相关的db
 	db                                         ethdb.Database
+	// 几个索引器的引用
 	chtIndexer, bloomTrieIndexer, bloomIndexer *core.ChainIndexer
+	// 猎犬管理器
 	retriever                                  *retrieveManager
+	// 关闭信号通道
 	stop                                       chan struct{}
 }
 

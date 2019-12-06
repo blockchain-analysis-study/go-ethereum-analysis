@@ -213,6 +213,10 @@ func NewChtIndexer(db ethdb.Database, clientMode bool, odr OdrBackend) *core.Cha
 	 */
 	backend := &ChtIndexerBackend{
 		diskdb:      db,
+
+		// todo 注意：这里的odr只有在 LightEthereum 实例化的时候才会传入
+		// 		在LesServer 实例化的时候，没有传入
+
 		odr:         odr,
 		trieTable:   trieTable,
 		triedb:      trie.NewDatabase(trieTable),
@@ -267,6 +271,8 @@ func (c *ChtIndexerBackend) Reset(ctx context.Context, section uint64, lastSecti
 	var err error
 	c.trie, err = trie.New(root, c.triedb)
 
+	// todo 注意， c.ord 如果是 Server端的c，则 c.odr 为nil的，
+	//    因为在 NewLesServer中 new ChtRequest 和 new BloomRequest时，传入的 odr 为nil
 	if err != nil && c.odr != nil {
 		err = c.fetchMissingNodes(ctx, section, root)
 		if err == nil {
@@ -382,6 +388,9 @@ func NewBloomTrieIndexer(db ethdb.Database, clientMode bool, odr OdrBackend) *co
 
 	backend := &BloomTrieIndexerBackend{
 		diskdb:    db,
+
+		// todo 注意：这里的odr只有在 LightEthereum 实例化的时候才会传入
+		// 		在LesServer 实例化的时候，没有传入
 		odr:       odr,
 		trieTable: trieTable,
 		triedb:    trie.NewDatabase(trieTable),
