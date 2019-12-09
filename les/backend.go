@@ -68,7 +68,7 @@ type LightEthereum struct {
 	// todo 里头记录的是和当前 client链接的 server 端
 	serverPool *serverPool
 	reqDist    *requestDistributor
-	// 猎犬 (reqDist的更上一层)
+	// 请求拉取管理器 (reqDist的更上一层)
 	retriever  *retrieveManager
 
 	// Channel receiving bloom data retrieval requests
@@ -151,7 +151,7 @@ func New(ctx *node.ServiceContext, config *eth.Config) (*LightEthereum, error) {
 	// todo 这个东西,只有当前节点为 light 节点测 client端的时候才会有值
 	// todo 里头记录的是和当前 client链接的 server 端
 	leth.serverPool = newServerPool(chainDb, quitSync, &leth.wg)
-	// 猎犬管理器 (额,请求分发器的更上一层)
+	// 请求拉取管理器 (额,请求分发器的更上一层)
 	leth.retriever = newRetrieveManager(peers, leth.reqDist, leth.serverPool)
 
 	// todo 处理ODR检索类型的后端服务 （这个只有 Client 端才会有）

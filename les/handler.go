@@ -109,7 +109,7 @@ type ProtocolManager struct {
 	lesTopic    discv5.Topic
 	// 请求分发器
 	reqDist     *requestDistributor
-	// 猎犬(请求分发器的更上一层)
+	// 请求拉取管理器(请求分发器的更上一层)
 	retriever   *retrieveManager
 
 	// downloader 的引用
@@ -162,7 +162,7 @@ func NewProtocolManager(chainConfig *params.ChainConfig, lightSync bool, network
 	}
 	if odr != nil {
 		manager.retriever = odr.retriever    // 请求分发器
-		manager.reqDist = odr.retriever.dist // 猎犬 (请求分发器更上一层)
+		manager.reqDist = odr.retriever.dist // 请求拉取管理器 (请求分发器更上一层)
 	}
 
 	// 获取 removePeerFunc 的指针
