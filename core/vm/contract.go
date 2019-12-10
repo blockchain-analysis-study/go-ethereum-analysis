@@ -147,6 +147,7 @@ func (c *Contract) SetCode(hash common.Hash, code []byte) {
 // SetCallCode sets the code of the contract and address of the backing data
 // object
 func (c *Contract) SetCallCode(addr *common.Address, hash common.Hash, code []byte) {
+	// 将 code 和 codeHash 和 code的拥有者，设置到 合约执行上下文环境 `contract` 上
 	c.Code = code
 	c.CodeHash = hash
 	c.CodeAddr = addr

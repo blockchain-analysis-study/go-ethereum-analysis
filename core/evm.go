@@ -72,21 +72,35 @@ func NewEVMContext(msg Message, header *types.Header, chain ChainContext, author
 }
 
 // GetHashFn returns a GetHashFunc which retrieves header hashes by number
+//
+// 返回一个可以根据 BlockNumber 返回BlockHash
 func GetHashFn(ref *types.Header, chain ChainContext) func(n uint64) common.Hash {
 	var cache map[uint64]common.Hash
 
 	return func(n uint64) common.Hash {
 		// If there's no hash cache yet, make one
+
+		// 如果还没有 cache 这个map的话，则我们创建它
 		if cache == nil {
 			cache = map[uint64]common.Hash{
+
+				// 放入第一个元素
+				// 即，当前创建时的block对应的 parent number 和 hash
 				ref.Number.Uint64() - 1: ref.ParentHash,
 			}
 		}
 		// Try to fulfill the request from the cache
+		//
+		// 尝试满足来自 cache 的请求
+		//
+		// 根据某个 blockNumber查询是否存在对应的blockHash
 		if hash, ok := cache[n]; ok {
 			return hash
 		}
 		// Not cached, iterate the blocks and cache the hashes
+
+		// 如果cache中没有缓存对应入参的blockNumber的BlockHash
+		// 则，我们需要遍历整个 chain，并写入 BlockNumber 和 BlockHash
 		for header := chain.GetHeader(ref.ParentHash, ref.Number.Uint64()-1); header != nil; header = chain.GetHeader(header.ParentHash, header.Number.Uint64()-1) {
 			cache[header.Number.Uint64()-1] = header.ParentHash
 			if n == header.Number.Uint64()-1 {
@@ -99,11 +113,15 @@ func GetHashFn(ref *types.Header, chain ChainContext) func(n uint64) common.Hash
 
 // CanTransfer checks whether there are enough funds in the address' account to make a transfer.
 // This does not take the necessary gas in to account to make the transfer valid.
+
+// 检查账户的Balance
 func CanTransfer(db vm.StateDB, addr common.Address, amount *big.Int) bool {
 	return db.GetBalance(addr).Cmp(amount) >= 0
 }
 
 // Transfer subtracts amount from sender and adds amount to recipient using the given Db
+
+// 执行转账
 func Transfer(db vm.StateDB, sender, recipient common.Address, amount *big.Int) {
 	db.SubBalance(sender, amount)
 	db.AddBalance(recipient, amount)

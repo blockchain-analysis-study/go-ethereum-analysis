@@ -239,7 +239,12 @@ func (st *StateTransition) TransitionDb() (ret []byte, usedGas uint64, failed bo
 		ret, _, st.gas, vmerr = evm.Create(sender, st.data, st.gas, st.value)
 	} else {
 		// Increment the nonce for the next transaction
+		// 先更新该账户下一次发交易应该发的 nonce
+		//
+		// todo 注意： evm.Create() 实在 func 里面做掉了
 		st.state.SetNonce(msg.From(), st.state.GetNonce(sender.Address())+1)
+
+		// todo 然后才是做 contract 调用
 		ret, st.gas, vmerr = evm.Call(sender, st.to(), st.data, st.gas, st.value)
 	}
 	if vmerr != nil {

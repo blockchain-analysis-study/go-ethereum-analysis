@@ -27,17 +27,31 @@ import (
 // Config are the configuration options for the Interpreter
 type Config struct {
 	// Debug enabled debugging Interpreter options
+	//
+	// 这是调试的标识
 	Debug bool
 	// Tracer is the op code logger
+	//
+	// 指令码的日志
 	Tracer Tracer
 	// NoRecursion disabled Interpreter call, callcode,
 	// delegate call and create.
+	//
+	/**
+	Config是解释器的配置选项
+	NoRecursion 禁用的解释器的 Call ，Callcode， DelegateCall和 Create
+	 */
 	NoRecursion bool
+
 	// Enable recording of SHA3/keccak preimages
+	// 启用记录SHA3 / keccak原像
+	// 1.8.x 已经废弃
 	EnablePreimageRecording bool
 	// JumpTable contains the EVM instruction table. This
 	// may be left uninitialised and will be set to the default
 	// table.
+	//
+	// JumpTable包含EVM指令表。 可以不进行初始化，并将其设置为默认表.
 	JumpTable [256]operation
 }
 
