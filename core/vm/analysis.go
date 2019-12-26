@@ -25,6 +25,12 @@ import (
 // destinations stores one map per contract (keyed by hash of code).
 // The maps contain an entry for each location of a JUMPDEST
 // instruction.
+//
+/**
+目的地 每个 contract存储 一个 map（以代码哈希键输入）。
+所有的maps 包含JUMPDEST指令每个位置的条目。
+ */
+// key: codeHash
 type destinations map[common.Hash]bitvec
 
 // has checks whether code has a JUMPDEST at dest.
@@ -39,6 +45,10 @@ func (d destinations) has(codehash common.Hash, code []byte, dest *big.Int) bool
 	m, analysed := d[codehash]
 	if !analysed {
 		m = codeBitmap(code)
+
+		/**
+		TODO 注意了， 这个就是将对应的 code 的bitvec 加入 map 中
+		 */
 		d[codehash] = m
 	}
 	return OpCode(code[udest]) == JUMPDEST && m.codeSegment(udest)
@@ -47,6 +57,10 @@ func (d destinations) has(codehash common.Hash, code []byte, dest *big.Int) bool
 // bitvec is a bit vector which maps bytes in a program.
 // An unset bit means the byte is an opcode, a set bit means
 // it's data (i.e. argument of PUSHxx).
+//
+// bitvec:
+// 是在程序中映射字节的bit向量。
+// 未设置的bit表示该字节是操作码，设置的bit表示其是数据（即PUSHxx的参数）。
 type bitvec []byte
 
 func (bits *bitvec) set(pos uint64) {

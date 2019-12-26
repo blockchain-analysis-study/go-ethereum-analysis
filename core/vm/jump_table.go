@@ -45,8 +45,11 @@ type operation struct {
 	// memorySize returns the memory size required for the operation
 	memorySize memorySizeFunc
 
+	// todo 指示该操作是否应停止进一步执行
 	halts   bool // indicates whether the operation should halt further execution
 	jumps   bool // indicates whether the program counter should not increment
+	// todo 确定这是否是状态修改操作 (9个指令)
+	//     涉及到的指令有 CREATE2， SSTORE， LOG0， LOG1， LOG2，LOG3， LOG4，  CREATE， SELFDESTRUCT
 	writes  bool // determines whether this a state modifying operation
 	valid   bool // indication whether the retrieved operation is valid and known
 	reverts bool // determines whether the operation reverts state (implicitly halts)

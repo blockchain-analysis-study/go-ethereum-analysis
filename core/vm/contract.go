@@ -45,10 +45,31 @@ type Contract struct {
 	// CallerAddress is the result of the caller which initialised this
 	// contract. However when the "call method" is delegated this value
 	// needs to be initialised to that of the caller's caller.
+	/**
+	CallerAddress是调用方初始化此 contract 的结果。 但是，在委托调用“调用方法”时，需要将此值初始化为调用方的调用方的addr。
+	普通调用:
+	A -> B, 则该值为 A
+
+	委托调用:
+	A -> B -> C, 则该值为 A
+	 */
 	CallerAddress common.Address
+
+	// todo 这个是指合约的调用方， 可能是一个 账户Addr 也可能是一个 contract实例
 	caller        ContractRef
+
+	// todo 这个只能是 合约本身的地址
 	self          ContractRef
 
+	/**
+	todo JUMPDEST分析的结果
+
+	destinations: 目的地
+
+	在 (d destinations) has() 中，有追加 bitvec
+
+	todo 貌似只有 opJump() 和 opJumpi() 中使用
+	 */
 	jumpdests destinations // result of JUMPDEST analysis.
 
 	Code     []byte
@@ -61,24 +82,44 @@ type Contract struct {
 
 	Args []byte
 
+	// todo 标识 当前调用是否是 代理调用， true 是
 	DelegateCall bool
 }
 
 // NewContract returns a new contract environment for the execution of EVM.
+//
+// NewContract: 返回用于执行EVM的新 contract环境
 func NewContract(caller ContractRef, object ContractRef, value *big.Int, gas uint64) *Contract {
+
+	// 实例化一个 contract 执行上下文
+	//
+	// caller: 合约的调用者 <可能是一个账户Addr 也可能是一个  contract >
+	// object: 被调用的合约账户
 	c := &Contract{CallerAddress: caller.Address(), caller: caller, self: object, Args: nil}
 
+	// 如果是合约调用合约的话
 	if parent, ok := caller.(*Contract); ok {
 		// Reuse JUMPDEST analysis from parent context if available.
+		//
+		// 从 `父上下文` 中重用JUMPDEST分析（如果有）
 		c.jumpdests = parent.jumpdests
 	} else {
+
+		// 如果不是 合约调合约 则，
 		c.jumpdests = make(destinations)
 	}
 
 	// Gas should be a pointer so it can safely be reduced through the run
 	// This pointer will be off the state transition
+	//
+	// Gas应该是指针，以便可以通过运行安全地减少气体
+	// 该指针将关闭状态转换
+	//
+	// 说白了，就是当前tx中给出的 gas
 	c.Gas = gas
 	// ensures a value is set
+	//
+	// 当前tx中的 value
 	c.value = value
 
 	return c
@@ -87,11 +128,19 @@ func NewContract(caller ContractRef, object ContractRef, value *big.Int, gas uin
 // AsDelegate sets the contract to be a delegate call and returns the current
 // contract (for chaining calls)
 func (c *Contract) AsDelegate() *Contract {
+
+	// 添加代理调用的标识
 	c.DelegateCall = true
 	// NOTE: caller must, at all times be a contract. It should never happen
 	// that caller is something other than a Contract.
 	parent := c.caller.(*Contract)
-	c.CallerAddress = parent.CallerAddress
+
+	/**
+	todo 将 tx 的sender 逐步传递下去， 即在 solidity 中拿到的 msg.sender 一定一直都是 tx 的sender
+	*/
+	c.CallerAddress = parent.CallerAddress // 将调用方的调用方Addr赋值给当前Addr
+
+	// 就是用调用方的 vaue
 	c.value = parent.value
 
 	return c

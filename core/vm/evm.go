@@ -41,6 +41,7 @@ type (
 )
 
 // run runs the given contract and takes care of running precompiles with a fallback to the byte code interpreter.
+// todo 执行合约， 其中 readOnly 标识符只有从 StaticCall 进来才会有， 表示无状态改变的对合约进行调用
 func run(evm *EVM, contract *Contract, input []byte) ([]byte, error) {
 	if contract.CodeAddr != nil {
 		precompiles := PrecompiledContractsHomestead
@@ -51,11 +52,16 @@ func run(evm *EVM, contract *Contract, input []byte) ([]byte, error) {
 			return RunPrecompiledContract(p, input, contract)
 		}
 	}
+
+	// todo 注意了， 执行器是 for 来调用的，所以， evm 的stack 是需要有 深度的
+	//    即： evm.depth
+	//  但是从代码中看得出来， interpreters 其实只有一个 interpreter
 	for _, interpreter := range evm.interpreters {
 		if interpreter.CanRun(contract.Code) {
 			if evm.interpreter != interpreter {
 				// Ensure that the interpreter pointer is set back
 				// to its current value upon return.
+				// todo 确保在返回时将解 释器指针设置回其当前值。 （干嘛的？ 不懂）
 				defer func(i Interpreter) {
 					evm.interpreter = i
 				}(evm.interpreter)
@@ -85,10 +91,10 @@ type Context struct {
 
 	// Message information
 	//
-	// 这些事 Msg 的 信息
+	// 这些是 Msg 的 信息
 	//
 
-	// 提供 ORIGIN `起源` 信息
+	// todo 实际上这个就是 msg.from (tx.from)
 	Origin   common.Address // Provides information for ORIGIN
 	// 提供 GASPRICE `gasPrice` 信息
 	GasPrice *big.Int       // Provides information for GASPRICE
@@ -127,7 +133,9 @@ type EVM struct {
 	// StateDB gives access to the underlying state
 	StateDB StateDB
 	// Depth is the current call stack
-	/** 当前调用栈深度 */
+	/** 当前调用 stack 深度 ， 最大是 1024 */
+	// todo 合约调用栈深度，主要用于合约跨合约时的调用深度，每一个合约执行的时候，都会进入执行器的 Run() 函数，
+	// 	进去的时候都会 depth++，在执行完该合约时会 depth--
 	depth int
 
 	// chainConfig contains information about the current chain
@@ -189,6 +197,10 @@ func (evm *EVM) Interpreter() Interpreter {
 // parameters. It also handles any necessary value transfer required and takes
 // the necessary steps to create accounts and reverses the state in case of an
 // execution error or failed value transfer.
+/**
+todo 这个是正常的 call 调用合约
+	但是如果是合约调合约的call， 那么也会进来
+*/
 func (evm *EVM) Call(caller ContractRef, addr common.Address, input []byte, gas uint64, value *big.Int) (ret []byte, leftOverGas uint64, err error) {
 
 	// todo 还是一上来就先判断是否禁用的解释器的 Call ，Callcode， DelegateCall和 Create
@@ -244,14 +256,19 @@ func (evm *EVM) Call(caller ContractRef, addr common.Address, input []byte, gas 
 		// todo 否则，一概创建 state 账户
 		evm.StateDB.CreateAccount(addr)
 	}
-
-	// todo 还是老做法，什么都不管，先来一波转账
+	// todo 只有 call 才做了转账
 	evm.Transfer(evm.StateDB, caller.Address(), to.Address(), value)
 
 	// Initialise a new contract and set the code that is to be used by the EVM.
 	// The contract is a scoped environment for this execution context only.
 	//
 	// 初始化一个合约执行的上下文环境 `contract`
+	/**
+	todo 创建一个 合约上下文，非常重要
+		因为，当合约调合约的时候也是用这个的。
+		A -> B 的时候
+		注意： 此时的 evm 还是 同一个evm ，所以里头需要用到 depth
+	*/
 	contract := NewContract(caller, to, value, gas)
 	// todo 先取出 合约的 code
 	contract.SetCallCode(&addr, evm.StateDB.GetCodeHash(addr), evm.StateDB.GetCode(addr))
@@ -298,6 +315,12 @@ func (evm *EVM) Call(caller ContractRef, addr common.Address, input []byte, gas 
 //
 // CallCode differs from Call in the sense that it executes the given address'
 // code with the caller as context.
+/**
+todo 注意了， CallCode 其实只会改变发起方的 state
+
+
+todo  说白了这个就是用来 使用：  被调用方的 code 来修改 发起方的值
+*/
 func (evm *EVM) CallCode(caller ContractRef, addr common.Address, input []byte, gas uint64, value *big.Int) (ret []byte, leftOverGas uint64, err error) {
 
 	// todo 还是一上来就先判断是否禁用的解释器的 Call ，Callcode， DelegateCall和 Create
@@ -318,15 +341,24 @@ func (evm *EVM) CallCode(caller ContractRef, addr common.Address, input []byte, 
 	if !evm.CanTransfer(evm.StateDB, caller.Address(), value) {
 		return nil, gas, ErrInsufficientBalance
 	}
-
+	// todo 可以看得出来，CallCode 并没有做 transfer 操作
 	var (
 		snapshot = evm.StateDB.Snapshot()
+
+		// todo ###########################
+		// todo ###########################
+		// todo ###########################
+		//
+		// todo 且， 使用了 caller 作为 to
 		to       = AccountRef(caller.Address())
 	)
 	// initialise a new contract and set the code that is to be used by the
 	// EVM. The contract is a scoped environment for this execution context
 	// only.
+	// 不做转账了，为什么还有 value ？？
 	contract := NewContract(caller, to, value, gas)
+
+	// todo 但是 却也是用了 被调用合约的 code
 	contract.SetCallCode(&addr, evm.StateDB.GetCodeHash(addr), evm.StateDB.GetCode(addr))
 
 	ret, err = run(evm, contract, input)
@@ -344,6 +376,11 @@ func (evm *EVM) CallCode(caller ContractRef, addr common.Address, input []byte, 
 //
 // DelegateCall differs from CallCode in the sense that it executes the given address'
 // code with the caller as context and the caller is set to the caller of the caller.
+/**
+todo 委托调用合约
+
+todo  说白了这个就是用来 使用：  被调用方的 code 来修改 发起方的值
+*/
 func (evm *EVM) DelegateCall(caller ContractRef, addr common.Address, input []byte, gas uint64) (ret []byte, leftOverGas uint64, err error) {
 
 	// todo 还是一上来就先判断是否禁用的解释器的 Call ，Callcode， DelegateCall和 Create
@@ -357,14 +394,27 @@ func (evm *EVM) DelegateCall(caller ContractRef, addr common.Address, input []by
 	if evm.depth > int(params.CallCreateDepth) {
 		return nil, gas, ErrDepth
 	}
+	// todo 这个，直接不判断 余额了
 
+	// todo  也不做转账
 	var (
 		snapshot = evm.StateDB.Snapshot()
+		// todo ###########################
+		// todo ###########################
+		// todo ###########################
+		//
+		// todo 且， 使用了 caller 作为 to
 		to       = AccountRef(caller.Address())
 	)
 
 	// Initialise a new contract and make initialise the delegate values
+	// todo ###########################
+	// todo ###########################
+	// todo ###########################
+	//
+	// todo 最主要一点是在创建合约上下文的时候， 使用了 AsDelegate()
 	contract := NewContract(caller, to, nil, gas).AsDelegate()
+	// todo 但是 却也是用了 被调用合约的 code
 	contract.SetCallCode(&addr, evm.StateDB.GetCodeHash(addr), evm.StateDB.GetCode(addr))
 
 	ret, err = run(evm, contract, input)
@@ -381,6 +431,9 @@ func (evm *EVM) DelegateCall(caller ContractRef, addr common.Address, input []by
 // as parameters while disallowing any modifications to the state during the call.
 // Opcodes that attempt to perform such modifications will result in exceptions
 // instead of performing the modifications.
+// todo 静态调用
+//
+// todo STATICCALL是CALL的新变体，它仅允许对其他合同（包括其本身）进行无状态更改的调用
 func (evm *EVM) StaticCall(caller ContractRef, addr common.Address, input []byte, gas uint64) (ret []byte, leftOverGas uint64, err error) {
 
 	// todo 还是一上来就先判断是否禁用的解释器的 Call ，Callcode， DelegateCall和 Create
@@ -401,8 +454,11 @@ func (evm *EVM) StaticCall(caller ContractRef, addr common.Address, input []byte
 		evm.interpreter.SetReadOnly(true)
 		defer func() { evm.interpreter.SetReadOnly(false) }()
 	}
+	// todo 不校验 余额
 
+	// todo  不作转账
 	var (
+		// todo 正常的和call一样 to就是to
 		to       = AccountRef(addr)
 		snapshot = evm.StateDB.Snapshot()
 	)
@@ -512,6 +568,8 @@ func (evm *EVM) create(caller ContractRef, code []byte, gas uint64, value *big.I
 	TODO 开始执行 部署，
 			部署成功后，返回 ret 和 err
 			ret 既是部署之后的 指令码集
+
+	todo 注意： 部署合约的时候， input 为nil
 	 */
 	ret, err := run(evm, contract, nil)
 
@@ -576,7 +634,7 @@ func (evm *EVM) Create(caller ContractRef, code []byte, gas uint64, value *big.I
 	// todo 直接使用当前 Caller 的Addr 和 nonce，生成 contract Addr
 	contractAddr = crypto.CreateAddress(caller.Address(), evm.StateDB.GetNonce(caller.Address()))
 
-	//
+	// todo 这里的 code 就是 tx.data
 	return evm.create(caller, code, gas, value, contractAddr)
 }
 
@@ -584,6 +642,13 @@ func (evm *EVM) Create(caller ContractRef, code []byte, gas uint64, value *big.I
 //
 // The different between Create2 with Create is Create2 uses sha3(0xff ++ msg.sender ++ salt ++ sha3(init_code))[12:]
 // instead of the usual sender-and-nonce-hash as the address where the contract is initialized at.
+/**
++
++
++ todo Create2与Create2之间的区别在于
++
++ todo Create2使用sha3（0xff ++ msg.sender ++盐++ sha3（init_code））[12：]代替了通常的 sender + nonce 作为初始化合同的地址的方式.
++ */
 func (evm *EVM) Create2(caller ContractRef, code []byte, gas uint64, endowment *big.Int, salt *big.Int) (ret []byte, contractAddr common.Address, leftOverGas uint64, err error) {
 	contractAddr = crypto.CreateAddress2(caller.Address(), common.BigToHash(salt), code)
 	return evm.create(caller, code, gas, endowment, contractAddr)
