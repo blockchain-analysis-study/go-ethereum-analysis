@@ -20,13 +20,21 @@
 package params
 
 // GasTable organizes gas prices for different ethereum phases.
+//
+// todo GasTable组织了不同以太坊阶段的天然气价格。
 type GasTable struct {
 	ExtcodeSize uint64
 	ExtcodeCopy uint64
 	ExtcodeHash uint64
 	Balance     uint64
+	// 表示 加载 State数据时的gas固定消耗
 	SLoad       uint64
+
+	// 这个表示 四种跨合约调用时的必须gas消耗
+	// 直接随着 gasTable 走
 	Calls       uint64
+
+	// 表示 自杀的固定gas消耗
 	Suicide     uint64
 
 	ExpByte uint64
@@ -36,6 +44,10 @@ type GasTable struct {
 	// not exist. This logic is similar
 	// to call. May be left nil. Nil means
 	// not charged.
+	//
+	/**
+	如果退款的帐户不存在，则会发生CreateBySuicide。 此逻辑类似于Call。 可能为零。 0: 表示未收费。
+	 */
 	CreateBySuicide uint64
 }
 

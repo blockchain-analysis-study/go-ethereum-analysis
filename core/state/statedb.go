@@ -31,9 +31,12 @@ import (
 	"github.com/go-ethereum-analysis/trie"
 )
 
+// 修订版
+//
+// 表示 每一个state变更对应的 `一组日志帐条目` 组成的旅程碑
 type revision struct {
-	id           int
-	journalIndex int
+	id           int // 里程碑Id
+	journalIndex int // 日志账条目 组的索引 <用每一组生成时的 长度作为 索引>
 }
 
 var (
@@ -49,12 +52,24 @@ var (
 // nested states. It's the general query interface to retrieve:
 // * Contracts
 // * Accounts
+//
+//
+// todo State中的db是cachingDB
+//
+// todo State中的 trie是 cachedTrie
+// todo Storage中的 trie是 SecureTrie
 type StateDB struct {
+	//  todo 这个的实现是 cachingDB
 	db   Database
+
+	// state的trie
 	trie Trie
 
 	// This map holds 'live' objects, which will get modified while processing a state transition.
+	//
+	// 此map包含“活动”对象，在处理state转换时会对其进行修改。
 	stateObjects      map[common.Address]*stateObject
+	// 最近有过变动的账户地址
 	stateObjectsDirty map[common.Address]struct{}
 
 	// DB error.
@@ -62,22 +77,37 @@ type StateDB struct {
 	// unable to deal with database-level errors. Any error that occurs
 	// during a database read is memoized here and will eventually be returned
 	// by StateDB.Commit.
+	//
+	/**
+	DB err。
+	State对象由无法处理数据库级err的 `共识核心` 和`VM` 使用。 在数据库中读取期间发生的任何 err 都将在此处存储，并最终由StateDB.Commit返回。
+	 */
 	dbErr error
 
 	// The refund counter, also used by state transitioning.
+	//
+	// refund计数器，也用于State转换。
 	refund uint64
 
+	// 用来给log用的
 	thash, bhash common.Hash
 	txIndex      int
+	// 记录log的
 	logs         map[common.Hash][]*types.Log
 	logSize      uint
 
+
+	//
 	preimages map[common.Hash][]byte
 
 	// Journal of state modifications. This is the backbone of
 	// Snapshot and RevertToSnapshot.
+	//
+	// State修改杂志。 这是Snapshot和RevertToSnapshot的骨干。
 	journal        *journal
+	// （修订版）表示 每一个state变更对应的 `一组日志帐条目` 组成的旅程碑
 	validRevisions []revision
+	// 下一个修订版Id
 	nextRevisionId int
 
 	lock sync.Mutex
@@ -107,18 +137,24 @@ func New(root common.Hash, db Database) (*StateDB, error) {
 }
 
 // setError remembers the first non-nil error it is called with.
+//
+// setError: 记住第一个非零错误
 func (self *StateDB) setError(err error) {
 	if self.dbErr == nil {
 		self.dbErr = err
 	}
 }
 
+//
 func (self *StateDB) Error() error {
 	return self.dbErr
 }
 
 // Reset clears out all ephemeral state objects from the state db, but keeps
 // the underlying state trie to avoid reloading data for the next operations.
+//
+// Reset:
+//  从state db中清除所有 临时 state对象，但保留基础 state Trie，以避免为下一个操作重新加载数据。
 func (self *StateDB) Reset(root common.Hash) error {
 	tr, err := self.db.OpenTrie(root)
 	if err != nil {
@@ -133,11 +169,13 @@ func (self *StateDB) Reset(root common.Hash) error {
 	self.logs = make(map[common.Hash][]*types.Log)
 	self.logSize = 0
 	self.preimages = make(map[common.Hash][]byte)
-	self.clearJournalAndRefund()
+	self.clearJournalAndRefund() // 清空所有 日志账条目 和 修订版 和 refund计数器
 	return nil
 }
 
 func (self *StateDB) AddLog(log *types.Log) {
+
+	// 往 `State修改杂志` 中添加 log变更的 日志账条目
 	self.journal.append(addLogChange{txhash: self.thash})
 
 	log.TxHash = self.thash
@@ -161,6 +199,8 @@ func (self *StateDB) Logs() []*types.Log {
 }
 
 // AddPreimage records a SHA3 preimage seen by the VM.
+//
+// AddPreimage: 记录VM看到的SHA3预映像。
 func (self *StateDB) AddPreimage(hash common.Hash, preimage []byte) {
 	if _, ok := self.preimages[hash]; !ok {
 		self.journal.append(addPreimageChange{hash: hash})
@@ -171,6 +211,8 @@ func (self *StateDB) AddPreimage(hash common.Hash, preimage []byte) {
 }
 
 // Preimages returns a list of SHA3 preimages that have been submitted.
+//
+// Preimages: 返回已提交的SHA3原像的列表。
 func (self *StateDB) Preimages() map[common.Hash][]byte {
 	return self.preimages
 }
@@ -327,11 +369,17 @@ func (self *StateDB) SetState(addr common.Address, key, value common.Hash) {
 //
 // The account's state object is still available until the state is committed,
 // getStateObject will return a non-nil account after Suicide.
+//
+// todo 账户自杀
 func (self *StateDB) Suicide(addr common.Address) bool {
+
+	// 获取账户信息
 	stateObject := self.getStateObject(addr)
 	if stateObject == nil {
 		return false
 	}
+
+	// todo  添加 账户自杀的 日志账条目
 	self.journal.append(suicideChange{
 		account:     &addr,
 		prev:        stateObject.suicided,
@@ -358,9 +406,14 @@ func (self *StateDB) updateStateObject(stateObject *stateObject) {
 }
 
 // deleteStateObject removes the given object from the state trie.
+//
+// deleteStateObject: 从State Trie中移除给定的对象
 func (self *StateDB) deleteStateObject(stateObject *stateObject) {
+	// 将账户标识位 删除
 	stateObject.deleted = true
 	addr := stateObject.Address()
+
+	// 将 State Trie 上的对应该账户的信息 移除
 	self.setError(self.trie.TryDelete(addr[:]))
 }
 
@@ -507,6 +560,8 @@ func (self *StateDB) Copy() *StateDB {
 }
 
 // Snapshot returns an identifier for the current revision of the state.
+//
+// 每一次记录快照的时候，都是 定格 日志账条目的 里程碑 修订版
 func (self *StateDB) Snapshot() int {
 	id := self.nextRevisionId
 	self.nextRevisionId++
@@ -517,12 +572,16 @@ func (self *StateDB) Snapshot() int {
 // RevertToSnapshot reverts all state changes made since the given revision.
 func (self *StateDB) RevertToSnapshot(revid int) {
 	// Find the snapshot in the stack of valid snapshots.
+	//
+	// todo 从 修订版数组中找到对饮搞得修订版在数组中的 `下标`
 	idx := sort.Search(len(self.validRevisions), func(i int) bool {
 		return self.validRevisions[i].id >= revid
 	})
 	if idx == len(self.validRevisions) || self.validRevisions[idx].id != revid {
 		panic(fmt.Errorf("revision id %v cannot be reverted", revid))
 	}
+
+	// todo 返回对应的修订版索引 <也就是当前 日志帐条目组的 长度>
 	snapshot := self.validRevisions[idx].journalIndex
 
 	// Replay the journal to undo changes and remove invalidated snapshots
@@ -537,8 +596,17 @@ func (self *StateDB) GetRefund() uint64 {
 
 // Finalise finalises the state by removing the self destructed objects
 // and clears the journal as well as the refunds.
+//
+/**
+Finalize:
+通过删除 suicided对象来最终确定State，并清除 日记帐<journal> 以及 refunds计数器。
+ */
 func (s *StateDB) Finalise(deleteEmptyObjects bool) {
+
+	// todo 这一步很重要， 遍历所有最近有变动的 账户addr
 	for addr := range s.journal.dirties {
+
+		// todo 判断最近的 变更  日志账条目 中对应的 账户Addr 是否属于 最近活动的账户
 		stateObject, exist := s.stateObjects[addr]
 		if !exist {
 			// ripeMD is 'touched' at block 1714175, in tx 0x1237f737031e40bcde4a8b7e717b2d15e3ecadfe49bb1bbc71ee9deb09c6fcf2
@@ -550,21 +618,29 @@ func (s *StateDB) Finalise(deleteEmptyObjects bool) {
 			continue
 		}
 
+		// todo 如果账户自杀了 || (最近有变更 && 需要将空账户删除 && 账户为空账户)
 		if stateObject.suicided || (deleteEmptyObjects && stateObject.empty()) {
 			s.deleteStateObject(stateObject)
-		} else {
+		} else { // todo 否则 更新账户的 storage root 和 state的Trie 中该账户信息
 			stateObject.updateRoot(s.db)
 			s.updateStateObject(stateObject)
 		}
 		s.stateObjectsDirty[addr] = struct{}{}
 	}
 	// Invalidate journal because reverting across transactions is not allowed.
-	s.clearJournalAndRefund()
+	s.clearJournalAndRefund() // 清空所有 日志账条目 和 修订版 和 refund计数器
 }
 
 // IntermediateRoot computes the current root hash of the state trie.
 // It is called in between transactions to get the root hash that
 // goes into transaction receipts.
+//
+/**
+IntermediateRoot:
+	计算State Trie的当前 root Hash。 在tx之间调用它以获取进入交易 receipt的 root哈希。
+	说白了，每个tx都需要调用，是因为每个tx都产生receipt，而state的root 是生成receipt的重要一部分
+	todo 当然这都发生在 拜占庭分叉之前， 在此之后receipt 就不需要实时的root了
+ */
 func (s *StateDB) IntermediateRoot(deleteEmptyObjects bool) common.Hash {
 	s.Finalise(deleteEmptyObjects)
 	return s.trie.Hash()
@@ -572,12 +648,19 @@ func (s *StateDB) IntermediateRoot(deleteEmptyObjects bool) common.Hash {
 
 // Prepare sets the current transaction hash and index and block hash which is
 // used when the EVM emits new state logs.
+//
+/**
+Prepare: 设置当前 txHash以及 txIndex和 blockHash，当EVM发出新的状态log时将使用它们。
+		只在 tx 被执行之前调用
+ */
 func (self *StateDB) Prepare(thash, bhash common.Hash, ti int) {
 	self.thash = thash
 	self.bhash = bhash
 	self.txIndex = ti
 }
 
+
+// 清空所有 日志账条目 和 修订版 和 refund计数器
 func (s *StateDB) clearJournalAndRefund() {
 	s.journal = newJournal()
 	s.validRevisions = s.validRevisions[:0]
@@ -586,35 +669,62 @@ func (s *StateDB) clearJournalAndRefund() {
 
 // Commit writes the state to the underlying in-memory trie database.
 func (s *StateDB) Commit(deleteEmptyObjects bool) (root common.Hash, err error) {
-	defer s.clearJournalAndRefund()
 
+
+	defer s.clearJournalAndRefund() // 清空所有 日志账条目 和 修订版 和 refund计数器
+
+	// 先遍历当前所有  日志账条目，
+	// 更新 记录最近变更账户的 map
 	for addr := range s.journal.dirties {
 		s.stateObjectsDirty[addr] = struct{}{}
 	}
 	// Commit objects to the trie.
+	//
+	// 逐个处理最近活动的 账户
 	for addr, stateObject := range s.stateObjects {
+
+		// 获取 账户 最近是否变更
 		_, isDirty := s.stateObjectsDirty[addr]
 		switch {
+
+		// todo 如果账户自杀了 || (最近有变更 && 需要将空账户删除 && 账户为空账户)
 		case stateObject.suicided || (isDirty && deleteEmptyObjects && stateObject.empty()):
 			// If the object has been removed, don't bother syncing it
 			// and just mark it for deletion in the trie.
+			//
+			// 将账户的标识位 删除
 			s.deleteStateObject(stateObject)
+
+		// todo 如果只是账户有变更
 		case isDirty:
 			// Write any contract code associated with the state object
+			//
+			// code 不为空 且 code 最近有变更
+			// todo 写入与状态对象关联的任何合约code
 			if stateObject.code != nil && stateObject.dirtyCode {
+
+				// 将code 写入 db
 				s.db.TrieDB().InsertBlob(common.BytesToHash(stateObject.CodeHash()), stateObject.code)
+
+				// 将code 变更标识位 重置
 				stateObject.dirtyCode = false
 			}
 			// Write any storage changes in the state object to its storage trie.
+			//
+			// 将 stateObject 中的所有 storage 更改写入其 storage Trie。
 			if err := stateObject.CommitTrie(s.db); err != nil {
 				return common.Hash{}, err
 			}
 			// Update the object in the main account trie.
+			//
+			// 更新State Trie中的 stateObject
 			s.updateStateObject(stateObject)
 		}
 		delete(s.stateObjectsDirty, addr)
 	}
 	// Write trie changes.
+	//
+	// 将 State中的变动 写入db
 	root, err = s.trie.Commit(func(leaf []byte, parent common.Hash) error {
 		var account Account
 		if err := rlp.DecodeBytes(leaf, &account); err != nil {

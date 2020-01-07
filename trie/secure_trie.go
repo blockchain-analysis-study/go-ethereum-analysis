@@ -55,6 +55,8 @@ func NewSecure(root common.Hash, db *Database, cachelimit uint16) (*SecureTrie, 
 	if db == nil {
 		panic("trie.NewSecure called without a database")
 	}
+
+	// todo 根据 db 和 rootHash， 从 db 加载一颗 trie
 	trie, err := New(root, db)
 	if err != nil {
 		return nil, err

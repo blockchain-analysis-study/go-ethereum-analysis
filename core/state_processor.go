@@ -57,7 +57,7 @@ func NewStateProcessor(config *params.ChainConfig, bc *BlockChain, engine consen
 // returns the amount of gas that was used in the process. If any of the
 // transactions failed to execute due to insufficient gas it will return an error.
 
-/** tx 执行入口 */
+/** tx 执行入口 (这里主要是 block 重发时进来的) */
 func (p *StateProcessor) Process(block *types.Block, statedb *state.StateDB, cfg vm.Config) (types.Receipts, []*types.Log, uint64, error) {
 	var (
 		receipts types.Receipts
@@ -77,7 +77,7 @@ func (p *StateProcessor) Process(block *types.Block, statedb *state.StateDB, cfg
 	for i, tx := range block.Transactions() {
 		// 每一次执行前在state中记录当前txHash、BlockHash、txIndex 等，用做logs
 		statedb.Prepare(tx.Hash(), block.Hash(), i)
-		// 执行交易
+		// todo 真正执行交易
 		receipt, _, err := ApplyTransaction(p.config, p.bc, nil, gp, statedb, header, tx, usedGas, cfg)
 		if err != nil {
 			return nil, nil, 0, err
@@ -116,6 +116,8 @@ func ApplyTransaction(config *params.ChainConfig, bc ChainContext, author *commo
 	}
 	// Update the state with pending changes
 	var root []byte
+
+	// todo 注意这里， 在拜占庭分叉之后， tx 的receipt 中不在需要实时的 root 了
 	if config.IsByzantium(header.Number) {
 		statedb.Finalise(true)
 	} else {

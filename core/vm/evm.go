@@ -57,6 +57,9 @@ func run(evm *EVM, contract *Contract, input []byte) ([]byte, error) {
 	//    即： evm.depth
 	//  但是从代码中看得出来， interpreters 其实只有一个 interpreter
 	for _, interpreter := range evm.interpreters {
+		if input == nil {
+			interpreter.CanRun(contract.Code)
+		}
 		if interpreter.CanRun(contract.Code) {
 			if evm.interpreter != interpreter {
 				// Ensure that the interpreter pointer is set back
@@ -155,6 +158,11 @@ type EVM struct {
 	// callGasTemp holds the gas available for the current call. This is needed because the
 	// available gas is calculated in gasCall* according to the 63/64 rule and later
 	// applied in opCall*.
+	//
+	/**
+	callGasTemp保留当前 调用可用的Gas <未被使用的>。 这是必需的，
+	因为可用Gas是根据【63/64规则】在gasCall *中计算的，后来又在opCall *中应用。
+	 */
 	callGasTemp uint64
 }
 
@@ -225,7 +233,7 @@ func (evm *EVM) Call(caller ContractRef, addr common.Address, input []byte, gas 
 	var (
 		// 拿到 合约的地址
 		to       = AccountRef(addr)
-		// 获取一个state 的快照， 为了回滚用
+		// 获取一个state 的快照， 为了回滚用， todo  返回了生成的  日志帐条目 修订版的 Id
 		snapshot = evm.StateDB.Snapshot()
 	)
 
@@ -298,7 +306,11 @@ func (evm *EVM) Call(caller ContractRef, addr common.Address, input []byte, gas 
 	//
 	// todo 处理 err
 	if err != nil {
+
+		// todo  根据快照 Id <修订版Id> 做State回滚
 		evm.StateDB.RevertToSnapshot(snapshot)
+
+		// todo 只有当 err 不是 执行 `Revert` 时，则将全部的gas消耗
 		if err != errExecutionReverted {
 			contract.UseGas(contract.Gas)
 		}
@@ -363,7 +375,11 @@ func (evm *EVM) CallCode(caller ContractRef, addr common.Address, input []byte, 
 
 	ret, err = run(evm, contract, input)
 	if err != nil {
+
+		// todo  根据快照 Id <修订版Id> 做State回滚
 		evm.StateDB.RevertToSnapshot(snapshot)
+
+		// todo 只有当 err 不是 执行 `Revert` 时，则将全部的gas消耗
 		if err != errExecutionReverted {
 			contract.UseGas(contract.Gas)
 		}
@@ -419,7 +435,11 @@ func (evm *EVM) DelegateCall(caller ContractRef, addr common.Address, input []by
 
 	ret, err = run(evm, contract, input)
 	if err != nil {
+
+		// todo  根据快照 Id <修订版Id> 做State回滚
 		evm.StateDB.RevertToSnapshot(snapshot)
+
+		// todo 只有当 err 不是 执行 `Revert` 时，则将全部的gas消耗
 		if err != errExecutionReverted {
 			contract.UseGas(contract.Gas)
 		}
@@ -473,7 +493,11 @@ func (evm *EVM) StaticCall(caller ContractRef, addr common.Address, input []byte
 	// when we're in Homestead this also counts for code storage gas errors.
 	ret, err = run(evm, contract, input)
 	if err != nil {
+
+		// todo  根据快照 Id <修订版Id> 做State回滚
 		evm.StateDB.RevertToSnapshot(snapshot)
+
+		// todo 只有当 err 不是 执行 `Revert` 时，则将全部的gas消耗
 		if err != errExecutionReverted {
 			contract.UseGas(contract.Gas)
 		}
@@ -607,8 +631,11 @@ func (evm *EVM) create(caller ContractRef, code []byte, gas uint64, value *big.I
 	// above we revert to the snapshot and consume any gas remaining. Additionally
 	// when we're in homestead this also counts for code storage gas errors.
 	if maxCodeSizeExceeded || (err != nil && (evm.ChainConfig().IsHomestead(evm.BlockNumber) || err != ErrCodeStoreOutOfGas)) {
-		// todo 有问题，则回滚state
+
+		// todo  根据快照 Id <修订版Id> 做State回滚
 		evm.StateDB.RevertToSnapshot(snapshot)
+
+		// todo 只有当 err 不是 执行 `Revert` 时，则将全部的gas消耗
 		if err != errExecutionReverted {
 			contract.UseGas(contract.Gas)
 		}

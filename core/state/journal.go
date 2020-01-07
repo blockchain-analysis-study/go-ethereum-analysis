@@ -24,19 +24,33 @@ import (
 
 // journalEntry is a modification entry in the state change journal that can be
 // reverted on demand.
+//
+// journalEntry是 `State更改日记帐` 中的修改条目，可以按需还原。
 type journalEntry interface {
 	// revert undoes the changes introduced by this journal entry.
+	//
+	// revert: 撤消此日记帐分录引入的更改。
 	revert(*StateDB)
 
 	// dirtied returns the Ethereum address modified by this journal entry.
+	//
+	// dirtied: 返回由该日志条目修改的以太坊地址。
 	dirtied() *common.Address
 }
 
 // journal contains the list of state modifications applied since the last state
 // commit. These are tracked to be able to be reverted in case of an execution
 // exception or revertal request.
+//
+/**
+journal包含自上次提交State以来应用的State修改列表。 在执行异常或恢复请求的情况下，将跟踪这些 `日志账条目` 以使其能够恢复。
+ */
 type journal struct {
+	// 日记跟踪的当前更改
 	entries []journalEntry         // Current changes tracked by the journal
+
+	// 最近变更的账户 和 更改次数
+	// map[账户]变更次数
 	dirties map[common.Address]int // Dirty accounts and the number of changes
 }
 
@@ -48,8 +62,13 @@ func newJournal() *journal {
 }
 
 // append inserts a new modification entry to the end of the change journal.
+//
+//
 func (j *journal) append(entry journalEntry) {
+	// todo 往 `State的修改杂志` 中添加 日志账条目
 	j.entries = append(j.entries, entry)
+
+	// todo 如果对应的   日志账条目 有 addr 存在的话，则记录下最近日志帐条目中对应的账户 Addr和变更次数
 	if addr := entry.dirtied(); addr != nil {
 		j.dirties[*addr]++
 	}
@@ -58,6 +77,8 @@ func (j *journal) append(entry journalEntry) {
 // revert undoes a batch of journalled modifications along with any reverted
 // dirty handling too.
 func (j *journal) revert(statedb *StateDB, snapshot int) {
+
+	// todo 遍历出最近存入的 所有  日志账条目实例
 	for i := len(j.entries) - 1; i >= snapshot; i-- {
 		// Undo the changes made by the operation
 		j.entries[i].revert(statedb)
@@ -84,14 +105,29 @@ func (j *journal) length() int {
 	return len(j.entries)
 }
 
+// todo ###############################
+// todo ###############################
+// todo ###############################
+// todo ###############################
+//
+// todo 下面这些都是 `journalEntry` 的实现
+// todo journalEntry 是 `State更改日记帐` 中的修改条目，可以按需还原。
 type (
 	// Changes to the account trie.
+	//
+	// 更改帐户尝试。
+
+	// todo 创建账户的 日志帐条目
 	createObjectChange struct {
 		account *common.Address
 	}
+
+	// todo 重置账户的 日志帐条目
 	resetObjectChange struct {
 		prev *stateObject
 	}
+
+	// todo 账户自杀的 日志账条目
 	suicideChange struct {
 		account     *common.Address
 		prev        bool // whether account had already suicided
@@ -99,33 +135,53 @@ type (
 	}
 
 	// Changes to individual accounts.
+	//
+	// 更改个人帐户。
+
+	// todo 余额变更的 日志帐条目
 	balanceChange struct {
 		account *common.Address
 		prev    *big.Int
 	}
+
+	// todo nonce变更的 日志帐条目
 	nonceChange struct {
 		account *common.Address
 		prev    uint64
 	}
+
+	// todo 账户的存储数据变更的 日志账条目
 	storageChange struct {
 		account       *common.Address
 		key, prevalue common.Hash
 	}
+
+	// todo 账户的code变更的 日志账条目
 	codeChange struct {
 		account            *common.Address
 		prevcode, prevhash []byte
 	}
 
 	// Changes to other state values.
+	//
+	// 更改为其他状态值。
+
+	// todo 需要退款的 日志账条目
 	refundChange struct {
 		prev uint64
 	}
+
+	// todo 增加了 log的 日志账条目
 	addLogChange struct {
 		txhash common.Hash
 	}
+
+	// todo preimage数据变更的 日志账条目
 	addPreimageChange struct {
 		hash common.Hash
 	}
+
+	// todo 这个还没启用 ...
 	touchChange struct {
 		account   *common.Address
 		prev      bool

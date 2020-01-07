@@ -45,6 +45,7 @@ func (self Storage) String() (str string) {
 	return
 }
 
+// 值拷贝
 func (self Storage) Copy() Storage {
 	cpy := make(Storage)
 	for key, value := range self {
@@ -61,9 +62,16 @@ func (self Storage) Copy() Storage {
 // Account values can be accessed and modified through the object.
 // Finally, call CommitTrie to write the modified storage trie into a database.
 type stateObject struct {
+	// 当前账户对应的Addr
 	address  common.Address
+
+	// 当前账户Addr的Hash
 	addrHash common.Hash // hash of ethereum address of the account
+
+	// todo 账户相关的真正实体
 	data     Account
+
+	// 外头 statedb的引用
 	db       *StateDB
 
 	// DB error.
@@ -71,34 +79,69 @@ type stateObject struct {
 	// unable to deal with database-level errors. Any error that occurs
 	// during a database read is memoized here and will eventually be returned
 	// by StateDB.Commit.
+	/**
+	DB err。
+	State对象由无法处理数据库级err的 `共识核心` 和`VM` 使用。 在数据库中读取期间发生的任何 err 都将在此处存储，并最终由StateDB.Commit返回。
+	*/
 	dbErr error
 
 	// Write caches.
+	//
+	// 写缓存
+	//
+	// storage trie，首次访问时变为非零
 	trie Trie // storage trie, which becomes non-nil on first access
+	// contract bytecode, 加载代码时设置
 	code Code // contract bytecode, which gets set when code is loaded
 
+	// Storage 的条目缓存，以避免重复读取 <从db中加载出来的>
 	cachedStorage Storage // Storage entry cache to avoid duplicate reads
+	// 需要刷新到磁盘的 Storage条目
 	dirtyStorage  Storage // Storage entries that need to be flushed to disk
 
 	// Cache flags.
 	// When an object is marked suicided it will be delete from the trie
 	// during the "update" phase of the state transition.
+	//
+	// 	缓存标志。
+	//	当一个对象被标记为 suicided对象时，它将在 state转换的“update”阶段从trie中删除。
+	//
+	// 	如果代码已更新，则为true
 	dirtyCode bool // true if the code was updated
+
+	// 账户自杀标识
 	suicided  bool
+
+	// 账户删除标识 <注意： 自杀时，还未被删除的>
 	deleted   bool
 }
 
 // empty returns whether the account is considered empty.
+//
+// 判断某个 账户是否为空账户
 func (s *stateObject) empty() bool {
+
+	// 如果 nonce ==0 且 余额为0 且 代码Hash为空 则是个 空账户
 	return s.data.Nonce == 0 && s.data.Balance.Sign() == 0 && bytes.Equal(s.data.CodeHash, emptyCodeHash)
 }
 
 // Account is the Ethereum consensus representation of accounts.
 // These objects are stored in the main account trie.
+//
+/**
+账户是以太坊账户的共识表示。
+这些对象存储在主帐户trie中。
+ */
 type Account struct {
+	// 账户的 nonce， 标识下一次发tx时需要用到的值
 	Nonce    uint64
+	// 账户的余额
 	Balance  *big.Int
+
+	// 账户的 k-v storage trie 的root
 	Root     common.Hash // merkle root of the storage trie
+
+	// 只有合约账户才会有的， 合约账户的codeHash
 	CodeHash []byte
 }
 
@@ -147,12 +190,19 @@ func (c *stateObject) touch() {
 	}
 }
 
+// 获取一颗 trie
+// todo 根据 root 从db中加载
 func (c *stateObject) getTrie(db Database) Trie {
 	if c.trie == nil {
 		var err error
+
+		// todo 根据 root Hash，从 db中加载 trie
+		//      主要是想要这个 trie
 		c.trie, err = db.OpenStorageTrie(c.addrHash, c.data.Root)
 		if err != nil {
+			// 如果有err，则根据 zeroHash 加载一颗 empty trie
 			c.trie, _ = db.OpenStorageTrie(c.addrHash, common.Hash{})
+			// 并将err 设置出去
 			c.setError(fmt.Errorf("can't create storage trie: %v", err))
 		}
 	}
@@ -184,6 +234,8 @@ func (self *stateObject) GetState(db Database, key common.Hash) common.Hash {
 
 // SetState updates a value in account storage.
 func (self *stateObject) SetState(db Database, key, value common.Hash) {
+
+	// todo 添加 账户存储变动的  日志账条目
 	self.db.journal.append(storageChange{
 		account:  &self.address,
 		key:      key,
@@ -198,6 +250,9 @@ func (self *stateObject) setState(key, value common.Hash) {
 }
 
 // updateTrie writes cached storage modifications into the object's storage trie.
+//
+// updateTrie:
+//	将缓存的存储修改 写入对象的存储树
 func (self *stateObject) updateTrie(db Database) Trie {
 	tr := self.getTrie(db)
 	for key, value := range self.dirtyStorage {
@@ -214,8 +269,12 @@ func (self *stateObject) updateTrie(db Database) Trie {
 }
 
 // UpdateRoot sets the trie root to the current root hash of
+//
+// UpdateRoot:
+// 将Trie根设置为的当前根哈希
 func (self *stateObject) updateRoot(db Database) {
 	self.updateTrie(db)
+	// 计算root Hash
 	self.data.Root = self.trie.Hash()
 }
 

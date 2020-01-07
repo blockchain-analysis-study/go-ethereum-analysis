@@ -38,6 +38,8 @@ const (
 	QuadCoeffDiv          uint64 = 512   // Divisor for the quadratic particle of the memory cost equation.
 	SstoreSetGas          uint64 = 20000 // Once per SLOAD operation.
 	LogDataGas            uint64 = 8     // Per byte in a LOG* operation's data.
+
+	// 调用 <Call 和 CallCode 调用>开始时，提供的 免费gas <补贴？>
 	CallStipend           uint64 = 2300  // Free gas given at beginning of call.
 
 	Sha3Gas          uint64 = 30    // Once per SHA3 operation.

@@ -252,10 +252,20 @@ func (st *StateTransition) TransitionDb() (ret []byte, usedGas uint64, failed bo
 		// The only possible consensus-error would be if there wasn't
 		// sufficient balance to make the transfer happen. The first
 		// balance transfer may never fail.
+		// A possible consensus error is if there is not enough balance to complete the transfer. The first balance transfer may never fail.
+		// There are also times when VMs are aborted.
+		/**
+		todo 唯一可能的 consensus-error是，
+			如果没有足够的余额来完成转移。 第一次余额转移可能永远不会失败。
+		 */
 		if vmerr == vm.ErrInsufficientBalance {
 			return nil, 0, false, vmerr
 		}
 	}
+	// todo  可以看出只有当 余额不足err 时，才不会消耗gas，其他的都消耗
+
+
+	// 退还多余的 gas
 	st.refundGas()
 	st.state.AddBalance(st.evm.Coinbase, new(big.Int).Mul(new(big.Int).SetUint64(st.gasUsed()), st.gasPrice))
 
@@ -264,6 +274,8 @@ func (st *StateTransition) TransitionDb() (ret []byte, usedGas uint64, failed bo
 
 func (st *StateTransition) refundGas() {
 	// Apply refund counter, capped to half of the used gas.
+	//
+	// 申请退款柜台，上限为已用 gas 的一半。
 	refund := st.gasUsed() / 2
 	if refund > st.state.GetRefund() {
 		refund = st.state.GetRefund()
@@ -271,15 +283,21 @@ func (st *StateTransition) refundGas() {
 	st.gas += refund
 
 	// Return ETH for remaining gas, exchanged at the original rate.
+	//
+	// 返回ETH剩余的gas，以原始汇率 兑换。
 	remaining := new(big.Int).Mul(new(big.Int).SetUint64(st.gas), st.gasPrice)
 	st.state.AddBalance(st.msg.From(), remaining)
 
 	// Also return remaining gas to the block gas counter so it is
 	// available for the next transaction.
+	//
+	// 还要将剩余的gas返回到 block gas 计数器，以便下次交易使用。
 	st.gp.AddGas(st.gas)
 }
 
 // gasUsed returns the amount of gas used up by the state transition.
+//
+// todo gasUsed: 返回状态转换用完的 gas 数量。
 func (st *StateTransition) gasUsed() uint64 {
 	return st.initialGas - st.gas
 }

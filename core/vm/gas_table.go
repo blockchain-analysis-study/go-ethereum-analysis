@@ -330,36 +330,54 @@ func gasExp(gt params.GasTable, evm *EVM, contract *Contract, stack *Stack, mem 
 	return gas, nil
 }
 
+// todo  计算 跨合约调用 Call 的gas 消耗
 func gasCall(gt params.GasTable, evm *EVM, contract *Contract, stack *Stack, mem *Memory, memorySize uint64) (uint64, error) {
 	var (
+
+		// 先获取 四种 跨合约调用的 固定消耗gas
 		gas            = gt.Calls
+
+		// 是否有 转账行为
 		transfersValue = stack.Back(2).Sign() != 0
+
+		// to的地址
 		address        = common.BigToAddress(stack.Back(1))
 		eip158         = evm.ChainConfig().IsEIP158(evm.BlockNumber)
 	)
 	if eip158 {
+		// 如果是 转账且 to的地址是个空账户
+		// 需要追加创建账户的gas 消耗
 		if transfersValue && evm.StateDB.Empty(address) {
 			gas += params.CallNewAccountGas
 		}
 	} else if !evm.StateDB.Exist(address) {
 		gas += params.CallNewAccountGas
 	}
+
+	// 如果是转账还需要添加新的账户转账的固定 gas消耗
 	if transfersValue {
 		gas += params.CallValueTransferGas
 	}
+
+	// 根据 memory 计算出本次memory的使用对应的gas消耗
 	memoryGas, err := memoryGasCost(mem, memorySize)
 	if err != nil {
 		return 0, err
 	}
 	var overflow bool
+	// 累加 gas消耗
 	if gas, overflow = math.SafeAdd(gas, memoryGas); overflow {
 		return 0, errGasUintOverflow
 	}
 
+
+	// 根据当前合约上下文的可用Gas <contract.Gas> 和 本次累加的gas消耗计算出剩下还有多少可用gas
 	evm.callGasTemp, err = callGas(gt, contract.Gas, gas, stack.Back(0))
 	if err != nil {
 		return 0, err
 	}
+
+	// todo 这里为什么用 可用的  callGasTemp + gas 作为 本次调用的 gas消耗 ？
 	if gas, overflow = math.SafeAdd(gas, evm.callGasTemp); overflow {
 		return 0, errGasUintOverflow
 	}
@@ -398,10 +416,13 @@ func gasRevert(gt params.GasTable, evm *EVM, contract *Contract, stack *Stack, m
 	return memoryGasCost(mem, memorySize)
 }
 
+// 计算自杀指令的gas
 func gasSuicide(gt params.GasTable, evm *EVM, contract *Contract, stack *Stack, mem *Memory, memorySize uint64) (uint64, error) {
 	var gas uint64
 	// EIP150 homestead gas reprice fork:
 	if evm.ChainConfig().IsEIP150(evm.BlockNumber) {
+
+		// 这个是固定消耗的 自杀 gas消耗
 		gas = gt.Suicide
 		var (
 			address = common.BigToAddress(stack.Back(0))
@@ -418,7 +439,9 @@ func gasSuicide(gt params.GasTable, evm *EVM, contract *Contract, stack *Stack, 
 		}
 	}
 
+	// 如果该合约没有自杀
 	if !evm.StateDB.HasSuicided(contract.Address()) {
+		// 添加退款
 		evm.StateDB.AddRefund(params.SuicideRefundGas)
 	}
 	return gas, nil

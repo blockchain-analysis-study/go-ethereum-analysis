@@ -100,7 +100,7 @@ const (
 environment是 worker 的当前环境并保存所有当前state信息。
  */
 type environment struct {
-	/** 当前签名者 */
+	/** 当前签名者 todo 主要是  chainId */
 	signer types.Signer
 
 	/** 在此处应用 state 更改 */
@@ -1040,7 +1040,7 @@ func (w *worker) commitTransaction(tx *types.Transaction, coinbase common.Addres
 	snap := w.current.state.Snapshot()
 
 	/**
-	执行 单笔 交易
+	todo 真正执行 单笔 交易
 	 */
 	receipt, _, err := core.ApplyTransaction(w.config, w.chain, &coinbase, w.current.gasPool, w.current.state, w.current.header, tx, &w.current.header.GasUsed, vm.Config{})
 	if err != nil {
@@ -1048,7 +1048,14 @@ func (w *worker) commitTransaction(tx *types.Transaction, coinbase common.Addres
 		w.current.state.RevertToSnapshot(snap)
 		return nil, err
 	}
-	// 收集当前被执行过了的 交易
+	// todo  ########################################
+	// todo  ########################################
+	// todo  ########################################
+	// todo  ########################################
+	//
+	// todo 收集当前被执行过了的 交易
+	//
+	// todo 只有执行通过的 tx 才会被打包到 block 中
 	w.current.txs = append(w.current.txs, tx)
 	// 收集当前交易执行产生的 收据
 	w.current.receipts = append(w.current.receipts, receipt)
@@ -1069,9 +1076,9 @@ func (w *worker) commitTransactions(txs *types.TransactionsByPriceAndNonce, coin
 
 	// 设置 GasPool
 	if w.current.gasPool == nil {
-		// 预先设置 gasPool == header 中的gasLimit
-		// 由于所有的是 core.GasPool 的指针，所以随着 tx的执行
-		// core.GasPool 也会一直的变化，即 w.current.gasPool 也会一直的变化
+		// todo 预先设置 gasPool == header 中的gasLimit
+		// 		由于所有的是 core.GasPool 的指针，所以随着 tx的执行
+		// 		core.GasPool 也会一直的变化，即 w.current.gasPool 也会一直的变化
 		w.current.gasPool = new(core.GasPool).AddGas(w.current.header.GasLimit)
 	}
 
@@ -1126,7 +1133,7 @@ func (w *worker) commitTransactions(txs *types.TransactionsByPriceAndNonce, coin
 			break
 		}
 		// Retrieve the next transaction and abort if all done
-		// 检索下一个 tx 并在完成所有操作后中止
+		// todo 检索下一个 tx 并在完成所有操作后中止
 		tx := txs.Peek()
 		if tx == nil {
 			break
@@ -1145,9 +1152,9 @@ func (w *worker) commitTransactions(txs *types.TransactionsByPriceAndNonce, coin
 		// Check whether the tx is replay protected. If we're not in the EIP155 hf
 		// phase, start ignoring the sender until we do.
 		/**
-		检查tx是否重播受保护。 如果我们不在EIP155 hf阶段，请开始忽略发送方，直到我们这样做。
+		todo 检查tx是否重播受保护。 如果我们不在EIP155 hf阶段，请开始忽略发送方，直到我们这样做。
 		 */
-		 // 如果 tx 是受保护的 && 当前块高处于 eip155 条件的块高
+		 // todo 如果 tx 是受保护的 && 当前块高处于 eip155 条件的块高
 		if tx.Protected() && !w.config.IsEIP155(w.current.header.Number) {
 			log.Trace("Ignoring reply protected transaction", "hash", tx.Hash(), "eip155", w.config.EIP155Block)
 
@@ -1158,32 +1165,38 @@ func (w *worker) commitTransactions(txs *types.TransactionsByPriceAndNonce, coin
 		// 填充当前 state 的 txHash (thash 字段) 及bhash字段 及txIndex 字段
 		w.current.state.Prepare(tx.Hash(), common.Hash{}, w.current.tcount)
 
-		// 执行单笔 tx
+		// todo 真正执行单笔 tx
+		//
+		// todo 在这里面实现了， 只 打包执行通过的 tx 逻辑
 		logs, err := w.commitTransaction(tx, coinbase)
 
-		/* 判断 tx 的执行err */
+		/* 判断 tx 的执行err， todo 调整 tx集 中的 tx 情况 */
 		switch err {
 		case core.ErrGasLimitReached:
 			// Pop the current out-of-gas transaction without shifting in the next from the account
-			// 弹出(剔除)当前的 out-of-gas 的tx，而不会从账户中转移下一个
+			//
+			// todo 弹出(剔除)当前的 out-of-gas 的tx，而不会从账户中转移下一个
 			log.Trace("Gas limit exceeded for current block", "sender", from)
 			txs.Pop()
 
 		case core.ErrNonceTooLow:
 			// New head notification data race between the transaction pool and miner, shift
-			// 如果交易池和矿工之间的新头通知存在 数据竞争，则翻页
+			//
+			//todo 如果 txpool 和 miner 之间的 新header通知  存在 数据竞争，则翻页
 			log.Trace("Skipping transaction with low nonce", "sender", from, "nonce", tx.Nonce())
 			txs.Shift()
 
 		case core.ErrNonceTooHigh:
 			// Reorg notification data race between the transaction pool and miner, skip account =
-			// 如果在tx pool 及 miner 之间存在重组 通知有数据竞争， 则跳过当前 账户的所有 tx
+			//
+			// todo 如果在 txpool 及 miner 之间存在重组 通知有数据竞争， 则跳过当前 账户的所有 tx
 			log.Trace("Skipping account with hight nonce", "sender", from, "nonce", tx.Nonce())
 			txs.Pop()
 
 		case nil:
 			// Everything ok, collect the logs and shift in the next transaction from the same account
-			// 所有的东西都 OK的话，则收集日志并从同一帐户转移下一个交易
+			//
+			// todo 所有的东西都 OK的话，则收集日志并从同一帐户转移下一个交易
 			coalescedLogs = append(coalescedLogs, logs...)
 			w.current.tcount++
 			txs.Shift()
@@ -1192,7 +1205,7 @@ func (w *worker) commitTransactions(txs *types.TransactionsByPriceAndNonce, coin
 			// Strange error, discard the transaction and get the next in line (note, the
 			// nonce-too-high clause will prevent us from executing in vain).
 			/**
-			奇怪的错误，丢弃事务并获得下一个（注意，nonce-too-high子句将阻止我们徒劳地执行）。
+			todo 奇怪的错误，丢弃 Tx 并获得下一个 Tx（注意，nonce-too-high子句将阻止我们徒劳地执行）。
 			 */
 			log.Debug("Transaction failed, account skipped", "hash", tx.Hash(), "err", err)
 			txs.Shift()

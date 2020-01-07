@@ -97,7 +97,7 @@ func (t *Trie) newFlag() nodeFlag {
 //
 /**
 todo 这个方法超级重要
-从数据库加载一个已经存在的Trie树， 就调用trie.resolveHash方法来加载整颗Trie树
+	从数据库加载一个已经存在的Trie树， 就调用 `trie.resolveHash()` 方法来加载整颗Trie树
  */
 func New(root common.Hash, db *Database) (*Trie, error) {
 	if db == nil {
@@ -109,7 +109,7 @@ func New(root common.Hash, db *Database) (*Trie, error) {
 	}
 	if root != (common.Hash{}) && root != emptyRoot {
 
-		// 加载整棵树,并返回rootNode
+		// todo 加载整棵树,并返回rootNode
 		rootnode, err := trie.resolveHash(root[:], nil)
 		if err != nil {
 			return nil, err

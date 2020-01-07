@@ -33,13 +33,17 @@ import (
 var (
 	bigZero                  = new(big.Int)
 	tt255                    = math.BigPow(2, 255)
+	// evm：写保护
 	errWriteProtection       = errors.New("evm: write protection")
+	// evm：超出范围返回数据
 	errReturnDataOutOfBounds = errors.New("evm: return data out of bounds")
+	// evm：执行恢复
 	errExecutionReverted     = errors.New("evm: execution reverted")
+	// evm：超出最大代码大小
 	errMaxCodeSizeExceeded   = errors.New("evm: max code size exceeded")
 )
 
-// todo + - * /
+// todo + - * 等运算符执行 /
 
 
 
@@ -484,12 +488,16 @@ func opCodeSize(pc *uint64, interpreter *EVMInterpreter, contract *Contract, mem
 	return nil, nil
 }
 
+// todo  超级重要的指令， 在部署的时候调用，进行代码复制，从偏移0x1e拷贝，长度为0x86
+//		就是为了将 contractCode 从部署时的 tx.Data 中解出来
 func opCodeCopy(pc *uint64, interpreter *EVMInterpreter, contract *Contract, memory *Memory, stack *Stack) ([]byte, error) {
 	var (
 		memOffset  = stack.pop()
 		codeOffset = stack.pop()
 		length     = stack.pop()
 	)
+
+	// todo 从 contract.Code 中解出 真正的 contractCode
 	codeCopy := getDataBig(contract.Code, codeOffset, length)
 	memory.Set(memOffset.Uint64(), length.Uint64(), codeCopy)
 
@@ -725,7 +733,8 @@ func opCreate(pc *uint64, interpreter *EVMInterpreter, contract *Contract, memor
 }
 
 /**
-+
++ addr.transfer.gas(2)(3)
++ addr.call.gas(2).value(3)('funcName', 'aa')
 +
 + todo Create2与Create2之间的区别在于
 +
@@ -803,7 +812,12 @@ func opCallCode(pc *uint64, interpreter *EVMInterpreter, contract *Contract, mem
 	// Pop gas. The actual gas is in interpreter.evm.callGasTemp.
 	interpreter.intPool.put(stack.pop())
 
-	// todo 获取gas
+	// todo 获取gas 本层调用时，可以用到的 gas
+	//
+	// todo 在一次以太坊升级中，规定了每次通过 call 或 delegatecall 调用合约函数时，
+	//		只能为被调用函数分配最多 63/64 的剩余 gas.
+	//		而以太坊中每个区块最多只能包含约 470 万的 gas。
+	//		也就是说，如果调用者最初投入了数量为 a 的 gas, 在 10 层递归调用后，最内层的函数最多只有 (63/64)^10*a 的 gas.
 	gas := interpreter.evm.callGasTemp
 	// Pop other call parameters.
 	addr, value, inOffset, inSize, retOffset, retSize := stack.pop(), stack.pop(), stack.pop(), stack.pop(), stack.pop(), stack.pop()
@@ -824,6 +838,15 @@ func opCallCode(pc *uint64, interpreter *EVMInterpreter, contract *Contract, mem
 	if err == nil || err == errExecutionReverted {
 		memory.Set(retOffset.Uint64(), retSize.Uint64(), ret)
 	}
+
+	// todo 问题： 这里为什么 + 回来？
+	//
+	// todo 因为在 gasCallCode 中我们可以看到 计算出来所需要的消耗的gas 中已提前被包含了 callGasTemp，被在evm interpreter 中直接先减掉了
+	//		而这里又将 callGasTemp 作为可用的传给了下一层调用，并将真正剩余的加回来，
+	//    类似： 第一层可用的为 100， 通过gasCallCode计算出第二层调用需要消耗 90 <20为肯定会被消耗的， 70为通过 callGas() 计算出给第二层可用的>
+	//		那么，暂且先认为 第二层可用的 70也会在第二层被用完，然后在 interpreter 中调用 第一层的  contract.UseGas() 先扣除这部分
+	//    即: 100 -90 = 10, 然后在第二层调用中我们将 70 作为第二层可用的，且加上 5块的 免费调用补贴，
+	//    最后将 第二层剩下的钱 20 加会第一层剩余的10块上，因为第二层的70 并没消耗完啊，哈哈剩余的需要加回来
 	contract.Gas += returnGas
 
 	interpreter.intPool.put(addr, value, inOffset, inSize, retOffset, retSize)

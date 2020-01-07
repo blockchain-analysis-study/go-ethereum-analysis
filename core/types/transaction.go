@@ -260,6 +260,8 @@ func (tx *Transaction) RawSignatureValues() (*big.Int, *big.Int, *big.Int) {
 }
 
 // Transactions is a Transaction slice type for basic sorting.
+//
+// todo Transactions 是用于 基本排序<根据nonce排序> 的 tx列表
 type Transactions []*Transaction
 
 // Len returns the length of s.
@@ -324,9 +326,23 @@ func (s *TxByPrice) Pop() interface{} {
 // TransactionsByPriceAndNonce represents a set of transactions that can return
 // transactions in a profit-maximizing sorted order, while supporting removing
 // entire batches of transactions for non-executable accounts.
+//
+/**
+todo 这个只有 worker  在用
+
+todo TransactionsByPriceAndNonce表示
+	 一组Txs，这些 tx 可以按 利润最大化的排序顺序返回交易，
+	*** 同时支持删除不可执行账户的全部交易。***
+ */
 type TransactionsByPriceAndNonce struct {
+
+	// 按帐户nonce排序的事务列表
 	txs    map[common.Address]Transactions // Per account nonce-sorted list of transactions
+
+	// 每个唯一帐户的下一笔交易（价格堆）<根据 gasPrice 排序>
 	heads  TxByPrice                       // Next transaction for each unique account (price heap)
+
+	// 交易集的签署人
 	signer Signer                          // Signer for the set of transactions
 }
 
@@ -336,15 +352,15 @@ type TransactionsByPriceAndNonce struct {
 // Note, the input map is reowned so the caller should not interact any more with
 // if after providing it to the constructor.
 /**
-NewTransactionsByPriceAndNonce 函数
-创建一个tx集，可以以nonce-honor方式检索价格排序的 tx 。
+todo NewTransactionsByPriceAndNonce 函数
 
-请注意，输入映射是 reowned，因此调用者不应再与之交互
-如果在提供给构造函数之后。
+todo	创建一个tx集，可以以 nonce-honor <现时荣誉> 方式检索 gasPrice排序 的 tx 。
+todo
+todo	请注意，输入映射是拥有所有权的，因此如果在将其提供给构造函数之后，调用方将不再与之交互。
  */
 func NewTransactionsByPriceAndNonce(signer Signer, txs map[common.Address]Transactions) *TransactionsByPriceAndNonce {
 	// Initialize a price based heap with the head transactions
-	// 初始化一个 根据price最为堆排的tx最小堆
+	// 初始化一个 根据 gasPrice 最为堆排的tx最小堆
 	heads := make(TxByPrice, 0, len(txs))
 	for from, accTxs := range txs {
 		/** 将 每个账户的tx集中的 第一个tx收集起来，用于做最小堆排序 */
@@ -352,9 +368,9 @@ func NewTransactionsByPriceAndNonce(signer Signer, txs map[common.Address]Transa
 		// Ensure the sender address is from the signer
 		// 确保 form是当前tx的签名者
 		acc, _ := Sender(signer, accTxs[0])
-		// 移除掉当前 账户的 tx机中的第一个 tx
+		// 移除掉当前 账户的 tx集 中的第一个 tx
 		txs[acc] = accTxs[1:]
-		/** 如果 当前账户的第一个 tx 解出来的from 及当前账户不相等，则为非法交易，直接删除 txs 中该账户相关的所有 tx集 */
+		/** todo 如果 当前账户的第一个 tx 解出来的from 及当前账户不相等，则为非法交易，直接删除 txs 中该账户相关的所有 tx集 */
 		if from != acc {
 			delete(txs, from)
 		}
@@ -367,11 +383,15 @@ func NewTransactionsByPriceAndNonce(signer Signer, txs map[common.Address]Transa
 	return &TransactionsByPriceAndNonce{
 		txs:    txs,
 		heads:  heads,
+
+		// todo  一般是 worker
 		signer: signer,
 	}
 }
 
 // Peek returns the next transaction by price.
+//
+// Peek: 按价格 <从堆中> 返回下一个交易。
 func (t *TransactionsByPriceAndNonce) Peek() *Transaction {
 	if len(t.heads) == 0 {
 		return nil
@@ -380,12 +400,26 @@ func (t *TransactionsByPriceAndNonce) Peek() *Transaction {
 }
 
 // Shift replaces the current best head with the next one from the same account.
+//
+// todo Shift: 用同一帐户中的下一个tx 替换当前的 当前堆的头元素<tx>。
 func (t *TransactionsByPriceAndNonce) Shift() {
+
+	// todo 从当前 堆顶的 tx中解出当前tx对应的 账户
 	acc, _ := Sender(t.signer, t.heads[0])
+
+	// todo 获取当前账户的 在堆中的 所有 tx
 	if txs, ok := t.txs[acc]; ok && len(txs) > 0 {
+
+		// 使用 tx 列表中第一个 tx 替换堆顶， 并重新调整堆，
+		// todo 注意： 上面为什么说是下一个 tx？ 因为当执行到这个 txs[0]的时候还是不满足，再次进入 `Shift()` 时，
+		// 		拉出来的新列表是 txs[1:] 了，而新的 txs[0]，对于原先的 txs[0]来说就是下一个 tx 啊
 		t.heads[0], t.txs[acc] = txs[0], txs[1:]
+
+		// 调整堆
 		heap.Fix(&t.heads, 0)
 	} else {
+
+		// todo 否则，如果该 tx 是该 账户的最后一个 tx 了，那么从堆中移除当前tx
 		heap.Pop(&t.heads)
 	}
 }
@@ -393,7 +427,10 @@ func (t *TransactionsByPriceAndNonce) Shift() {
 // Pop removes the best transaction, *not* replacing it with the next one from
 // the same account. This should be used when a transaction cannot be executed
 // and hence all subsequent ones should be discarded from the same account.
+//
+// todo Pop: 移除最佳 tx，*不*  将其替换为同一帐户中的下一笔交易。 当无法执行 tx 时应使用此功能，因此所有后续交易应从同一帐户中丢弃。
 func (t *TransactionsByPriceAndNonce) Pop() {
+	// todo 从堆中移除当前 tx
 	heap.Pop(&t.heads)
 }
 

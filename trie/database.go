@@ -61,25 +61,47 @@ type DatabaseReader interface {
 // Database is an intermediate write layer between the trie data structures and
 // the disk database. The aim is to accumulate trie writes in-memory and only
 // periodically flush a couple tries to disk, garbage collecting the remainder.
+//
+/**
+Database
+	todo 是在 `trie数据结构` 和 `磁盘数据库` 之间的中间写入层。
+		目的是在内存中累积trie写操作，并且仅定期刷新一对尝试写入磁盘的内容，垃圾收集剩余的内容。
+ */
 type Database struct {
+	// 永久存储成熟的Trie节点
 	diskdb ethdb.Database // Persistent storage for matured trie nodes
 
+	// trie node 的数据和引用关系
 	nodes  map[common.Hash]*cachedNode // Data and references relationships of a node
+
+	// 最早跟踪的节点，刷新列表头
 	oldest common.Hash                 // Oldest tracked node, flush-list head
+	// 最新跟踪的节点，刷新列表尾
 	newest common.Hash                 // Newest tracked node, flush-list tail
 
+	// 安全Trie中节点的原像
 	preimages map[common.Hash][]byte // Preimages of nodes from the secure trie
+	// 临时缓冲区，用于计算 preimage keys
 	seckeybuf [secureKeyLength]byte  // Ephemeral buffer for calculating preimage keys
 
+	// 自上次提交以来在 gc 上花费的时间
 	gctime  time.Duration      // Time spent on garbage collection since last commit
+	// 自上次提交以来 gc的node个数
 	gcnodes uint64             // Nodes garbage collected since last commit
+	// 自上次提交以来 gc的存储数据数量
 	gcsize  common.StorageSize // Data storage garbage collected since last commit
 
+	// 自上次提交以来花在数据刷新上的时间
 	flushtime  time.Duration      // Time spent on data flushing since last commit
+	// 自上次提交以来 节点被刷新的个数
 	flushnodes uint64             // Nodes flushed since last commit
+	// 自上次以来 被刷新的数据数量
 	flushsize  common.StorageSize // Data storage flushed since last commit
 
+	// 节点缓存的存储大小（不包括刷新列表）
 	nodesSize     common.StorageSize // Storage size of the nodes cache (exc. flushlist)
+
+	// preimages缓存的存储大小
 	preimagesSize common.StorageSize // Storage size of the preimages cache
 
 	lock sync.RWMutex
@@ -311,6 +333,14 @@ func (db *Database) DiskDB() DatabaseReader {
 // yet unknown. This method should only be used for non-trie nodes that require
 // reference counting, since trie nodes are garbage collected directly through
 // their embedded children.
+//
+/**
+如果尚不知道，InsertBlob 会将新的引用跟踪的Blob 写入  内存数据库。
+todo 此方法仅应用于需要引用计数的非trie节点，
+因为trie节点是直接通过其嵌入式子节点进行gc的。
+
+todo 说白了目前这种只用来存储 code
+ */
 func (db *Database) InsertBlob(hash common.Hash, blob []byte) {
 	db.lock.Lock()
 	defer db.lock.Unlock()
