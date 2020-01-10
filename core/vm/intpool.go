@@ -28,7 +28,7 @@ const poolLimit = 256
 // intPool is a pool of big integers that
 // can be reused for all big.Int operations.  可以重复用于所有big.Int operations
 /** 自定义 栈的池子 */
-// *big.Int的池子，主要是性能上的考虑，跟业务逻辑无关
+// todo *big.Int的池子，主要是性能上的考虑，跟业务逻辑无关
 type intPool struct {
 	pool *Stack
 }

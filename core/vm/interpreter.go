@@ -83,13 +83,20 @@ type Interpreter interface {
 
 // EVMInterpreter represents an EVM interpreter
 type EVMInterpreter struct {
-	evm      *EVM
-	cfg      Config
+	evm      *EVM // 虚机包装类
+	cfg      Config // 配置
+
+	// gas 价格表
 	gasTable params.GasTable
+
 	intPool  *intPool
 
 	readOnly   bool   // Whether to throw on stateful modifications 只读标识位
-	returnData []byte // Last CALL's return data for subsequent reuse 最后一个CALL的返回数据，供后续重用
+	// todo 最后一个CALL的返回数据，供后续重用 <记录每一次 调用的返回值，下次可能会用到>
+	//       只有 [7个指令] 会往这里赋值， CREATE,  CREATE2, CALL, CALLCODE, DELEGATECALL, STATICCALL, REVERT
+	//		如在执行跨合约时， 那么 会先将跨合约的返回值记录在这里，并继续往下走 指令，期间可能会用到这里的数据，最后在返回时置换这里的值
+	//      说白了就是个 跨合约时的 返回值中转 临时变量
+	returnData []byte // Last CALL's return data for subsequent reuse
 }
 
 // NewEVMInterpreter returns a new instance of the Interpreter.
@@ -172,7 +179,8 @@ func (in *EVMInterpreter) Run(contract *Contract, input []byte) (ret []byte, err
 	}
 
 	/**
-	todo 在执行特定的计算之前，处理器会确定下面所说的信息是否有效和是否可获取：
+
+	 todo 在执行特定的计算之前，处理器会确定下面所说的信息是否有效和是否可获取：
 		- 系统状态
 		- 用于计算的剩余gas
 		- 拥有执行代码的账户地址
@@ -213,7 +221,7 @@ func (in *EVMInterpreter) Run(contract *Contract, input []byte) (ret []byte, err
 
 
 	// Increment the call depth which is restricted to 1024
-	/** 增加调用深度，限制为1024 */
+	/** todo 增加调用深度，限制为 1024 */
 	in.evm.depth++
 	// 函数调用结束后需要 恢复调用深度
 	defer func() { in.evm.depth-- }()
@@ -230,9 +238,9 @@ func (in *EVMInterpreter) Run(contract *Contract, input []byte) (ret []byte, err
 	var (
 		// 当前执行码 (临时变量)
 		op    OpCode        // current opcode
-		// 初始化EVM执行时需要的内存
+		// todo 初始化EVM执行时需要的内存
 		mem   = NewMemory() // bound memory
-		// 初始化一个 底层为1024 cap 的 big.int 切片的 栈空间
+		// todo 初始化一个 底层为1024 cap 的 big.int 切片的 栈空间
 		stack = newstack()  // local stack
 		// For optimisation reason we're using uint64 as the program counter.
 		// It's theoretically possible to go above 2^64. The YP defines the PC
@@ -280,14 +288,14 @@ func (in *EVMInterpreter) Run(contract *Contract, input []byte) (ret []byte, err
 
 		// Get the operation from the jump table and validate the stack to ensure there are
 		// enough stack items available to perform the operation.
-		/* 获取一条指令及指令对应的操作 */
+		/* todo 获取一条指令及指令对应的操作 */
 		op = contract.GetOp(pc)
 		operation := in.cfg.JumpTable[op]
-		// valid校验
+		// todo 指令是否可用标识 校验
 		if !operation.valid {
 			return nil, fmt.Errorf("invalid opcode 0x%x", int(op))
 		}
-		// 栈校验
+		// todo 指令的栈校验
 		if err := operation.validateStack(stack); err != nil {
 			return nil, err
 		}
@@ -300,15 +308,16 @@ func (in *EVMInterpreter) Run(contract *Contract, input []byte) (ret []byte, err
 		var memorySize uint64
 		// calculate the new memory size and expand the memory to fit
 		// the operation
-		// 计算内存 按操作所需要的操作数来算
+		// todo 计算内存 按操作所需要的操作数来算
 		if operation.memorySize != nil {
+			// todo 计算 指令的 内存使用量，需要收费
 			memSize, overflow := bigUint64(operation.memorySize(stack))
 			if overflow {
 				return nil, errGasUintOverflow
 			}
 			// memory is expanded in words of 32 bytes. Gas
 			// is also calculated in words.
-			/** 内存以32字节的字扩展。 Gas 也按 字 来计算。 */
+			/** todo 内存以32字节的字扩展。 Gas 也按 字 来计算。 */
 			if memorySize, overflow = math.SafeMul(toWordSize(memSize), 32); overflow {
 				return nil, errGasUintOverflow
 			}
@@ -317,11 +326,12 @@ func (in *EVMInterpreter) Run(contract *Contract, input []byte) (ret []byte, err
 		// cost is explicitly set so that the capture state defer method can get the proper cost
 		/** todo 校验cost 调用前面提到的costfunc 计算本次操作 gas 消耗 */
 		cost, err = operation.gasCost(in.gasTable, in.evm, contract, stack, mem, memorySize)
+		// todo 先扣减gas计算
 		if err != nil || !contract.UseGas(cost) {
 			return nil, ErrOutOfGas
 		}
 		if memorySize > 0 {
-			// 如果本次操作需要消耗memory ，扩展memory
+			// todo 如果本次操作需要消耗memory ，扩展memory
 			mem.Resize(memorySize)
 		}
 
@@ -331,31 +341,32 @@ func (in *EVMInterpreter) Run(contract *Contract, input []byte) (ret []byte, err
 		}
 
 		// execute the operation
-		/* 执行操作 */
+		/* todo 执行操作 */
 		res, err := operation.execute(&pc, in, contract, mem, stack)
 		// verifyPool is a build flag. Pool verification makes sure the integrity
 		// of the integer pool by comparing values to a default value.
 		if verifyPool {
+			// 暂未实现
 			verifyIntegerPool(in.intPool)
 		}
 		// if the operation clears the return data (e.g. it has returning data)
 		// set the last return to the result of the operation.
-		// 如果遇到return 设置返回值
+		// todo 如果遇到 具备return属性的指令， 设置返回值， 注意只有最后一个返回有效果。
 		if operation.returns {
 			in.returnData = res
 		}
 
 		switch {
-		//报错
+		// 执行指令报错
 		case err != nil:
 			return nil, err
-		//出错回滚
+		// 出错回滚
 		case operation.reverts:
 			return res, errExecutionReverted
-		//停止
+		// 停止
 		case operation.halts:
 			return res, nil
-		// 跳转
+		// 只有不是 跳转指令时， 才继续走下一个 指令
 		case !operation.jumps:
 			pc++
 		}

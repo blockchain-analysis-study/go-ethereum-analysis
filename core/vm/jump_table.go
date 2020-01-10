@@ -37,26 +37,44 @@ var errGasUintOverflow = errors.New("gas uint64 overflow")
 
 type operation struct {
 	// execute is the operation function
+	//
+	// 下列函数在core/vm/jump_table.go文件中定义了模板
+	// 操作函数
 	execute executionFunc
 	// gasCost is the gas function and returns the gas required for execution
+	//
+	// gas函数，返回执行所需的gas
 	gasCost gasFunc
 	// validateStack validates the stack (size) for the operation
+	//
+	// 验证操作的堆栈(大小)
 	validateStack stackValidationFunc
 	// memorySize returns the memory size required for the operation
+	//
+	// 返回操作所需的内存大小
 	memorySize memorySizeFunc
 
-	// todo 指示该操作是否应停止进一步执行
+	// todo 指示该操作是否应停止进一步执行 (3个指令)
+	//		目前支持的指令为: STOP, RETURN, SELFDESTRUCT
 	halts   bool // indicates whether the operation should halt further execution
+	// todo 指示程序计数器是否不应递增 (2个指令)
+	//		目前支持的指令为: JUMP, JUMPI
 	jumps   bool // indicates whether the program counter should not increment
 	// todo 确定这是否是状态修改操作 (9个指令)
 	//     涉及到的指令有 CREATE2， SSTORE， LOG0， LOG1， LOG2，LOG3， LOG4，  CREATE， SELFDESTRUCT
 	writes  bool // determines whether this a state modifying operation
+	// todo 指示检索到的 指令码 是否有效并且已知
 	valid   bool // indication whether the retrieved operation is valid and known
+	// todo 确定 指令码 是否恢复状态（隐式暂停）， 这个就是终止继续执行了 (1个指令)
+	//		目前只有 REVERT 指令支持
 	reverts bool // determines whether the operation reverts state (implicitly halts)
+	// todo 确定 指令码 是否设置返回数据内容 (7个指令)
+	//		目前支持的指令为: CREATE,  CREATE2, CALL, CALLCODE, DELEGATECALL, STATICCALL, REVERT
 	returns bool // determines whether the operations sets the return data content
 }
 
 var (
+	// 各个分叉时的 内置合约 集
 	frontierInstructionSet       = newFrontierInstructionSet()
 	homesteadInstructionSet      = newHomesteadInstructionSet()
 	byzantiumInstructionSet      = newByzantiumInstructionSet()
@@ -449,8 +467,7 @@ func newFrontierInstructionSet() [256]operation {
 			gasCost:       gasMStore8,
 			memorySize:    memoryMStore8,
 			validateStack: makeStackFunc(2, 0),
-
-			valid: true,
+			valid:         true,
 		},
 		SLOAD: {
 			execute:       opSload,

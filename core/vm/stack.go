@@ -30,6 +30,7 @@ type Stack struct {
 	data []*big.Int
 }
 
+// 实例化一个 1024 的栈
 func newstack() *Stack {
 	return &Stack{data: make([]*big.Int, 0, 1024)}
 }
