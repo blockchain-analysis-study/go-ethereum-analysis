@@ -810,9 +810,14 @@ func opCall(pc *uint64, interpreter *EVMInterpreter, contract *Contract, memory 
 				toAddr 是 B 合约， 则 本地调用修改的是 B 的state
 	*/
 	ret, returnGas, err := interpreter.evm.Call(contract, toAddr, args, gas, value)
+	/**
+	todo 这些地方就是，往栈中添加 调用成功与否的 标识
+	*/
 	if err != nil {
+		// 0 调用失败
 		stack.push(interpreter.intPool.getZero())
 	} else {
+		// 1 调用成功
 		stack.push(interpreter.intPool.get().SetUint64(1))
 	}
 	if err == nil || err == errExecutionReverted {
@@ -849,9 +854,14 @@ func opCallCode(pc *uint64, interpreter *EVMInterpreter, contract *Contract, mem
 		gas += params.CallStipend
 	}
 	ret, returnGas, err := interpreter.evm.CallCode(contract, toAddr, args, gas, value)
+	/**
+	todo 这些地方就是，往栈中添加 调用成功与否的 标识
+	*/
 	if err != nil {
+		// 0 调用失败
 		stack.push(interpreter.intPool.getZero())
 	} else {
+		// 1 调用成功
 		stack.push(interpreter.intPool.get().SetUint64(1))
 	}
 	if err == nil || err == errExecutionReverted {
@@ -892,9 +902,14 @@ func opDelegateCall(pc *uint64, interpreter *EVMInterpreter, contract *Contract,
 	todo 真正发起 委托调用了
 	*/
 	ret, returnGas, err := interpreter.evm.DelegateCall(contract, toAddr, args, gas)
+	/**
+	todo 这些地方就是，往栈中添加 调用成功与否的 标识
+	 */
 	if err != nil {
+		// 0 调用失败
 		stack.push(interpreter.intPool.getZero())
 	} else {
+		// 1 调用成功
 		stack.push(interpreter.intPool.get().SetUint64(1))
 	}
 	if err == nil || err == errExecutionReverted {
@@ -923,9 +938,14 @@ func opStaticCall(pc *uint64, interpreter *EVMInterpreter, contract *Contract, m
 	args := memory.Get(inOffset.Int64(), inSize.Int64())
 
 	ret, returnGas, err := interpreter.evm.StaticCall(contract, toAddr, args, gas)
+	/**
+	todo 这些地方就是，往栈中添加 调用成功与否的 标识
+	*/
 	if err != nil {
+		// 0 调用失败
 		stack.push(interpreter.intPool.getZero())
 	} else {
+		// 1 调用成功
 		stack.push(interpreter.intPool.get().SetUint64(1))
 	}
 	if err == nil || err == errExecutionReverted {
