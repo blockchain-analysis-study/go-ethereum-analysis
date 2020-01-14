@@ -118,20 +118,29 @@ func EncodeToReader(val interface{}) (size int, r io.Reader, err error) {
 	return eb.size(), &encReader{buf: eb}, nil
 }
 
+/**
+自定义 rlp 编码buf
+ */
 type encbuf struct {
+	// 字符串数据，包含列表标题以外的所有内容
 	str     []byte      // string data, contains everything except list headers
+	// 所有列表标题
 	lheads  []*listhead // all list headers
 	lhsize  int         // sum of sizes of all encoded list headers
 	sizebuf []byte      // 9-byte auxiliary buffer for uint encoding
 }
-
+// rlp 编码中的list描述
 type listhead struct {
+	// 此标头在字符串数据中的索引
 	offset int // index of this header in string data
+	// 编码数据的总大小（包括列表标题）
 	size   int // total size of encoded data (including list headers)
 }
 
 // encode writes head to the given buffer, which must be at least
 // 9 bytes long. It returns the encoded bytes.
+//
+// 编码将 头 <head> 写入给定的缓冲区，该缓冲区必须至少9个字节长。 它返回编码的字节。
 func (head *listhead) encode(buf []byte) []byte {
 	return buf[:puthead(buf, 0xC0, 0xF7, uint64(head.size))]
 }
@@ -147,6 +156,11 @@ func headsize(size uint64) int {
 
 // puthead writes a list or string header to buf.
 // buf must be at least 9 bytes long.
+//
+/**
+todo puthead: 将列表或字符串标头写入buf。
+	buf必须至少9个字节长。
+ */
 func puthead(buf []byte, smalltag, largetag byte, size uint64) int {
 	if size < 56 {
 		buf[0] = smalltag + byte(size)

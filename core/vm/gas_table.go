@@ -372,12 +372,18 @@ func gasCall(gt params.GasTable, evm *EVM, contract *Contract, stack *Stack, mem
 
 
 	// 根据当前合约上下文的可用Gas <contract.Gas> 和 本次累加的gas消耗计算出剩下还有多少可用gas
+	//
+	//  todo stack.Back(0), 查看 opCall 中就明白了
+	//		 stack.Back(x) 对应上 stack.Pop 的第几个 stack.Pop 的
 	evm.callGasTemp, err = callGas(gt, contract.Gas, gas, stack.Back(0))
 	if err != nil {
 		return 0, err
 	}
 
 	// todo 这里为什么用 可用的  callGasTemp + gas 作为 本次调用的 gas消耗 ？
+	//   表示，这会被先扣出该部分 gas， 先认为，再下一层会把这些 gas 消耗完，
+	//  然后在 opCall 中至于有没有消耗完，需要看执行完之后 剩下的returnGas，
+	//  如果有，然后再将剩下的加回来到 contract.Gas
 	if gas, overflow = math.SafeAdd(gas, evm.callGasTemp); overflow {
 		return 0, errGasUintOverflow
 	}

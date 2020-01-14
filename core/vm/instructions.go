@@ -790,8 +790,8 @@ func opCreate2(pc *uint64, interpreter *EVMInterpreter, contract *Contract, memo
 
 // todo evm 执行code 指令
 func opCall(pc *uint64, interpreter *EVMInterpreter, contract *Contract, memory *Memory, stack *Stack) ([]byte, error) {
-	// Pop gas. The actual gas in in interpreter.evm.callGasTemp.
-	interpreter.intPool.put(stack.pop())
+	// Pop gas. The actual gas in interpreter.evm.callGasTemp. todo 先 弹出 gas, interpreter.evm.callGasTemp中的实际气体
+	interpreter.intPool.put(stack.pop()) // stack 中的 第 0 位 , 用 stack.Back(0) 可以拿到
 	gas := interpreter.evm.callGasTemp
 	// Pop other call parameters.
 	addr, value, inOffset, inSize, retOffset, retSize := stack.pop(), stack.pop(), stack.pop(), stack.pop(), stack.pop(), stack.pop()
