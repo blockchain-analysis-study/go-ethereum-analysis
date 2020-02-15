@@ -231,6 +231,8 @@ func (in *EVMInterpreter) Run(contract *Contract, input []byte) (ret []byte, err
 	in.returnData = nil
 
 	// Don't bother with the execution if there's no code.
+	//
+	// 如果没有 code，则我们不做任何事
 	if len(contract.Code) == 0 {
 		return nil, nil
 	}
@@ -240,7 +242,19 @@ func (in *EVMInterpreter) Run(contract *Contract, input []byte) (ret []byte, err
 		op    OpCode        // current opcode
 		// todo 初始化EVM执行时需要的内存
 		mem   = NewMemory() // bound memory
-		// todo 初始化一个 底层为1024 cap 的 big.int 切片的 栈空间
+		/**
+		todo ##################################################
+		todo ##################################################
+		todo ##################################################
+		todo ##################################################
+		todo
+		todo 初始化一个 底层为1024 cap 的 big.int 切片的 栈空间
+		todo
+		todo ##################################################
+		todo ##################################################
+		todo ##################################################
+		todo ##################################################
+		 */
 		stack = newstack()  // local stack
 		// For optimisation reason we're using uint64 as the program counter.
 		// It's theoretically possible to go above 2^64. The YP defines the PC
