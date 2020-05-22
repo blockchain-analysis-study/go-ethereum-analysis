@@ -24,15 +24,21 @@ import (
 	"sync"
 )
 
+// todo 编码器，用于将给定的数据编码为rlp
 var (
 	// Common encoded values.
 	// These are useful when implementing EncodeRLP.
-	EmptyString = []byte{0x80}
-	EmptyList   = []byte{0xC0}
+
+	// 常见的编码值。
+	// 这些在实施EncodeRLP时非常有用。
+	EmptyString = []byte{0x80} //128，定义了序列化时候的空字符串，空的时候对应的是编码128
+	EmptyList   = []byte{0xC0} //192，定义了序列化时候的空集合，空的时候对应的编码192
 )
 
 // Encoder is implemented by types that require custom
 // encoding rules or want to encode private fields.
+//
+// 可以理解为，任何拥有下面接口中函数的`结构体`，都表示继承并实现了该接口
 type Encoder interface {
 	// EncodeRLP should write the RLP encoding of its receiver to w.
 	// If the implementation is a pointer method, it may also be
@@ -42,6 +48,13 @@ type Encoder interface {
 	// not verified at the moment, but a future version might. It is
 	// recommended to write only a single value but writing multiple
 	// values or no value at all is also permitted.
+
+	// EncodeRLP应该将其接收器的RLP编码写成w。
+	// 如果是指针方法的实现，也可以调用零指针方法。
+
+	// 实施过程中应生成有效的RLP。编写的数据目前还没有验证，但未来的版本可能会有。
+	// 建议只写一个值，但也允许写多个值或根本不写值。
+	//
 	EncodeRLP(io.Writer) error
 }
 
@@ -49,34 +62,58 @@ type Encoder interface {
 // perform many small writes in some cases. Consider making w
 // buffered.
 //
+// Encode 将 val 的 RLP 编码写到 w。考虑让w被缓冲。
+
 // Encode uses the following type-dependent encoding rules:
 //
+// Encode使用以下类型相关的编码规则
+
 // If the type implements the Encoder interface, Encode calls
 // EncodeRLP. This is true even for nil pointers, please see the
 // documentation for Encoder.
 //
+// 如果类型实现了 Encoder 接口，Encode 会调用 EncodeRLP。
+// 即使对于零指针也是如此，请参见Encoder的文档。
+
 // To encode a pointer, the value being pointed to is encoded. For nil
 // pointers, Encode will encode the zero value of the type. A nil
 // pointer to a struct type always encodes as an empty RLP list.
 // A nil pointer to an array encodes as an empty list (or empty string
 // if the array has element type byte).
 //
+// 要对指针进行编码，要对指向的值进行编码。对于零指针，Encode将对该类型的零值进行编码。
+// 一个指向结构类型的零指针总是编码为空的RLP列表。
+// 一个指向数组的零指针将被编码为空列表（如果数组的元素类型为字节，则为空字符串）。
+
 // Struct values are encoded as an RLP list of all their encoded
 // public fields. Recursive struct types are supported.
 //
+// 结构值被编码为所有被编码的公共字段的RLP列表。支持递归结构类型。
+
 // To encode slices and arrays, the elements are encoded as an RLP
 // list of the value's elements. Note that arrays and slices with
 // element type uint8 or byte are always encoded as an RLP string.
 //
+// 要对分片和数组进行编码，元素被编码为值的元素的RLP列表。
+// 注意，元素类型为uint8或字节的数组和片断总是被编码为RLP字符串。
+
 // A Go string is encoded as an RLP string.
 //
+// 一个Go字符串被编码为RLP字符串。
+
 // An unsigned integer value is encoded as an RLP string. Zero always
 // encodes as an empty RLP string. Encode also supports *big.Int.
 //
+// 一个无符号整数值被编码为RLP字符串。零总是 Encode也支持*big.Int.Encode。
+
 // An interface value encodes as the value contained in the interface.
 //
+// 一个接口值编码为接口中包含的值。
+
 // Boolean values are not supported, nor are signed integers, floating
 // point numbers, maps, channels and functions.
+//
+// 不支持布尔值，也不支持有符号整数、浮点数、映射、通道和函数。
 func Encode(w io.Writer, val interface{}) error {
 	if outer, ok := w.(*encbuf); ok {
 		// Encode was called by some type's EncodeRLP.
@@ -94,6 +131,10 @@ func Encode(w io.Writer, val interface{}) error {
 
 // EncodeToBytes returns the RLP encoding of val.
 // Please see the documentation of Encode for the encoding rules.
+//
+// EncodeToBytes返回val的RLP编码。
+// 有关编码规则，请参见Encode的文档。
+
 func EncodeToBytes(val interface{}) ([]byte, error) {
 	eb := encbufPool.Get().(*encbuf)
 	defer encbufPool.Put(eb)
@@ -109,6 +150,10 @@ func EncodeToBytes(val interface{}) ([]byte, error) {
 // data.
 //
 // Please see the documentation of Encode for the encoding rules.
+//
+// EncodeToReader返回一个读取器，可以从这个读取器中读取val的RLP编码。返回的大小是编码后的数据的总大小。
+// 有关编码规则，请参见Encode的文档。
+
 func EncodeToReader(val interface{}) (size int, r io.Reader, err error) {
 	eb := encbufPool.Get().(*encbuf)
 	eb.reset()
@@ -126,7 +171,9 @@ type encbuf struct {
 	str     []byte      // string data, contains everything except list headers
 	// 所有列表标题
 	lheads  []*listhead // all list headers
+	// 所有编码列表标题的大小之和
 	lhsize  int         // sum of sizes of all encoded list headers
+	// 9个字节的辅助缓冲区，用于uint编码
 	sizebuf []byte      // 9-byte auxiliary buffer for uint encoding
 }
 // rlp 编码中的list描述
@@ -147,6 +194,8 @@ func (head *listhead) encode(buf []byte) []byte {
 
 // headsize returns the size of a list or string header
 // for a value of the given size.
+//
+// headsize 返回给定大小的值的 列表 或 字符串 头的大小。
 func headsize(size uint64) int {
 	if size < 56 {
 		return 1
@@ -172,10 +221,13 @@ func puthead(buf []byte, smalltag, largetag byte, size uint64) int {
 }
 
 // encbufs are pooled.
+//
+// encbufs是集合在一起的。
 var encbufPool = sync.Pool{
 	New: func() interface{} { return &encbuf{sizebuf: make([]byte, 9)} },
 }
 
+// 重置 缓冲区
 func (w *encbuf) reset() {
 	w.lhsize = 0
 	if w.str != nil {
@@ -187,6 +239,8 @@ func (w *encbuf) reset() {
 }
 
 // encbuf implements io.Writer so it can be passed it into EncodeRLP.
+//
+// encbuf实现了io.Writer，因此可以将其传入EncodeRLP。
 func (w *encbuf) Write(b []byte) (int, error) {
 	w.str = append(w.str, b...)
 	return len(b), nil

@@ -28,6 +28,8 @@ import (
 	"strings"
 )
 
+
+// todo 解码器，用于将rlp数据解码为原始数据
 var (
 	// EOL is returned when the end of the current list
 	// has been reached during streaming.

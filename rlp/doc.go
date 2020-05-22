@@ -31,3 +31,5 @@ value in the input stream and defines the size and kind of the bytes
 that follow.
 */
 package rlp
+
+// todo 没什么，rlp的相关描述

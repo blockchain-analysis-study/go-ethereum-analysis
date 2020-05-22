@@ -21,7 +21,7 @@ import (
 	"reflect"
 )
 
-
+// todo 于处理编码后的rlp数据，比如计算长度、分离等
 /**
 todo RLP:
 	Recursive Length Prefix，递归长度前缀

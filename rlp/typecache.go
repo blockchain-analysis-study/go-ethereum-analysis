@@ -23,6 +23,8 @@ import (
 	"sync"
 )
 
+// todo 类型缓存，用于记录哪些类型数据应该如何处理（如何编码和解码）
+
 var (
 	typeCacheMutex sync.RWMutex
 	// todo 全局缓存， 不同类型的 编码器和解码器  集
