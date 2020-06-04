@@ -49,6 +49,11 @@ func ListSize(contentSize uint64) uint64 {
 //
 // todo  Split:
 // 	返回第一个RLP值的内容以及该值之后的任何字节，作为b的子切片。
+//
+// @return
+// k: b中的首个元素(也就是代表b内容前缀, 即b的内容类型)
+// content: b 中除掉首个代表内容类型的剩余内容中的第一个元素
+// rest: 剩余下的内容
 func Split(b []byte) (k Kind, content, rest []byte, err error) {
 	k, ts, cs, err := readKind(b)
 	if err != nil {
@@ -65,6 +70,11 @@ func Split(b []byte) (k Kind, content, rest []byte, err error) {
 // todo 主要用来解 多字段编码的第二层内容
 //  用经过拆出 [list总前缀, 第一个元素前缀, 第一个元素[]byte, 第二个元素前缀, 第二个元素[]byte, ...] 中的
 //  list前缀 之后的 后面的内容 作为 第一个元素并返回作为入参，返回里面第一个字段和后面的N个字段的rlp
+//
+// @return
+// content: rlp中第一个元素内容 (不是首个代表长度的元素哦，是指首个代表内容的元素)
+// rest: 剩余的元素
+// err: 错误信息
 func SplitString(b []byte) (content, rest []byte, err error) {
 	k, content, rest, err := Split(b)
 	if err != nil {
@@ -84,6 +94,11 @@ func SplitString(b []byte) (content, rest []byte, err error) {
 // todo 主要用来解 多字段编码的第一层list
 //  拆出 [list总前缀, 第一个元素前缀, 第一个元素[]byte, 第二个元素前缀, 第二个元素[]byte, ...] 中的
 //  list前缀 并将 后面的内容 <就是第一前缀到 末尾> 作为第一个元素并返回， 第二个元素是个空<这里不管>
+//
+// @return
+// content: rlp中第一个元素内容 (不是首个代表长度的元素哦，是指首个代表内容的元素)
+// rest: 剩余的元素
+// err: 错误信息
 func SplitList(b []byte) (content, rest []byte, err error) {
 	k, content, rest, err := Split(b)
 	if err != nil {

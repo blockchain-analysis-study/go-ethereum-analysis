@@ -40,7 +40,32 @@ const (
 	LogDataGas            uint64 = 8     // Per byte in a LOG* operation's data.
 
 	// 调用 <Call 和 CallCode 调用>开始时，提供的 免费gas <补贴？>
-	CallStipend           uint64 = 2300  // Free gas given at beginning of call.
+	// 这个是 给 fallback() 函数调用的
+	//
+	// 以太坊中的部分函数是附加有默认 fallback() 函数伴随执行的.
+	//
+	// todo fallback() 调用的时机
+	//
+	// 一、如果调用合约时，没有匹配上任何一个函数(或者没有传哪怕一点数据)，就会调用默认的回退函数
+	// 二、当合约收到了ether时（没有任何其它数据），这个函数也会被执行 |todo 一般仅有少量的gas剩余，用于执行这个函数(准确的说，还剩2300 gas)
+	// 三、当 solidity中 调用call() 函数的时候我们会执行默认的 fallback()函数
+	// 四、
+	//
+	// 以太坊中，我们对于gas的使用共有两个函数，send与call。那么他们有什么区别呢？
+	//
+	// fallback() 函数 可以做尽量多的计算至到 gas 耗尽。
+	// 有两种方法可以触发 fallback 函数：
+	// todo `recipient.send()` 和 `recipient.call.value()`
+	//
+	// 方法1： 有2300 gas限制
+	// 如果调用 `recipient.send()` 函数的话，被 send() 唤起的 fallback() 函数最多只能消耗 2300 gas
+	//
+	// 方法2: 会使用尽量多的gas，所以要注意安全问题
+	// 而调用 recipient.call.value()` 会使用尽量多的gas，todo 另外两个函数 `callcode()` 和 `delegatecall()`，也是如此
+	//
+	// todo 如果想要和 send() 方法达到同样的安全效果，调用者必须指定 gas limit为0， `recipient.call.gas(0).value(...)`
+	//
+	CallStipend           uint64 = 2300  // Free gas given at beginning of call.  Call() 开始时提供的免费 gas
 
 	Sha3Gas          uint64 = 30    // Once per SHA3 operation.
 	Sha3WordGas      uint64 = 6     // Once per word of the SHA3 operation's data.
