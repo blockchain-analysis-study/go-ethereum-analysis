@@ -410,7 +410,13 @@ func (l *txList) Filter(costLimit *big.Int, gasLimit uint64) (types.Transactions
 
 	// Filter out all the transactions above the account's funds
 	// 过滤掉帐户的所有 资金超出限额的交易
-	removed := l.txs.Filter(func(tx *types.Transaction) bool { return tx.Cost().Cmp(costLimit) > 0 || tx.Gas() > gasLimit })
+	removed := l.txs.Filter(func(tx *types.Transaction) bool {
+		// todo Cost: tx.Value + tx.Gas*tx.GasPrice
+		//
+		// 收集
+		// todo value + gas*gasPrice 大于from余额的 交易
+		// todo tx.Gas 大于 pool 中的gasLimit 的 交易
+		return tx.Cost().Cmp(costLimit) > 0 || tx.Gas() > gasLimit })
 
 	// If the list was strict, filter anything above the lowest nonce
 	// 如果列表是严格的，则过滤掉最低nonce之上的任何内容
@@ -430,8 +436,8 @@ func (l *txList) Filter(costLimit *big.Int, gasLimit uint64) (types.Transactions
 		// 再次过滤出 比 被删除tx中最小nonce还要大的tx
 		invalids = l.txs.Filter(func(tx *types.Transaction) bool { return tx.Nonce() > lowest })
 	}
-	// removed：不够支付转账金额 或者gas的交易
-	// invalids：nonce比removed中最小nonce还大的tx (因为某tx都被删了，那么在 要求当前账户txs的nonce严格连续的条件下，比它nonce大的tx也就非法了)
+	// todo removed：不够支付转账金额 或者gas的交易
+	// todo invalids：nonce比removed中最小nonce还大的tx (因为某tx都被删了，那么在 要求当前账户txs的nonce严格连续的条件下，比它nonce大的tx也就非法了)
 	return removed, invalids
 }
 

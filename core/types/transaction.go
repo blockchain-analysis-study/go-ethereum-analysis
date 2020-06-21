@@ -249,6 +249,8 @@ func (tx *Transaction) WithSignature(signer Signer, sig []byte) (*Transaction, e
 }
 
 // Cost returns amount + gasprice * gaslimit.
+//
+// Cost: tx.Value + tx.Gas*tx.GasPrice
 func (tx *Transaction) Cost() *big.Int {
 	total := new(big.Int).Mul(tx.data.Price, new(big.Int).SetUint64(tx.data.GasLimit))
 	total.Add(total, tx.data.Amount)

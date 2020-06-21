@@ -1506,6 +1506,7 @@ func (pool *TxPool) demoteUnexecutables() {
 	for addr, list := range pool.pending {
 		nonce := pool.currentState.GetNonce(addr)
 
+		/** TODO 处理 nonce too low 的交易 */
 		// Drop all transactions that are deemed too old (low nonce)
 		for _, tx := range list.Forward(nonce) {
 			hash := tx.Hash()
@@ -1513,10 +1514,16 @@ func (pool *TxPool) demoteUnexecutables() {
 			pool.all.Remove(hash)
 			pool.priced.Removed()
 		}
+
+
+		/** TODO 处理 余额不足的 交易 */
 		// Drop all transactions that are too costly (low balance or out of gas), and queue any invalids back for later
 		// 删除所有成本过高的交易（低余额或 gas 不足；这里的成本过高，是指 超出了账户自身所能承受与的价格）
 		// 并且将任何 失效的 （这里的失效是指 返回的：invalids 也就是收到 drops 的影响而 移除的 tx ）tx 组装到queue中以备日后使用
 		// 入参为当前账户的 余额 和 pool的 MaxGas
+		//
+		// todo drops: 需要从all 中移除的 txs
+		// todo invalids: 需要从 pending中转移到 queue 中的 txs
 		drops, invalids := list.Filter(pool.currentState.GetBalance(addr), pool.currentMaxGas)
 		// 遍历 由于不够支付 金额或者gas而被删除掉的txs
 		for _, tx := range drops {
