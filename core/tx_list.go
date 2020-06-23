@@ -29,6 +29,9 @@ import (
 
 // nonceHeap is a heap.Interface implementation over 64bit unsigned integers for
 // retrieving sorted transactions from the possibly gapped future queue.
+//
+// nonceHeap 是一个64位无符号整数的stack.Interface实现，
+// 用于从可能出现缺口的将来队列中检索已排序的事务
 type nonceHeap []uint64
 
 func (h nonceHeap) Len() int           { return len(h) }
@@ -58,7 +61,12 @@ type txSortedMap struct {
 	items map[uint64]*types.Transaction // Hash map storing the transaction data
 	// 所有存储tx的nonce堆（最小堆）（非严格模式）
 	index *nonceHeap                    // Heap of nonces of all the stored transactions (non-strict mode)
-	// 缓存已排序的tx
+
+	/**
+	todo
+		缓存已排序的tx
+	(【注意】： cache 是在 Flatten 函数中被 创建)
+	*/
 	cache types.Transactions            // Cache of the transactions already sorted
 }
 
@@ -79,7 +87,9 @@ func (m *txSortedMap) Get(nonce uint64) *types.Transaction {
 // index. If a transaction already exists with the same nonce, it's overwritten.
 func (m *txSortedMap) Put(tx *types.Transaction) {
 	nonce := tx.Nonce()
+	// m.items 是一个map[nonce]tx
 	if m.items[nonce] == nil {
+		// m.index 是一个 heap
 		heap.Push(m.index, nonce)
 	}
 	m.items[nonce], m.cache = tx, nil
@@ -90,20 +100,19 @@ func (m *txSortedMap) Put(tx *types.Transaction) {
 // maintenance.
 /**
 Forward 函数：
-将使用低于提供的阈值的nonce的tx从列表中删除。
+将使用低于提供的阈值 (threshold) 的nonce的tx从列表中删除。
 对于任何删除后的维护，都会返回每个已被删除的tx。
  */
 func (m *txSortedMap) Forward(threshold uint64) types.Transactions {
 	var removed types.Transactions
-
 	// Pop off heap items until the threshold is reached
 	// 弹出堆中元素，直到达到阈值
 	for m.index.Len() > 0 && (*m.index)[0] < threshold {
-		// heap 中的元素是在 Add 方法里面加的 参照：txList 结构自己就明白了
+		// heap 中的元素是在 Put 方法里面加的 参照：txSortedMap 结构自己就明白了
 		nonce := heap.Pop(m.index).(uint64)
 		// 把被删除的 元素收集起来，返回出去
 		removed = append(removed, m.items[nonce])
-		// 清楚 存储
+		// 清除 存储
 		delete(m.items, nonce)
 	}
 	// If we had a cached order, shift the front
@@ -206,6 +215,7 @@ func (m *txSortedMap) Remove(nonce uint64) bool {
 	}
 	delete(m.items, nonce)
 	/**
+	todo
 	(【注意】： cache 是在 Flatten 函数中被 创建)
 	*/
 	m.cache = nil
@@ -254,7 +264,7 @@ Flatten 函数：
 基于松散排序的内部表现创建一个按照 nonce 排序的 tx slice。
 如果在对内容进行任何修改之前再次请求，则对缓存的结果须是有序的。
 
-即：对 tx list构建 构建一个 根据 nonce 从小到大的 排序的 cache，并返回 cache中的tx
+todo 即：对 tx list构建 构建一个 根据 nonce 从小到大的 排序的 cache，并返回 cache中的tx
  */
 func (m *txSortedMap) Flatten() types.Transactions {
 	// If the sorting was not cached yet, create and cache it
@@ -306,6 +316,8 @@ type txList struct {
 
 // newTxList create a new transaction list for maintaining nonce-indexable fast,
 // gapped, sortable transaction lists.
+//
+// 创建一个新的交易清单，以维护不可索引的快速，有缺口，可排序的交易清单。
 func newTxList(strict bool) *txList {
 	return &txList{
 		strict:  strict,
@@ -316,6 +328,8 @@ func newTxList(strict bool) *txList {
 
 // Overlaps returns whether the transaction specified has the same nonce as one
 // already contained within the list.
+//
+// todo [这个做 nonce 相同的 tx 替换]
 // 判断当前tx的nonce是否之前就在pending 队列中出现过
 // 是的话，说明是同一笔交易的更改提交
 func (l *txList) Overlaps(tx *types.Transaction) bool {
@@ -338,7 +352,9 @@ func (l *txList) Add(tx *types.Transaction, priceBump uint64) (bool, *types.Tran
 	// 就是说 nonce一样的旧有 tx 比当前tx还要好的话，则直接返回
 	old := l.txs.Get(tx.Nonce())
 	if old != nil {
-		// (old.gas * (100 + priceBump) / 100) 计算旧有tx的gas 的 110% 作为 阈值
+
+		// TODO 【相同 nonce 交易替换规则】
+		// 		(old.gas * (100 + priceBump) / 100) 计算旧有tx的gas 的 110% 作为 阈值
 		threshold := new(big.Int).Div(new(big.Int).Mul(old.GasPrice(), big.NewInt(100+int64(priceBump))), big.NewInt(100))
 		// Have to ensure that the new gas price is higher than the old gas
 		// price as well as checking the percentage threshold to ensure that
@@ -450,6 +466,8 @@ func (l *txList) Cap(threshold int) types.Transactions {
 // Remove deletes a transaction from the maintained list, returning whether the
 // transaction was found, and also returning any transaction invalidated due to
 // the deletion (strict mode only).
+//
+// todo Remove: 将从维护的列表中删除 tx，返回是否找到该tx，还返回由于删除而无效的任何事务（仅限严格模式）。
 func (l *txList) Remove(tx *types.Transaction) (bool, types.Transactions) {
 	// Remove the transaction from the set
 	nonce := tx.Nonce()
@@ -457,6 +475,8 @@ func (l *txList) Remove(tx *types.Transaction) (bool, types.Transactions) {
 		return false, nil
 	}
 	// In strict mode, filter out non-executable transactions
+	//
+	// 在nonce严格连续模式下，过滤掉不可执行的事务
 	if l.strict {
 		return true, l.txs.Filter(func(tx *types.Transaction) bool { return tx.Nonce() > nonce })
 	}
@@ -492,7 +512,7 @@ Flatten 函数：
 基于松散排序的内部表现创建一个按照 nonce 排序的 tx slice。
 如果在对内容进行任何修改之前再次请求，则对缓存的结果须是有序的。
 
-即：对 tx list构建 构建一个 根据 nonce 从小到大的 排序的 cache，并返回 cache中的tx
+todo 即：对 tx list构建 构建一个 根据 nonce 从小到大的 排序的 cache，并返回 cache中的tx
  */
 func (l *txList) Flatten() types.Transactions {
 	return l.txs.Flatten()
@@ -539,11 +559,11 @@ type txPricedList struct {
 	// 底层是一个存储所有交易的map txHash -> txInfo 【注意这里的 all 和 pool 中的 all是同一个引用， 而txPricedList又是以 price 字段保存在 pool中】
 	all    *txLookup  // Pointer to the map of all transactions
 
-	// 所有存储的交易的价格 (gasPrice)堆（里面就是tx数组）
+	// 所有存储的交易的价格 (gasPrice) Heap（里面就是tx数组）
 	items  *priceHeap // Heap of prices of all the stored transactions
 
 	// 过期价格点数（重堆积触发器）其实就是个计数器啦
-	// 记录删除了对少个因过期而删除的 tx
+	// 记录删除了多少个因过期而删除的 tx
 	stales int        // Number of stale price points to (re-heap trigger)
 }
 
@@ -666,10 +686,12 @@ func (l *txPricedList) Underpriced(tx *types.Transaction, local *accountSet) boo
 // priced list and returns them for further removal from the entire pool.
 /**
 Discard 函数
-找出 绝大多数定价过低的交易，将它们从 priced 列表中删除并返回它们 以便从整个池中进一步删除。
+todo 找出 绝大多数定价过低的交易，将它们从 priced 列表中删除并返回它们 以便从整个池中进一步删除。
  */
 func (l *txPricedList) Discard(count int, local *accountSet) types.Transactions {
-	drop := make(types.Transactions, 0, count) // Remote underpriced transactions to drop  	远端的 低价tx将被抛弃
+
+
+	drop := make(types.Transactions, 0, count) // Remote underpriced transactions to drop  	远端的 低价tx将被抛弃 (需要移除 count 个)
 	save := make(types.Transactions, 0, 64)    // Local underpriced transactions to keep	本地的 低价tx将保留
 
 	for len(*l.items) > 0 && count > 0 {

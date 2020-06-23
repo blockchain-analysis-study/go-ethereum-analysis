@@ -35,6 +35,9 @@ var errNoActiveJournal = errors.New("no active journal")
 // goal is to allow the transaction journal to write into a fake journal when
 // loading transactions on startup without printing warnings due to no file
 // being readt for write.
+//
+// devNull: 是一个WriteCloser，它只丢弃写入其中的所有内容。
+//          其目标是允许在启动时加载事务时将事务日志写入伪日志中，而不会打印警告，因为不会读取任何文件以进行写操作。
 type devNull struct{}
 
 func (*devNull) Write(p []byte) (n int, err error) { return len(p), nil }
@@ -56,12 +59,18 @@ func newTxJournal(path string) *txJournal {
 
 // load parses a transaction journal dump from disk, loading its contents into
 // the specified pool.
+//
+// load: 解析磁盘上的 tx日志转储，将其内容加载到指定的池中。
 func (journal *txJournal) load(add func([]*types.Transaction) []error) error {
 	// Skip the parsing if the journal file doens't exist at all
+	//
+	// 跳过所有不存在的日记文件的解析
 	if _, err := os.Stat(journal.path); os.IsNotExist(err) {
 		return nil
 	}
 	// Open the journal for loading any past transactions
+	//
+	// 打开 journal 加载一些 可用的 txs
 	input, err := os.Open(journal.path)
 	if err != nil {
 		return err
@@ -69,17 +78,26 @@ func (journal *txJournal) load(add func([]*types.Transaction) []error) error {
 	defer input.Close()
 
 	// Temporarily discard any journal additions (don't double add on load)
+	//
+	// 暂时丢弃任何日记帐添加（不要在加载时重复添加）
 	journal.writer = new(devNull)
 	defer func() { journal.writer = nil }()
 
 	// Inject all transactions from the journal into the pool
+	//
+	// 将日记帐中的所有 tx 注入池中
 	stream := rlp.NewStream(input, 0)
 	total, dropped := 0, 0
 
 	// Create a method to load a limited batch of transactions and bump the
 	// appropriate progress counters. Then use this method to load all the
 	// journalled transactions in small-ish batches.
+	//
+	// 创建一种方法来加载有限数量的 tx 并增加适当的进度计数器。
+	// 然后使用此方法以小批量加载所有日记帐交易记录。
 	loadBatch := func(txs types.Transactions) {
+
+		// 批量将解析出来的 txs 添加到 txpool
 		for _, err := range add(txs) {
 			if err != nil {
 				log.Debug("Failed to add journaled transaction", "err", err)
@@ -93,6 +111,8 @@ func (journal *txJournal) load(add func([]*types.Transaction) []error) error {
 	)
 	for {
 		// Parse the next transaction and terminate on error
+		//
+		// 从 io stream 中读出 txs
 		tx := new(types.Transaction)
 		if err = stream.Decode(tx); err != nil {
 			if err != io.EOF {
@@ -104,11 +124,13 @@ func (journal *txJournal) load(add func([]*types.Transaction) []error) error {
 			break
 		}
 		// New transaction parsed, queue up for later, import if threnshold is reached
+		//
+		// 解析新 tx，排队等待稍后，如果达到阈值则导入
 		total++
 
 		if batch = append(batch, tx); batch.Len() > 1024 {
 			loadBatch(batch)
-			batch = batch[:0]
+			batch = batch[:0] // 清空 batch
 		}
 	}
 	log.Info("Loaded local transaction journal", "transactions", total, "dropped", dropped)
@@ -130,20 +152,28 @@ func (journal *txJournal) insert(tx *types.Transaction) error {
 
 // rotate regenerates the transaction journal based on the current contents of
 // the transaction pool.
+//
+// rotate: 根据 txpool 的当前内容重新生成 tx journal
 func (journal *txJournal) rotate(all map[common.Address]types.Transactions) error {
+
 	// Close the current journal (if any is open)
+	// 关闭当前日记帐（如果有的话）
 	if journal.writer != nil {
 		if err := journal.writer.Close(); err != nil {
 			return err
 		}
 		journal.writer = nil
 	}
+
 	// Generate a new journal with the contents of the current pool
+	// 生成具有当前池内容的新 journal
 	replacement, err := os.OpenFile(journal.path+".new", os.O_WRONLY|os.O_CREATE|os.O_TRUNC, 0755)
 	if err != nil {
 		return err
 	}
 	journaled := 0
+
+	// 遍历出 所有 tx
 	for _, txs := range all {
 		for _, tx := range txs {
 			if err = rlp.Encode(replacement, tx); err != nil {
@@ -156,6 +186,8 @@ func (journal *txJournal) rotate(all map[common.Address]types.Transactions) erro
 	replacement.Close()
 
 	// Replace the live journal with the newly generated one
+	//
+	// 用新生成的日志替换实时日志
 	if err = os.Rename(journal.path+".new", journal.path); err != nil {
 		return err
 	}

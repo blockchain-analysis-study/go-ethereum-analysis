@@ -233,11 +233,11 @@ var (
 		Value: eth.DefaultConfig.Ethash.DatasetsOnDisk,
 	}
 	// Transaction pool settings
-	TxPoolLocalsFlag = cli.StringFlag{
+	TxPoolLocalsFlag = cli.StringFlag{  // 指定 本地账户 地址集, 以","分割
 		Name:  "txpool.locals",
 		Usage: "Comma separated accounts to treat as locals (no flush, priority inclusion)",
 	}
-	TxPoolNoLocalsFlag = cli.BoolFlag{
+	TxPoolNoLocalsFlag = cli.BoolFlag{ // 指定是否禁用本地账户
 		Name:  "txpool.nolocals",
 		Usage: "Disables price exemptions for locally submitted transactions",
 	}
@@ -1056,6 +1056,8 @@ func setGPO(ctx *cli.Context, cfg *gasprice.Config) {
 
 func setTxPool(ctx *cli.Context, cfg *core.TxPoolConfig) {
 	if ctx.GlobalIsSet(TxPoolLocalsFlag.Name) {
+
+		// 指定 本地账户集, 以","分割
 		locals := strings.Split(ctx.GlobalString(TxPoolLocalsFlag.Name), ",")
 		for _, account := range locals {
 			if trimmed := strings.TrimSpace(account); !common.IsHexAddress(trimmed) {
