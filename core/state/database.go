@@ -26,7 +26,7 @@ import (
 	lru "github.com/hashicorp/golang-lru"
 )
 
-// Trie cache generation limit after which to evict trie nodes from memory.
+// Trie cache generation limit after which to evict trie nodes from memory.   ·Trie· 缓存生成限制，之后将 对应的 trie nodes 从内存中逐出
 var MaxTrieCacheGen = uint16(120)
 
 const (
@@ -88,6 +88,7 @@ func NewDatabase(db ethdb.Database) Database {
 	}
 }
 
+// cachingDB 中 也有 SecureTrie 数组  和  LRU 缓存
 type cachingDB struct {
 	db            *trie.Database
 	mu            sync.Mutex
@@ -105,7 +106,7 @@ func (db *cachingDB) OpenTrie(root common.Hash) (Trie, error) {
 			return cachedTrie{db.pastTries[i].Copy(), db}, nil
 		}
 	}
-	tr, err := trie.NewSecure(root, db.db, MaxTrieCacheGen)
+	tr, err := trie.NewSecure(root, db.db, MaxTrieCacheGen)  // cachelimit = 120
 	if err != nil {
 		return nil, err
 	}
@@ -165,9 +166,12 @@ func (db *cachingDB) TrieDB() *trie.Database {
 }
 
 // cachedTrie inserts its trie into a cachingDB on commit.
+//
+// cacheTrie 是 SecureTrie的封装,
+//			我们可以知道 其实最终底层操作的都是 SecureTrie
 type cachedTrie struct {
-	*trie.SecureTrie
-	db *cachingDB
+	*trie.SecureTrie	// cachingTire 最终使用 SecureTrie
+	db *cachingDB  		// cachingDB 中 也有 SecureTrie 数组  和  LRU 缓存
 }
 
 func (m cachedTrie) Commit(onleaf trie.LeafCallback) (common.Hash, error) {

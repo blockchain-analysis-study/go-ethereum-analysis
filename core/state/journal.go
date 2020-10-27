@@ -50,7 +50,10 @@ type journal struct {
 	entries []journalEntry         // Current changes tracked by the journal
 
 	// 最近变更的账户 和 更改次数
-	// map[账户]变更次数
+	//
+	//  Finalise() 和 Commit 都会根据 这个来 for 最近变动的 stateObject
+	//
+	// 格式:  map[账户]变更次数
 	dirties map[common.Address]int // Dirty accounts and the number of changes
 }
 
@@ -63,7 +66,7 @@ func newJournal() *journal {
 
 // append inserts a new modification entry to the end of the change journal.
 //
-//
+//   追加 `journalEntry` 实例,  并记录对应的  stateObject 的 addr 变动的 次数
 func (j *journal) append(entry journalEntry) {
 	// todo 往 `State的修改杂志` 中添加 日志账条目
 	j.entries = append(j.entries, entry)
@@ -78,18 +81,23 @@ func (j *journal) append(entry journalEntry) {
 // dirty handling too.
 func (j *journal) revert(statedb *StateDB, snapshot int) {
 
-	// todo 遍历出最近存入的 所有  日志账条目实例
+	// todo 遍历出最近存入的 所有  日志账条目实例,
+	//		一直遍历到 需要被回滚点为止
 	for i := len(j.entries) - 1; i >= snapshot; i-- {
 		// Undo the changes made by the operation
 		j.entries[i].revert(statedb)
 
 		// Drop any dirty tracking induced by the change
+		//
+		// 递减 账户的变动 计数
 		if addr := j.entries[i].dirtied(); addr != nil {
 			if j.dirties[*addr]--; j.dirties[*addr] == 0 {
 				delete(j.dirties, *addr)
 			}
 		}
 	}
+
+	// 保留 回滚点 之前的  `journalEntry` 实例
 	j.entries = j.entries[:snapshot]
 }
 

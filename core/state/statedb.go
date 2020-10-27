@@ -62,7 +62,10 @@ type StateDB struct {
 	//  todo 这个的实现是 cachingDB
 	db   Database
 
-	// state的trie
+	// todo State中的 trie是 cachedTrie
+	// todo Storage中的 trie是 SecureTrie
+	//
+	// todo 而 cachingTrie 其实是封装了 SecureTrie
 	trie Trie
 
 	// This map holds 'live' objects, which will get modified while processing a state transition.
@@ -120,7 +123,8 @@ func New(root common.Hash, db Database) (*StateDB, error) {
 
 	// todo State中的 trie是 cachedTrie
 	// todo Storage中的 trie是 SecureTrie
-
+	//
+	// todo 而 cachingTrie 其实是封装了 SecureTrie
 	tr, err := db.OpenTrie(root)
 	if err != nil {
 		return nil, err
@@ -513,6 +517,9 @@ func (db *StateDB) ForEachStorage(addr common.Address, cb func(key, value common
 // Copy creates a deep, independent copy of the state.
 // Snapshots of the copied state cannot be applied to the copy.
 func (self *StateDB) Copy() *StateDB {
+
+	// todo 注意:  stateDB.Copy()  没有 copy  [journal.dirties]
+
 	self.lock.Lock()
 	defer self.lock.Unlock()
 
@@ -529,6 +536,8 @@ func (self *StateDB) Copy() *StateDB {
 		journal:           newJournal(),
 	}
 	// Copy the dirty states, logs, and preimages
+	//
+	// 只 copy 最近变动的 stateObject 的 Map 和标识位
 	for addr := range self.journal.dirties {
 		// As documented [here](https://github.com/go-ethereum-analysis/pull/16485#issuecomment-380438527),
 		// and in the Finalise-method, there is a case where an object is in the journal but not
@@ -603,7 +612,7 @@ Finalize:
  */
 func (s *StateDB) Finalise(deleteEmptyObjects bool) {
 
-	// todo 这一步很重要， 遍历所有最近有变动的 账户addr
+	// 根据 [journal.dirties]， 遍历所有最近有变动的 账户addr
 	for addr := range s.journal.dirties {
 
 		// todo 判断最近的 变更  日志账条目 中对应的 账户Addr 是否属于 最近活动的账户
@@ -673,11 +682,12 @@ func (s *StateDB) Commit(deleteEmptyObjects bool) (root common.Hash, err error) 
 
 	defer s.clearJournalAndRefund() // 清空所有 日志账条目 和 修订版 和 refund计数器
 
-	// 先遍历当前所有  日志账条目，
-	// 更新 记录最近变更账户的 map
+	// 根据 [journal.dirties] 来标识 最近变动的 stateObject
 	for addr := range s.journal.dirties {
 		s.stateObjectsDirty[addr] = struct{}{}
 	}
+
+
 	// Commit objects to the trie.
 	//
 	// 逐个处理最近活动的 账户

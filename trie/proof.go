@@ -93,7 +93,7 @@ func (t *Trie) Prove(key []byte, fromLevel uint, proofDb ethdb.Putter) error {
 		}
 	}
 
-	// 构建一个编码器
+	// 构建一个 hash (用来计算各个 node 的hash用)
 	hasher := newHasher(0, 0, nil)
 
 	// todo 遍历出所有该key路径上经历的node

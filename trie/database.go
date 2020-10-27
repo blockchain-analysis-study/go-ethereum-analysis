@@ -71,7 +71,7 @@ type Database struct {
 	// 永久存储成熟的Trie节点
 	diskdb ethdb.Database // Persistent storage for matured trie nodes
 
-	// trie node 的数据和引用关系
+	// trie node 的 数据 和 Hash 关系   todo (node.key 做了 compact编码之后的node计算的hash作为 key ->  并将该node作为 value)
 	nodes  map[common.Hash]*cachedNode // Data and references relationships of a node
 
 	// 最早跟踪的节点，刷新列表头
@@ -196,7 +196,7 @@ func (n *cachedNode) rlp() []byte {
 // or by regenerating it from the rlp encoded blob.
 func (n *cachedNode) obj(hash common.Hash, cachegen uint16) node {
 	if node, ok := n.node.(rawNode); ok {
-		return mustDecodeNode(hash[:], node, cachegen)
+		return mustDecodeNode(hash[:], node, cachegen)  // todo 这里会做. 将 node.key 从 compact 编码转回 hex 编码
 	}
 	return expandNode(hash[:], n.node, cachegen)
 }
@@ -348,6 +348,12 @@ func (db *Database) InsertBlob(hash common.Hash, blob []byte) {
 	db.insert(hash, blob, rawNode(blob))
 }
 
+// 只有两个地方用:
+//
+//		InsertBlob() 直接将 code 存入db
+//
+//		store() 将 node 存入db
+//
 // insert inserts a collapsed trie node into the memory database. This method is
 // a more generic version of InsertBlob, supporting both raw blob insertions as
 // well ex trie node insertions. The blob must always be specified to allow proper
@@ -359,7 +365,7 @@ func (db *Database) insert(hash common.Hash, blob []byte, node node) {
 	}
 	// Create the cached entry for this node
 	entry := &cachedNode{
-		node:      simplifyNode(node),
+		node:      simplifyNode(node),    // 简单的转换一些 node 格式   (statedb node  => db node)
 		size:      uint16(len(blob)),
 		flushPrev: db.newest,
 	}
@@ -368,7 +374,7 @@ func (db *Database) insert(hash common.Hash, blob []byte, node node) {
 			c.parents++
 		}
 	}
-	// todo 放入cache中
+	// todo 放入cache中    (此时的 hash  为 node.key 做了 compact 编码之后的 node计算出的hash)
 	db.nodes[hash] = entry
 
 	// Update the flush-list endpoints
@@ -394,21 +400,27 @@ func (db *Database) insertPreimage(hash common.Hash, preimage []byte) {
 
 // node retrieves a cached trie node from memory, or returns nil if none can be
 // found in the memory cache.
+//
+// todo 根据 nodeHash 查找 node
+//
+// 根据 hash 去 全局 node map 中找, 找不到再从  disk 找
 func (db *Database) node(hash common.Hash, cachegen uint16) node {
 	// Retrieve the node from cache if available
 	db.lock.RLock()
-	node := db.nodes[hash]
+	node := db.nodes[hash]  // 先从 缓存获取 node   todo (这里的hash 是 node.key 做了 compact 编码之后的node计算的hash,  node: 就是 key 做了 compact编码后的node )
 	db.lock.RUnlock()
 
 	if node != nil {
-		return node.obj(hash, cachegen)
+		return node.obj(hash, cachegen)   // todo 这里会做. 将 node.key 从 compact 编码转回 hex 编码
 	}
 	// Content unavailable in memory, attempt to retrieve from disk
+	//
+	// 缓存找不到时, 从 disk 获取 node
 	enc, err := db.diskdb.Get(hash[:])
 	if err != nil || enc == nil {
 		return nil
 	}
-	return mustDecodeNode(hash[:], enc, cachegen)
+	return mustDecodeNode(hash[:], enc, cachegen)   // todo 这里会做. 将 node.key 从 compact 编码转回 hex 编码
 }
 
 // Node retrieves an encoded cached trie node from memory. If it cannot be found

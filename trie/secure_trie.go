@@ -79,6 +79,8 @@ func (t *SecureTrie) Get(key []byte) []byte {
 // The value bytes must not be modified by the caller.
 // If a node was not found in the database, a MissingNodeError is returned.
 func (t *SecureTrie) TryGet(key []byte) ([]byte, error) {
+
+	// 先将 key  算完 sha3 Hash 作为需要查询的 key
 	return t.trie.TryGet(t.hashKey(key))
 }
 
@@ -185,10 +187,12 @@ func (t *SecureTrie) NodeIterator(start []byte) NodeIterator {
 // The caller must not hold onto the return value because it will become
 // invalid on the next call to hashKey or secKey.
 func (t *SecureTrie) hashKey(key []byte) []byte {
+
+	// 从  sync.Pool 中 获取  `key` 对应的 Hash
 	h := newHasher(0, 0, nil)
 	h.sha.Reset()
 	h.sha.Write(key)
-	buf := h.sha.Sum(t.hashKeyBuf[:0])
+	buf := h.sha.Sum(t.hashKeyBuf[:0])  //  key -> Sha3 ->  hash
 	returnHasherToPool(h)
 	return buf
 }

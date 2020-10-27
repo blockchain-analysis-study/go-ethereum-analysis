@@ -89,7 +89,11 @@ type stateObject struct {
 	//
 	// 写缓存
 	//
+	//
 	// storage trie，首次访问时变为非零
+	//
+	//      trie 中有 root, 且也放到 account.root 上了
+	//
 	trie Trie // storage trie, which becomes non-nil on first access
 	// contract bytecode, 加载代码时设置
 	code Code // contract bytecode, which gets set when code is loaded
@@ -216,6 +220,8 @@ func (self *stateObject) GetState(db Database, key common.Hash) common.Hash {
 		return value
 	}
 	// Load from DB in case it is missing.
+	//
+	// 当缓存 没有时, 尝试从 trie 上拿
 	enc, err := self.getTrie(db).TryGet(key[:])
 	if err != nil {
 		self.setError(err)

@@ -28,9 +28,10 @@ import (
 type hasher struct {
 	tmp        sliceBuffer
 	sha        keccakState
-	cachegen   uint16
-	cachelimit uint16
-	onleaf     LeafCallback
+	// 这两个值. 就是 trie 中的 chachegen 和 cachelimit
+	cachegen   uint16			//
+	cachelimit uint16			//
+	onleaf     LeafCallback   	// 这个 回调指针; 只有在  db.store() 的时候 调用, 而且 stateObject.Trie.Commit() 传nil, 只有 stateDB.Trie.Commit() 才传的回调
 }
 
 // keccakState wraps sha3.state. In addition to the usual hash methods, it also supports
@@ -62,9 +63,10 @@ var hasherPool = sync.Pool{
 	},
 }
 
+// 从  sync.Pool 中 获取  `key` 对应的 Hash
 func newHasher(cachegen, cachelimit uint16, onleaf LeafCallback) *hasher {
 	h := hasherPool.Get().(*hasher)
-	h.cachegen, h.cachelimit, h.onleaf = cachegen, cachelimit, onleaf
+	h.cachegen, h.cachelimit, h.onleaf = cachegen, cachelimit, onleaf   // 将 trie 的 cachegen 和 cachelimit 赋值给  hasher
 	return h
 }
 
@@ -105,18 +107,26 @@ func (h *hasher) hash(n node, db *Database, force bool) (node, node, error) {
 		if db == nil {
 			return hash, n, nil
 		}
+		// 是否 将 node 从 内存中删掉
 		if n.canUnload(h.cachegen, h.cachelimit) {
 			// Unload the node from cache. All of its subnodes will have a lower or equal
 			// cache generation number.
 			//
-			// 从缓存中卸载节点。它的所有子节点将具有较低或相等的缓存世代号码。
+			// 从缓存中卸载节点。它的所有子节点将具有较低或相等的缓存世代号码
 			cacheUnloadCounter.Inc(1)
+
+			// 只, 返回 hash  和 hash形成的 hashNode
 			return hash, hash, nil
 		}
+
+		// 如果 node  近期没有用 变动, 且 不需要充内存中删除, 返回 hash  和 node
 		if !dirty {
 			return hash, n, nil
 		}
 	}
+
+	// todo 走到这里 说明之前做过 insert 或者 delete, 各个 node 上的 hash 已经被清空. 需要重新计算
+	//
 	// Trie not processed yet or needs storage, walk the children
 	//
 	// todo 这里将进入间接的递归
@@ -127,9 +137,9 @@ func (h *hasher) hash(n node, db *Database, force bool) (node, node, error) {
 	// 		设置dirty参数为false [新创建的节点的dirty值是为true的]，然后返回。
 	//
 	//
-	// collapsed: 将 key被折叠的shortNode返回
-	// cached: 将 key 转成byte的shortNode/fullNode返回
-	collapsed, cached, err := h.hashChildren(n, db)
+	// collapsed: 将 key被折叠的shortNode返回  (key 被 compact 编码了)
+	// cached: 将 key 转成byte的shortNode/fullNode返回  (key 还是原来的 hex 编码)
+	collapsed, cached, err := h.hashChildren(n, db)   // todo 处理每个节点
 	if err != nil {
 		return hashNode{}, n, err
 	}
@@ -142,23 +152,26 @@ func (h *hasher) hash(n node, db *Database, force bool) (node, node, error) {
 	// 	force参数的用途是当节点的RLP字节长度小于32也对节点的RLP进行hash计算，
 	// 	这样保证无论如何也会对根节点进行Hash计算.
 	//
-	hashed, err := h.store(collapsed, db, force)
+	hashed, err := h.store(collapsed, db, force)   // todo 将当前节点生成hash       (collapsed: 为 key做了 compact 编码, 需要存入 磁盘的 node)
 	if err != nil {
 		return hashNode{}, n, err
 	}
+
+	// todo 将计算出 fullnode  和 shortnode 的 hash 存好,  并清楚 最近变更标识位 dirty
+	//
 	// Cache the hash of the node for later reuse and remove
 	// the dirty flag in commit mode. It's fine to assign these values directly
 	// without copying the node first because hashChildren copies it.
 	cachedHash, _ := hashed.(hashNode)
 	switch cn := cached.(type) {
 	case *shortNode:
-		cn.flags.hash = cachedHash
+		cn.flags.hash = cachedHash	// 将当前节点的hasn保存在flags中    (此时的 Hash 是使用了 collapsed <key做了 compact 编码之后的 node> 计算出来的,  并将它 赋给 内存 那份对应的 <key 还是原来的  hex 编码> node)
 		if db != nil {
 			// 因为新创建的节点的dirty值是为true的
 			cn.flags.dirty = false
 		}
 	case *fullNode:
-		cn.flags.hash = cachedHash
+		cn.flags.hash = cachedHash	// 将当前节点的hasn保存在flags中
 		if db != nil {
 			// 因为新创建的节点的dirty值是为true的
 			cn.flags.dirty = false
@@ -166,8 +179,9 @@ func (h *hasher) hash(n node, db *Database, force bool) (node, node, error) {
 	}
 
 	// 返回值说明，
-	// cached: 变量包含了原有的node节点，并且包含了node节点的hash值。
 	// hashed: 变量返回了当前节点的hash值(这个值其实是根据node和node的所有子节点计算出来的)
+	// cached: 变量包含了原有的node节点，并且包含了node节点的hash值。
+	//
 	return hashed, cached, nil
 }
 
@@ -192,6 +206,11 @@ func (h *hasher) hash(n node, db *Database, force bool) (node, node, error) {
 返回:
 collapsed: 将 key被折叠的shortNode/fullNode返回
 cached: 将 key 转成byte的shortNode/fullNode返回
+
+
+这个方法真正最主要的目的就是将当前所在节点复制了两份（分别叫做collapsed, cached），这样此时加上原先传入的总共就有3份当前节点数据了。
+
+todo 复制的两份，其中一份collapsed是为了将来db磁盘存储；而另一份cached会保留在内存中，回调结束后trie.root会指向这个cached，这样，原先的那一份就会被gc了（trie.root原先是指向这一份）
  */
 func (h *hasher) hashChildren(original node, db *Database) (node, node, error) {
 	var err error
@@ -206,11 +225,13 @@ func (h *hasher) hashChildren(original node, db *Database) (node, node, error) {
 		// 散列 short节点的 child节点，缓存新散列的子树
 		collapsed, cached := n.copy(), n.copy()
 
+		// todo 将 key 进行 折叠
+		//
 		// 节点放入数据库时候的key用到的就是Compact编码，可以节约磁盘空间
 		// hex 转 Compact编码 <压缩编码>
-		collapsed.Key = hexToCompact(n.Key)
+		collapsed.Key = hexToCompact(n.Key)  // todo 将 内存中 node 的前缀hex key 转为compact，方便磁盘存储   (insert 的时候  node.Key 是 hex编码的)
 		// hex 转 bytes
-		cached.Key = common.CopyBytes(n.Key)
+		cached.Key = common.CopyBytes(n.Key)   // 将key 字节数组复制给cached
 
 		// 如果 shortNode 存在valueNode子节点
 		if _, ok := n.Val.(valueNode); !ok {
@@ -223,14 +244,14 @@ func (h *hasher) hashChildren(original node, db *Database) (node, node, error) {
 
 		// collapsed: 将 key被折叠的shortNode返回
 		// cached: 将 key 转成byte的shortNode返回
-		return collapsed, cached, nil
+		return collapsed, cached, nil  // 前者是用于磁盘存储的节点，后者是hash化的节点，可以称为轻节点
 
 	case *fullNode:
 		// Hash the full node's children, caching the newly hashed subtrees
 		collapsed, cached := n.copy(), n.copy()
 
 		for i := 0; i < 16; i++ {
-			if n.Children[i] != nil {
+			if n.Children[i] != nil {  //类似，处理每个节点
 				collapsed.Children[i], cached.Children[i], err = h.hash(n.Children[i], db, false)
 				if err != nil {
 					return original, original, err
@@ -282,7 +303,7 @@ func (h *hasher) store(n node, db *Database, force bool) (node, error) {
 	// Larger nodes are replaced by their hash and stored in the database.
 	hash, _ := n.cache()
 	if hash == nil {
-		hash = h.makeHashNode(h.tmp)
+		hash = h.makeHashNode(h.tmp)   // todo  可以得知,  node 计算Hash 时,  key已经是 compact 编码的了
 	}
 
 	if db != nil {
@@ -297,7 +318,7 @@ func (h *hasher) store(n node, db *Database, force bool) (node, error) {
 		//
 		// 果然数据库里面插入的key是node的RLP之后的hash值(其实就是hashNode)，
 		// value为node的RLP值的字节数组.
-		db.insert(hash, h.tmp, n)
+		db.insert(hash, h.tmp, n)   // todo (这里的 node.key 已经是  compact 编码的了)
 		db.lock.Unlock()
 
 		// Track external references from account->storage trie
