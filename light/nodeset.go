@@ -29,8 +29,8 @@ import (
 // NodeSet stores a set of trie nodes. It implements trie.Database and can also
 // act as a cache for another trie.Database.
 type NodeSet struct {
-	nodes map[string][]byte
-	order []string
+	nodes map[string][]byte    // 装着  proof 路径上的所有  nodeHash -> node原数据
+	order []string				// 装着 所有 nodeHash  (按照proof 路径顺序)
 
 	dataSize int
 	lock     sync.RWMutex
@@ -102,6 +102,8 @@ func (db *NodeSet) NodeList() NodeList {
 	for _, key := range db.order {
 		values = append(values, db.nodes[key])
 	}
+
+	// 根据 proof 路径, 返回路径上 的所有 node原数据  list
 	return values
 }
 
@@ -128,12 +130,12 @@ func (n NodeList) Store(db ethdb.Putter) {
 // NodeSet converts the node list to a NodeSet
 func (n NodeList) NodeSet() *NodeSet {
 	db := NewNodeSet()
-	n.Store(db)
+	n.Store(db)  // 将  list 中的node 自己算 nodeHash 放入 Set的map中   nodeHash -> node原数据
 	return db
 }
 
 // Put stores a new node at the end of the list
-func (n *NodeList) Put(key []byte, value []byte) error {
+func (n *NodeList) Put(key []byte, value []byte) error {   // 妈的 key 并没用
 	*n = append(*n, value)
 	return nil
 }

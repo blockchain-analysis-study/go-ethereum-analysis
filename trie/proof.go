@@ -38,13 +38,17 @@ import (
 /**
 todo 这个方法一般只有 轻节点用
 
-Prove: 构造入参的key的Merkle proof。
-结果包含键值上路径上的所有编码节点。 该值本身也包含在最后一个节点中，可以通过验证证明来检索.
+Prove: 构造入参的key的Merkle proof
+
+proofDb: 用来 接收 证明 路径的  list
+
+todo 根据给定的key，在trie中，将满足key中最大长度前缀的路径上的节点都加入到proofDb 返回（队列中每个元素满足：未编码的hash以及对应rlp编码后的节点）
 
 
 如果trie不包含key的值，
 则返回的证明将包含key的现有前缀最长的所有节点（至少是根节点），
-并以证明不存在key的节点结尾.
+并以证明不存在key的节点结尾.   (这句话的意思是, 只返回了 key前缀匹配到的node, 而后缀没匹配到node)
+
 */
 func (t *Trie) Prove(key []byte, fromLevel uint, proofDb ethdb.Putter) error {
 	// Collect all nodes on the path to key.
@@ -107,12 +111,12 @@ func (t *Trie) Prove(key []byte, fromLevel uint, proofDb ethdb.Putter) error {
 		// 获取,key经过折叠之后的 node (只针对 shortNode 和 fullNode)
 		// (valueNode和hashNode返回的是原值,因为它们没有子节点)
 		n, _, _ = hasher.hashChildren(n, nil)
-		hn, _ := hasher.store(n, nil, false)
+		hn, _ := hasher.store(n, nil, false)  // 这里 返回 hash
 		if hash, ok := hn.(hashNode); ok || i == 0 {
 			// If the node's database encoding is a hash (or is the
 			// root node), it becomes a proof element.
 			//
-			// 如果节点的数据库编码是哈希（或根节点），则它将成为证明元素。
+			// 如果节点的数据库编码是  hashNode 或  根节点 ，则它将成为证明元素
 			if fromLevel > 0 {
 				fromLevel--
 			} else {
@@ -121,8 +125,8 @@ func (t *Trie) Prove(key []byte, fromLevel uint, proofDb ethdb.Putter) error {
 					hash = crypto.Keccak256(enc)
 				}
 
-				// 将node的Hash值存入proof
-				proofDb.Put(hash, enc)
+				//  todo 将  node的Hash值 和  node原数据   存入proof
+				proofDb.Put(hash, enc)   // 妈的 key 并没用, 就是 hash 根本没用
 			}
 		}
 	}
@@ -150,29 +154,53 @@ func (t *SecureTrie) Prove(key []byte, fromLevel uint, proofDb ethdb.Putter) err
 	return t.trie.Prove(key, fromLevel, proofDb)
 }
 
+
+// todo 校验  Prove() 返回的 proofDb 数组 和  key 的关系
+//
+//    以此来得知 key 是否在该  MPT 的路径上 ?
+//
+//   验证proffDb中是否存在满足输入的hash，和对应key的节点，如果满足，则返回rlp解码后的该节点
+//
+// todo 因为 key 对应的 value 肯定是 valueNode. 所以 证明 某个node是否在 tire上. 只需要早 proof 路径上找到 key 对应的 valueNode 即可
+//
 // VerifyProof checks merkle proofs. The given proof must contain the value for
 // key in a trie with the given root hash. VerifyProof returns an error if the
 // proof contains invalid trie nodes or the wrong value.
 func VerifyProof(rootHash common.Hash, key []byte, proofDb DatabaseReader) (value []byte, nodes int, err error) {
+
+	// key 先做 byte -> hex
 	key = keybytesToHex(key)
 	wantHash := rootHash
 	for i := 0; ; i++ {
-		buf, _ := proofDb.Get(wantHash[:])
+
+		// 首先  key 路径上 肯定要有 入参的 rootHash的.  否则 直接 证明失败
+		buf, _ := proofDb.Get(wantHash[:])  // proofDb 有两种实现 nodeSet 和 nodeList. 目前有效的报文中都是用 nodeSet.  其底层为 map   nodeHash -> node原数据
 		if buf == nil {
 			return nil, i, fmt.Errorf("proof node %d (hash %064x) missing", i, wantHash)
 		}
+
+
+		// 使用 nodeHash 和 node原数据 封装成一个 node实例   （第一次 for 是 rootNode, 后续都是 key 路径上的 node）
 		n, err := decodeNode(wantHash[:], buf, 0)
 		if err != nil {
 			return nil, i, fmt.Errorf("bad proof node %d: %v", i, err)
 		}
-		keyrest, cld := get(n, key)
+		keyrest, cld := get(n, key)   // 根据 node 和 key 返回 key路径上下一级 node  (及对应的 child node)  而  keyrest： key 剩余的后缀部分
 		switch cld := cld.(type) {
+
+		// todo 因为 key 对应的 value 肯定是 valueNode. 所以 证明 某个node是否在 tire上. 只需要早 proof 路径上找到 key 对应的 valueNode 即可
+
+		// 找到某个后缀处时, 返回了 nil, 说明提前终止了, 说明 proof 路径上 并没有包含 该 key
 		case nil:
 			// The trie doesn't contain the key.
 			return nil, i, nil
+
+		// 如果 child 是 hashNode, 将 该hash 复制给  wantHash 变量, 继续往下查找
 		case hashNode:
 			key = keyrest
 			copy(wantHash[:], cld)
+
+		// todo 找到了该 key 对应的 node. 说明 proof 路径上 存在 该 key
 		case valueNode:
 			return cld, i + 1, nil
 		}

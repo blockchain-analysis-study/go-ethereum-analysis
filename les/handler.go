@@ -1369,7 +1369,7 @@ func (pm *ProtocolManager) handleMsg(p *peer) error {
 					var encNumber [8]byte
 					binary.BigEndian.PutUint64(encNumber[:], req.BlockNum)
 
-					var proof light.NodeList
+					var proof light.NodeList   // list 容器, 注意和  Set 的区别
 
 					// todo 填充数的 proof 路径
 					trie.Prove(encNumber[:], 0, &proof)
@@ -1437,7 +1437,8 @@ func (pm *ProtocolManager) handleMsg(p *peer) error {
 			root     common.Hash
 			auxTrie  *trie.Trie
 		)
-		nodes := light.NewNodeSet()
+
+		nodes := light.NewNodeSet()  // Set 容器, 注意 和 List 的区别
 
 		// 遍历 所有 reqs
 		for _, req := range req.Reqs {
@@ -1488,7 +1489,7 @@ func (pm *ProtocolManager) handleMsg(p *peer) error {
 		}
 		bv, rcost := p.fcClient.RequestProcessed(costs.baseCost + uint64(reqCnt)*costs.reqCost)
 		pm.server.fcCostStats.update(msg.Code, uint64(reqCnt), rcost)
-		return p.SendHelperTrieProofs(req.ReqID, bv, HelperTrieResps{Proofs: nodes.NodeList(), AuxData: auxData})
+		return p.SendHelperTrieProofs(req.ReqID, bv, HelperTrieResps{Proofs: nodes.NodeList(), AuxData: auxData})  // nodes.NodeList()： 根据 proof 路径, 返回路径上 的所有 node原数据  list
 
 
 	/**
