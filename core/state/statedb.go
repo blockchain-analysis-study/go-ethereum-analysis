@@ -736,21 +736,34 @@ func (s *StateDB) Commit(deleteEmptyObjects bool) (root common.Hash, err error) 
 	//
 	// 将 State中的变动 写入db
 	root, err = s.trie.Commit(func(leaf []byte, parent common.Hash) error {
+		// 传入的 回调函数
+		//
+		//	入参说明:
+		//
+		//	leaf:  当前 trie 的某个 叶子结点
+		//	parent:  leaf的 父节点的 hash
+		//
+
+		// 只处理 node 是 account 组成的数据
 		var account Account
 		if err := rlp.DecodeBytes(leaf, &account); err != nil {
 			return nil
 		}
+
+		// 处理 root
 		if account.Root != emptyState {
 			fmt.Println("提交 storage root ...")
-			s.db.TrieDB().Reference(account.Root, parent)
+			s.db.TrieDB().Reference(account.Root, parent)  	// 追加 父子双方引用    root 和 parent
 		}
 		code := common.BytesToHash(account.CodeHash)
+
+		// 处理 codeHash
 		if code != emptyCode {
 			fmt.Println("提交Code Hash ...")
-			s.db.TrieDB().Reference(code, parent)
+			s.db.TrieDB().Reference(code, parent)			// 追加 父子双方引用    codeHash 和 parent
 		}
 		return nil
 	})
-	log.Debug("Trie cache stats after commit", "misses", trie.CacheMisses(), "unloads", trie.CacheUnloads())
+	log.Debug("Trie cache stats after commit", "misses", trie.CacheMisses(), "unloads", trie.CacheUnloads())  // 将统计的变量,   缓存未命中次数   和  node从内存中卸载次数   打印出来
 	return root, err
 }

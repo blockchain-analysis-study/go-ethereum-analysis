@@ -495,16 +495,20 @@ func (db *Database) reference(child common.Hash, parent common.Hash) {
 	if !ok {
 		return
 	}
-	// If the reference already exists, only duplicate for roots
-	// 如果引用已存在，则只复制根
+	// If the reference already exists, only duplicate for roots  如果引用已存在，则只复制根
+	//
+	//  如果 parent node 的 chaildren map 还不存在, 则创建 map, 并在后面讲 该node 加进去
 	if db.nodes[parent].children == nil {
 		db.nodes[parent].children = make(map[common.Hash]uint16)
+
+	// 如果 parent node 的 chaildren map 中已经记录当前 node 了, 直接返回
 	} else if _, ok = db.nodes[parent].children[child]; ok && parent != (common.Hash{}) {
 		return
 	}
-	// 只要当前节点有被 parent引用则，他爹的计数器加一
+	// 只要  当前node 有被 多少个parent引用 的计数器加一
 	node.parents++
-	// 把当前节点放置到对应的爹的 children map 中
+
+	// 把 对应的 parent node 的 children map 中，
 	db.nodes[parent].children[child]++
 }
 

@@ -277,6 +277,8 @@ func (h *hasher) hashChildren(original node, db *Database) (node, node, error) {
 // node->external trie references.
 //
 //
+// todo 将 经过 compact 编码key的node算出 node Hash, 并将node存到 db 缓存(最终会被刷入 db)， 且返回 nodeHash
+//
 // store方法:
 // 如果一个node的所有子节点都替换成了子节点的hash值，
 // 那么直接调用rlp.Encode方法对这个节点进行编码
@@ -285,24 +287,30 @@ func (h *hasher) hashChildren(original node, db *Database) (node, node, error) {
 // 然后把hash值和编码后的数据存储到数据库里面，然后返回hash值.
 // 可以看到每个值大于32的节点的值和hash都存储到了数据库里面，
 //
-//
+//  todo 如果  force 设置为true，则即使长度再小的节点，也要进行rlp编码
 func (h *hasher) store(n node, db *Database, force bool) (node, error) {
 	// Don't store hashes or empty nodes.
-	if _, isHash := n.(hashNode); n == nil || isHash {
+	if _, isHash := n.(hashNode); n == nil || isHash {   // 空数据  或者 hashNode，则不处理
 		return n, nil
 	}
+	// todo 将 node 做 rlp
 	// Generate the RLP encoding of the node
-	h.tmp.Reset()
+	h.tmp.Reset()  // 缓存初始化
 	if err := rlp.Encode(&h.tmp, n); err != nil {
 		panic("encode error: " + err.Error())
 	}
-	if len(h.tmp) < 32 && !force {
+	if len(h.tmp) < 32 && !force {   // todo 编码后的node长度小于32，若force为true，则可确保所有节点都被编码
 		// 小于32个字节的节点存储在其父级内部
 		return n, nil // Nodes smaller than 32 bytes are stored inside their parent
 	}
-	// Larger nodes are replaced by their hash and stored in the database.
-	hash, _ := n.cache()
+
+	//  todo 如果  force 设置为true，则即使长度再小的节点，也要进行rlp编码
+
+	// Larger nodes are replaced by their hash and stored in the database.   长度过大的，则都将被新计算出来的hash取代
+	hash, _ := n.cache() //  取出当前 node 的hash  （node.flag中的hash）
 	if hash == nil {
+
+		// 使用 rlp 之后的  node 算Hash
 		hash = h.makeHashNode(h.tmp)   // todo  可以得知,  node 计算Hash 时,  key已经是 compact 编码的了
 	}
 
@@ -323,15 +331,24 @@ func (h *hasher) store(n node, db *Database, force bool) (node, error) {
 
 		// Track external references from account->storage trie
 		if h.onleaf != nil {
+
+			// 判断当前处理的  node 类型
 			switch n := n.(type) {
+
+			// 如果是 拓展节点, 只处理  下属的  value node  和当前 short node 的引用关系
 			case *shortNode:
+
 				if child, ok := n.Val.(valueNode); ok {
-					h.onleaf(child, hash)
+					h.onleaf(child, hash)   	// 用于关联  parent 和 child 的 node 引用关系 todo  onleaf 回调只有 StateDB.Commit时传入.  stateObject.Commit传 nil
 				}
+
+			// 如果是 分支节点,  只处理	  下属的  value node  和当前 full node 的引用关系
 			case *fullNode:
+
+				// 逐个 处理 fullNode 下所有的 valueNode child
 				for i := 0; i < 16; i++ {
 					if child, ok := n.Children[i].(valueNode); ok {
-						h.onleaf(child, hash)
+						h.onleaf(child, hash)  	// 用于关联  parent 和 child 的 node 引用关系 todo  onleaf 回调只有 StateDB.Commit时传入.  stateObject.Commit传 nil
 					}
 				}
 			}
@@ -340,6 +357,7 @@ func (h *hasher) store(n node, db *Database, force bool) (node, error) {
 	return hash, nil
 }
 
+// 根据 rlp 之后的 node 计算 nodeHash
 func (h *hasher) makeHashNode(data []byte) hashNode {
 	n := make(hashNode, h.sha.Size())
 	h.sha.Reset()

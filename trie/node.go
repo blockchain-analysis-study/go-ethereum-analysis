@@ -153,7 +153,7 @@ type nodeFlag struct {
 
 // canUnload tells whether a node can be unloaded.
 func (n *nodeFlag) canUnload(cachegen, cachelimit uint16) bool {
-	return !n.dirty && cachegen-n.gen >= cachelimit
+	return !n.dirty && cachegen-n.gen >= cachelimit   // 说明该节点数据始终没有发生变化  （可以从 内存中 将 node的数据卸载, 只留 hash,  原因是 该node 近期并不活跃）
 }
 
 // 返回 node 是否需要从 内存中清空只留 Hash
