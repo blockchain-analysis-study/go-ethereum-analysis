@@ -37,24 +37,25 @@ const (
 	writePauseWarningThrottler = 1 * time.Minute
 )
 
-var OpenFileLimit = 64
+var OpenFileLimit = 64  // 限制同时最多只能打开64个文件
 
+// 定义了一套用于记录操作db的结构
 type LDBDatabase struct {
-	fn string      // filename for reporting
-	db *leveldb.DB // LevelDB instance
+	fn string      // filename for reporting    用于存放报告的 文件名称
+	db *leveldb.DB // LevelDB instance			 google的levelDB实例
 
-	compTimeMeter    metrics.Meter // Meter for measuring the total time spent in database compaction
-	compReadMeter    metrics.Meter // Meter for measuring the data read during compaction
-	compWriteMeter   metrics.Meter // Meter for measuring the data written during compaction
-	writeDelayNMeter metrics.Meter // Meter for measuring the write delay number due to database compaction
-	writeDelayMeter  metrics.Meter // Meter for measuring the write delay duration due to database compaction
-	diskReadMeter    metrics.Meter // Meter for measuring the effective amount of data read
-	diskWriteMeter   metrics.Meter // Meter for measuring the effective amount of data written
+	compTimeMeter    metrics.Meter // Meter for measuring the total time spent in database compaction						计算压缩数据所要花费的时间
+	compReadMeter    metrics.Meter // Meter for measuring the data read during compaction									压缩期间 读取的数据
+	compWriteMeter   metrics.Meter // Meter for measuring the data written during compaction								压缩期间 写入的数据
+	writeDelayNMeter metrics.Meter // Meter for measuring the write delay number due to database compaction					压缩而引起的写延迟数
+	writeDelayMeter  metrics.Meter // Meter for measuring the write delay duration due to database compaction				压缩而导致的写延迟时间
+	diskReadMeter    metrics.Meter // Meter for measuring the effective amount of data read									计算读取数据影响到的条数
+	diskWriteMeter   metrics.Meter // Meter for measuring the effective amount of data written								计算写入数据影响到的条数
 
-	quitLock sync.Mutex      // Mutex protecting the quit channel access
-	quitChan chan chan error // Quit channel to stop the metrics collection before closing the database
+	quitLock sync.Mutex      // Mutex protecting the quit channel access													停止时候的访问保护
+	quitChan chan chan error // Quit channel to stop the metrics collection before closing the database					退出db前的处理
 
-	log log.Logger // Contextual logger tracking the database path
+	log log.Logger // Contextual logger tracking the database path															日志 db 路径跟踪
 }
 
 // NewLDBDatabase returns a LevelDB wrapped object.
@@ -62,6 +63,8 @@ func NewLDBDatabase(file string, cache int, handles int) (*LDBDatabase, error) {
 	logger := log.New("database", file)
 
 	// Ensure we have some minimal caching and file guarantees
+	//
+	// 确保有一些缓存和文件
 	if cache < 16 {
 		cache = 16
 	}
@@ -71,6 +74,8 @@ func NewLDBDatabase(file string, cache int, handles int) (*LDBDatabase, error) {
 	logger.Info("Allocated cache and file handles", "cache", cache, "handles", handles)
 
 	// Open the db and recover any potential corruptions
+	//
+	// 初始化，性能调优相关 leveldb
 	db, err := leveldb.OpenFile(file, &opt.Options{
 		OpenFilesCacheCapacity: handles,
 		BlockCacheCapacity:     cache / 2 * opt.MiB,
@@ -128,6 +133,7 @@ func (db *LDBDatabase) NewIteratorWithPrefix(prefix []byte) iterator.Iterator {
 	return db.db.NewIterator(util.BytesPrefix(prefix), nil)
 }
 
+// 某次数据库操作结束后关闭该实例，停止metrics统计信息，防止多个因为启动的数据库实例过多造成内部资源竞争
 func (db *LDBDatabase) Close() {
 	// Stop the metrics collection to avoid internal database races
 	db.quitLock.Lock()

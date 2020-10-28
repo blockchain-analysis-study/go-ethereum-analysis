@@ -250,14 +250,17 @@ func (h *hasher) hashChildren(original node, db *Database) (node, node, error) {
 		// Hash the full node's children, caching the newly hashed subtrees
 		collapsed, cached := n.copy(), n.copy()
 
+		// 只算 0 ->  15 儿子的 hash
 		for i := 0; i < 16; i++ {
-			if n.Children[i] != nil {  //类似，处理每个节点
+			if n.Children[i] != nil {  // 类似，处理每个节点  (nil 的儿子不处理)
 				collapsed.Children[i], cached.Children[i], err = h.hash(n.Children[i], db, false)
 				if err != nil {
 					return original, original, err
 				}
 			}
 		}
+
+		// 自己的 value 不需要算 Hash
 		cached.Children[16] = n.Children[16]
 
 		// collapsed: 将 key被折叠的fullNode返回
