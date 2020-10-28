@@ -232,7 +232,7 @@ func (self *stateObject) GetState(db Database, key common.Hash) common.Hash {
 		if err != nil {
 			self.setError(err)
 		}
-		value.SetBytes(content)  // 将 byte 塞到 value中
+		value.SetBytes(content)  // 将 byte 塞到 value中   todo (这里如果 len(content) < 32，那么 value的前面会自动填充 0,  看 stateObject.updateTrie() 中)
 	}
 	self.cachedStorage[key] = value
 	return value
@@ -268,6 +268,10 @@ func (self *stateObject) updateTrie(db Database) Trie {
 			continue
 		}
 		// Encoding []byte cannot fail, ok to ignore the error.
+		//
+		// 做 rlp编码时, 对 value的前面的 0 截取掉  todo (在 stateObject.GetState() 中我们会看到, 将value的原始数据塞到 common.Hash中是调用了, `value.SetBytes(content)` 这里会自动往前面 填充0)
+		//
+		// 为什么需要切掉 0, 因为 前缀有0时, 说明真实的 value没32byte, value真实的值是不包含前面的0的, rlp当然是需要对真实值做编码, 还有就是 0其实做rlp也是有值的，不能被混淆了
 		v, _ := rlp.EncodeToBytes(bytes.TrimLeft(value[:], "\x00"))
 		self.setError(tr.TryUpdate(key[:], v))
 	}
