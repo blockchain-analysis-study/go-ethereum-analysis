@@ -255,12 +255,16 @@ func (self *stateObject) setState(key, value common.Hash) {
 	self.dirtyStorage[key] = value
 }
 
+// 将 dirtStorage 的东西更新树   (stateObject的 trie)
+//
 // updateTrie writes cached storage modifications into the object's storage trie.
 //
 // updateTrie:
 //	将缓存的存储修改 写入对象的存储树
 func (self *stateObject) updateTrie(db Database) Trie {
 	tr := self.getTrie(db)
+
+	// 将 dirtStorage 的东西更新树
 	for key, value := range self.dirtyStorage {
 		delete(self.dirtyStorage, key)
 		if (value == common.Hash{}) {
@@ -283,19 +287,18 @@ func (self *stateObject) updateTrie(db Database) Trie {
 // UpdateRoot:
 // 将Trie根设置为的当前根哈希
 func (self *stateObject) updateRoot(db Database) {
-	self.updateTrie(db)
-	// 计算root Hash
-	self.data.Root = self.trie.Hash()
+	self.updateTrie(db)  				 // 将 dirtStorage 的东西更新树   (stateObject的 trie)
+	self.data.Root = self.trie.Hash() 	// 计算root Hash
 }
 
 // CommitTrie the storage trie of the object to db.
 // This updates the trie root.
 func (self *stateObject) CommitTrie(db Database) error {
-	self.updateTrie(db)
+	self.updateTrie(db)  // 将 dirtStorage 的东西更新树   (stateObject的 trie)
 	if self.dbErr != nil {
 		return self.dbErr
 	}
-	root, err := self.trie.Commit(nil)
+	root, err := self.trie.Commit(nil)  // 然后将 trie 提交
 	if err == nil {
 		self.data.Root = root
 	}

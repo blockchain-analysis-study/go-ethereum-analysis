@@ -309,7 +309,7 @@ func (self *StateDB) StorageTrie(addr common.Address) Trie {
 		return nil
 	}
 	cpy := stateObject.deepCopy(self)
-	return cpy.updateTrie(self.db)
+	return cpy.updateTrie(self.db)   // 将 dirtStorage 的东西更新树   (stateObject的 trie)
 }
 
 func (self *StateDB) HasSuicided(addr common.Address) bool {
@@ -633,8 +633,8 @@ func (s *StateDB) Finalise(deleteEmptyObjects bool) {
 		if stateObject.suicided || (deleteEmptyObjects && stateObject.empty()) {
 			s.deleteStateObject(stateObject)
 		} else { // todo 否则 更新账户的 storage root 和 state的Trie 中该账户信息
-			stateObject.updateRoot(s.db)
-			s.updateStateObject(stateObject)
+			stateObject.updateRoot(s.db)			// 更新 stateObject 中的 k-v trie
+			s.updateStateObject(stateObject)		// 将该stateObject 去更新 stateDB的 trie
 		}
 		s.stateObjectsDirty[addr] = struct{}{}
 	}
@@ -728,15 +728,11 @@ func (s *StateDB) Commit(deleteEmptyObjects bool) (root common.Hash, err error) 
 				return common.Hash{}, err
 			}
 			// Update the object in the main account trie.
-			//
-			// 更新State Trie中的 stateObject
-			s.updateStateObject(stateObject)
+			s.updateStateObject(stateObject)   // 将该 stateObject 去更新 stateDB的 trie
 		}
 		delete(s.stateObjectsDirty, addr)
 	}
-	// Write trie changes.
-	//
-	// 将 State中的变动 写入db
+	// Write trie changes.  将 stateDB的 trie 提交
 	root, err = s.trie.Commit(func(leaf []byte, parent common.Hash) error {
 		// 传入的 回调函数
 		//
