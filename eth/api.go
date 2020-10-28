@@ -371,6 +371,8 @@ func (api *PrivateDebugAPI) StorageRangeAt(ctx context.Context, blockHash common
 	if err != nil {
 		return StorageRangeResult{}, err
 	}
+
+	// 根据 合约 addr 获取 对应的合约账户实例
 	st := statedb.StorageTrie(contractAddress)
 	if st == nil {
 		return StorageRangeResult{}, fmt.Errorf("account %x doesn't exist", contractAddress)
@@ -378,18 +380,25 @@ func (api *PrivateDebugAPI) StorageRangeAt(ctx context.Context, blockHash common
 	return storageRangeAt(st, keyStart, maxResult)
 }
 
+// 根据 prefix 遍历 trie 上符合该prefix 的key对应的 k-v (某个账户的trie)
+//
+// start:  key 的前缀, 目标 根据 load 回 所有这个前缀的 k-v 数据
+//
+//  看完实现, 我认为 这个 start 应该是 start == sha3(prefix)
 func storageRangeAt(st state.Trie, start []byte, maxResult int) (StorageRangeResult, error) {
+
+	// 获取 state 的iter
 	it := trie.NewIterator(st.NodeIterator(start))
 	result := StorageRangeResult{Storage: storageMap{}}
 	for i := 0; i < maxResult && it.Next(); i++ {
-		_, content, _, err := rlp.Split(it.Value)
+		_, content, _, err := rlp.Split(it.Value)	// value 的原始数据
 		if err != nil {
 			return StorageRangeResult{}, err
 		}
 		e := storageEntry{Value: common.BytesToHash(content)}
 		if preimage := st.GetKey(it.Key); preimage != nil {
 			preimage := common.BytesToHash(preimage)
-			e.Key = &preimage
+			e.Key = &preimage		// key 的原始数据
 		}
 		result.Storage[common.BytesToHash(it.Key)] = e
 	}

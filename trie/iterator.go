@@ -45,8 +45,8 @@ func NewIterator(it NodeIterator) *Iterator {
 func (it *Iterator) Next() bool {
 	for it.nodeIt.Next(true) {
 		if it.nodeIt.Leaf() {
-			it.Key = it.nodeIt.LeafKey()
-			it.Value = it.nodeIt.LeafBlob()
+			it.Key = it.nodeIt.LeafKey()		// 返回 hex key
+			it.Value = it.nodeIt.LeafBlob()		// 返回 valueNode (也是 value的原始数据啦)
 			return true
 		}
 	}
@@ -102,19 +102,29 @@ type NodeIterator interface {
 	LeafProof() [][]byte
 }
 
+// trie 迭代器的 状态
+//
 // nodeIteratorState represents the iteration state at one particular node of the
 // trie, which can be resumed at a later invocation.
 type nodeIteratorState struct {
+
+	// 当前状态对应 trie上的 node的 hash
 	hash    common.Hash // Hash of the node being iterated (nil if not standalone)
+	// 当前状态对应 trie上的 node
 	node    node        // Trie node being iterated
 	parent  common.Hash // Hash of the first full ancestor node (nil if current is the root)
 	index   int         // Child to be processed next
 	pathlen int         // Length of the path to this node
 }
 
+// trie节点迭代器的实现
 type nodeIterator struct {
+
+	// 迭代器引用的 trie 本身
 	trie  *Trie                // Trie being iterated
+	// 持久化迭代状态的 trie node 的层次结构 （里面装的是 遍历到的每个 node 的 state, 在 `it.push()` 中被放置）
 	stack []*nodeIteratorState // Hierarchy of trie nodes persisting the iteration state
+	// 当前被遍历到的 node
 	path  []byte               // Path to the current node
 	err   error                // Failure set in case of an internal error in the iterator
 }
@@ -131,13 +141,14 @@ type seekError struct {
 func (e seekError) Error() string {
 	return "seek error: " + e.err.Error()
 }
-
+// 根据 key 的前缀 返回 一个 trie 的迭代器
 func newNodeIterator(trie *Trie, start []byte) NodeIterator {
 	if trie.Hash() == emptyState {
 		return new(nodeIterator)
 	}
 	it := &nodeIterator{trie: trie}
-	it.err = it.seek(start)
+	// 根据 key 的前缀, 全部加载 prefix 匹配的key 路径上所有 node
+	it.err = it.seek(start) // 处理迭代器, 这时候 it.stack 队列中装的就是 trie 根据 start前缀找到的 key 的所有node
 	return it
 }
 
@@ -156,13 +167,13 @@ func (it *nodeIterator) Parent() common.Hash {
 }
 
 func (it *nodeIterator) Leaf() bool {
-	return hasTerm(it.path)
+	return hasTerm(it.path)  // it.path: key 的某个片段,  hasTerm() 判断 it.path 是否为一个完整的 hex 的key
 }
 
 func (it *nodeIterator) LeafKey() []byte {
 	if len(it.stack) > 0 {
 		if _, ok := it.stack[len(it.stack)-1].node.(valueNode); ok {
-			return hexToKeybytes(it.path)
+			return hexToKeybytes(it.path)  // 直接返回 hex key -> byte key
 		}
 	}
 	panic("not at leaf")
@@ -171,7 +182,7 @@ func (it *nodeIterator) LeafKey() []byte {
 func (it *nodeIterator) LeafBlob() []byte {
 	if len(it.stack) > 0 {
 		if node, ok := it.stack[len(it.stack)-1].node.(valueNode); ok {
-			return []byte(node)
+			return []byte(node)  // 从 it.stack 中获取 node数据 todo (注意, 这里只取 stack 中最后一个, 因为 最后一个才是 valueNode 才是 key对应的value)
 		}
 	}
 	panic("not at leaf")
@@ -221,12 +232,15 @@ func (it *nodeIterator) Next(descend bool) bool {
 		return false
 	}
 	if seek, ok := it.err.(seekError); ok {
+		// 根据 key 的前缀, 全部加载 prefix 匹配的key 路径上所有 node
 		if it.err = it.seek(seek.key); it.err != nil {
 			return false
 		}
 	}
 	// Otherwise step forward with the iterator and report any errors.
-	state, parentIndex, path, err := it.peek(descend)
+	//
+	// 否则，请使用迭代器前进并报告任何错误   (即, 之前的 it.seek() 报 `seekError` 了, 那么我们自己使用 peek() 去尝试遍历 路径上的下一个 node)
+	state, parentIndex, path, err := it.peek(descend)  // peek 创建迭代器的下一个状态
 	it.err = err
 	if it.err != nil {
 		return false
@@ -235,63 +249,84 @@ func (it *nodeIterator) Next(descend bool) bool {
 	return true
 }
 
+// 根据 key 的前缀, 全部加载 prefix 匹配的key 路径上所有 node
 func (it *nodeIterator) seek(prefix []byte) error {
-	// The path we're looking for is the hex encoded key without terminator.
-	key := keybytesToHex(prefix)
+	// The path we're looking for is the hex encoded key without terminator.   我们正在寻找的路径是 不带终止符 (后面是 ·16· 这个数字的) 的十六进制编码 key
+	key := keybytesToHex(prefix)		// 先做  byte -> hex
 	key = key[:len(key)-1]
 	// Move forward until we're just before the closest match to key.
 	for {
+
+		// 逐个将这哦trie 路径上的 node state 遍历出来, 并追加到 it.stack 中
 		state, parentIndex, path, err := it.peek(bytes.HasPrefix(key, it.path))
 		if err == errIteratorEnd {
 			return errIteratorEnd
 		} else if err != nil {
 			return seekError{prefix, err}
-		} else if bytes.Compare(path, key) >= 0 {
+		} else if bytes.Compare(path, key) >= 0 {   // 根据 前缀, 查找 key 结束了
 			return nil
 		}
-		it.push(state, parentIndex, path)
+		it.push(state, parentIndex, path) // 将当前最新 遍历到的 node 转入  it.stack
 	}
 }
 
 // peek creates the next state of the iterator.
+//
+// peek 创建迭代器的下一个状态
 func (it *nodeIterator) peek(descend bool) (*nodeIteratorState, *int, []byte, error) {
+
+	// it.stack:  持久化迭代状态的 trie node 的层次结构
+	//
+	// 如果是 第一层, 那就从 root 开始
 	if len(it.stack) == 0 {
-		// Initialize the iterator if we've just started.
-		root := it.trie.Hash()
+		// Initialize the iterator if we've just started.   如果我们刚刚开始，则初始化迭代器
+		root := it.trie.Hash()	// 先获取 trie 上的 root
 		state := &nodeIteratorState{node: it.trie.root, index: -1}
 		if root != emptyRoot {
 			state.hash = root
 		}
-		err := state.resolve(it.trie, nil)
+		err := state.resolve(it.trie, nil)   // 根据 遍历到 trie 的 root  <root其实是 rootNode hash> 从 db 将对应的 node加载出来
 		return state, nil, nil, err
 	}
 	if !descend {
 		// If we're skipping children, pop the current node first
+		//
+		// 如果我们要跳过子节点，请先弹出当前节点
 		it.pop()
 	}
 
 	// Continue iteration to the next child
+	//
+	// 继续从  it.stack 中获取上一个 node, 并往下 遍历 child node
 	for len(it.stack) > 0 {
-		parent := it.stack[len(it.stack)-1]
+		parent := it.stack[len(it.stack)-1]  // 每次去上一个, (尾巴的就是最新遍历到的node 也是key路径上目前遍历到的node)
 		ancestor := parent.hash
 		if (ancestor == common.Hash{}) {
 			ancestor = parent.parent
 		}
+		// 往下继续遍历 child node
 		state, path, ok := it.nextChild(parent, ancestor)
 		if ok {
 			if err := state.resolve(it.trie, path); err != nil {
 				return parent, &parent.index, path, err
 			}
+
+			// 将 node 返回
 			return state, &parent.index, path, nil
 		}
 		// No more child nodes, move back up.
 		it.pop()
 	}
-	return nil, nil, nil, errIteratorEnd
+	return nil, nil, nil, errIteratorEnd // 遍历结束了
 }
 
+// 根据 遍历到 trie 的node 从 db 将对应的 node加载出来,
+//
+// 其实 往下看 path 目前并没啥用  (在 tr.resolveHash(hash, path) 中, 没啥实际用处)
 func (st *nodeIteratorState) resolve(tr *Trie, path []byte) error {
 	if hash, ok := st.node.(hashNode); ok {
+
+		// todo 从 db 中将 hash 对应的 node实例加载出来
 		resolved, err := tr.resolveHash(hash, path)
 		if err != nil {
 			return err

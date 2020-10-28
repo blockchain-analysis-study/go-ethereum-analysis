@@ -446,14 +446,14 @@ func (db *Database) Node(hash common.Hash) ([]byte, error) {
 func (db *Database) preimage(hash common.Hash) ([]byte, error) {
 	// Retrieve the node from cache if available
 	db.lock.RLock()
-	preimage := db.preimages[hash]
+	preimage := db.preimages[hash]   // todo 先从缓存获取 key 的原始数据
 	db.lock.RUnlock()
 
 	if preimage != nil {
 		return preimage, nil
 	}
 	// Content unavailable in memory, attempt to retrieve from disk
-	return db.diskdb.Get(db.secureKey(hash[:]))
+	return db.diskdb.Get(db.secureKey(hash[:]))  // 没有, 再去 db 获取
 }
 
 // secureKey returns the database key for the preimage of key, as an ephemeral
