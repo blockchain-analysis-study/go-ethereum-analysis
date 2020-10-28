@@ -174,6 +174,7 @@ type cachedTrie struct {
 	db *cachingDB  		// cachingDB 中 也有 SecureTrie 数组  和  LRU 缓存
 }
 
+// StateDB 调用
 func (m cachedTrie) Commit(onleaf trie.LeafCallback) (common.Hash, error) {
 	root, err := m.SecureTrie.Commit(onleaf)
 	if err == nil {

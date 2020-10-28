@@ -36,8 +36,8 @@ import (
 type SecureTrie struct {
 	trie             Trie
 	hashKeyBuf       [common.HashLength]byte
-	secKeyCache      map[string][]byte
-	secKeyCacheOwner *SecureTrie // Pointer to self, replace the key cache on mismatch
+	secKeyCache      map[string][]byte      //  最新 update 的 key 缓存:   string(sha3(key)) => key
+	secKeyCacheOwner *SecureTrie // Pointer to self, replace the key cache on mismatch   指向自身的指针，在不匹配时替换密钥缓存   (没看到有吊用)
 }
 
 // NewSecure creates a trie with an existing root node from a backing database
@@ -105,12 +105,12 @@ func (t *SecureTrie) Update(key, value []byte) {
 //
 // If a node was not found in the database, a MissingNodeError is returned.
 func (t *SecureTrie) TryUpdate(key, value []byte) error {
-	hk := t.hashKey(key)
+	hk := t.hashKey(key)     // 先做 sha3  key
 	err := t.trie.TryUpdate(hk, value)
 	if err != nil {
 		return err
 	}
-	t.getSecKeyCache()[string(hk)] = common.CopyBytes(key)
+	t.getSecKeyCache()[string(hk)] = common.CopyBytes(key)   // 将 最近变更的 key 存起来
 	return nil
 }
 
@@ -124,18 +124,19 @@ func (t *SecureTrie) Delete(key []byte) {
 // TryDelete removes any existing value for key from the trie.
 // If a node was not found in the database, a MissingNodeError is returned.
 func (t *SecureTrie) TryDelete(key []byte) error {
-	hk := t.hashKey(key)
-	delete(t.getSecKeyCache(), string(hk))
-	return t.trie.TryDelete(hk)
+	hk := t.hashKey(key)							// 先做  sha3(key)
+	delete(t.getSecKeyCache(), string(hk))			// 将 近期做 update 的 key 从 缓存移除
+	return t.trie.TryDelete(hk)						//
 }
 
 // GetKey returns the sha3 preimage of a hashed key that was
 // previously used to store a value.
 func (t *SecureTrie) GetKey(shaKey []byte) []byte {
-	if key, ok := t.getSecKeyCache()[string(shaKey)]; ok {
+
+	if key, ok := t.getSecKeyCache()[string(shaKey)]; ok {  // 从 近期做 update 的key缓存中 获取 key的原始数据
 		return key
 	}
-	key, _ := t.trie.db.preimage(common.BytesToHash(shaKey))
+	key, _ := t.trie.db.preimage(common.BytesToHash(shaKey))	// 找不到则, 可能因为刚做了 State。Commit 动作, 所以 被刷到了 pre-imagse中了,  从 pre-images中获取
 	return key
 }
 
@@ -145,17 +146,28 @@ func (t *SecureTrie) GetKey(shaKey []byte) []byte {
 // Committing flushes nodes from memory. Subsequent Get calls will load nodes
 // from the database.
 func (t *SecureTrie) Commit(onleaf LeafCallback) (root common.Hash, err error) {
-	// Write all the pre-images to the actual disk database
-	if len(t.getSecKeyCache()) > 0 {
+
+	// Write all the pre-images to the actual disk database    将所有 pre-images 写入实际的磁盘数据库
+	//
+	if len(t.getSecKeyCache()) > 0 {  // 如果当前 trie 中有 近期update 的key, 那么 这个缓存 map 就有内容
 		t.trie.db.lock.Lock()
+
+		// 遍历 最近做 update 的key
 		for hk, key := range t.secKeyCache {
+
+			//	将 sha3(key) hash -> key  放入 preimages , 后续刷盘
+			//
+			// 这里的 key 是最原始的key,  没做 sha3 的,  没有做 hex  也不是 compact 的
 			t.trie.db.insertPreimage(common.BytesToHash([]byte(hk)), key)
 		}
 		t.trie.db.lock.Unlock()
 
+		// 清空  近期做 update 的key 缓存
 		t.secKeyCache = make(map[string][]byte)
 	}
 	// Commit the trie to its intermediate node database
+	//
+	//  todo  这里才是将 tire 上的 node 提交到  db.nodes 缓存map, 后续将 node 刷盘
 	return t.trie.Commit(onleaf)
 }
 
@@ -200,6 +212,9 @@ func (t *SecureTrie) hashKey(key []byte) []byte {
 // getSecKeyCache returns the current secure key cache, creating a new one if
 // ownership changed (i.e. the current secure trie is a copy of another owning
 // the actual cache).
+//
+//
+// getSecKeyCache() 返回当前的 sha3(key) 缓存，如果所有权更改（即当前的安全Trie是拥有实际高速缓存的另一个的副本），则创建一个新的安全密钥高速缓存
 func (t *SecureTrie) getSecKeyCache() map[string][]byte {
 	if t != t.secKeyCacheOwner {
 		t.secKeyCacheOwner = t

@@ -80,6 +80,9 @@ type Database struct {
 	newest common.Hash                 // Newest tracked node, flush-list tail
 
 	// 安全Trie中节点的原像
+	//
+	//  hash(sha3(data)) -> data    todo 目前看了是最要存放  sha3 hash key => key 的
+	//
 	preimages map[common.Hash][]byte // Preimages of nodes from the secure trie
 	// 临时缓冲区，用于计算 preimage keys
 	seckeybuf [secureKeyLength]byte  // Ephemeral buffer for calculating preimage keys
@@ -620,6 +623,8 @@ func (db *Database) Cap(limit common.StorageSize) error {
 	flushPreimages := db.preimagesSize > 4*1024*1024
 	if flushPreimages {
 		for hash, preimage := range db.preimages {
+			// hash:  sha3 key hash
+			// preimage: key原始数据
 			if err := batch.Put(db.secureKey(hash[:]), preimage); err != nil {
 				log.Error("Failed to commit preimage from trie database", "err", err)
 				db.lock.RUnlock()

@@ -215,7 +215,7 @@ func (c *stateObject) getTrie(db Database) Trie {
 
 // GetState returns a value in account storage.
 func (self *stateObject) GetState(db Database, key common.Hash) common.Hash {
-	value, exists := self.cachedStorage[key]
+	value, exists := self.cachedStorage[key]		// 先从 缓存中获取
 	if exists {
 		return value
 	}
@@ -228,11 +228,11 @@ func (self *stateObject) GetState(db Database, key common.Hash) common.Hash {
 		return common.Hash{}
 	}
 	if len(enc) > 0 {
-		_, content, _, err := rlp.Split(enc)
+		_, content, _, err := rlp.Split(enc)   // 去掉  value 的 rlp 头缀, 剩下的就是 真实的byte  (rlp(value) == 头缀|真实的byte)
 		if err != nil {
 			self.setError(err)
 		}
-		value.SetBytes(content)
+		value.SetBytes(content)  // 将 byte 塞到 value中
 	}
 	self.cachedStorage[key] = value
 	return value

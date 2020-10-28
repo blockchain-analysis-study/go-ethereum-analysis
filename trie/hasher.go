@@ -102,7 +102,12 @@ node: 节点折叠后的 hashNode
 node: 将 key 转成byte的shortNode/fullNode
  */
 func (h *hasher) hash(n node, db *Database, force bool) (node, node, error) {
+
 	// If we're not storing the node, just hashing, use available cached data
+	//
+	// 当我们可以获取 node 对应的 nodeHash 时,
+	//
+	// 我们需要判断该 node 是否满足 从 内存中释放掉. 并只留她的 hash 作为 hashNode  todo (被释放的 node 会在 tryGet() 中会根据 hashNode 从 db中 load 回来, 并替换掉 hashNode)
 	if hash, dirty := n.cache(); hash != nil {
 		if db == nil {
 			return hash, n, nil

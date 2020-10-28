@@ -291,7 +291,7 @@ func (self *StateDB) GetCodeHash(addr common.Address) common.Hash {
 func (self *StateDB) GetState(addr common.Address, bhash common.Hash) common.Hash {
 	stateObject := self.getStateObject(addr)
 	if stateObject != nil {
-		return stateObject.GetState(self.db, bhash)
+		return stateObject.GetState(self.db, bhash)  // 从 stateObject 中 获取 key 对应的 value
 	}
 	return common.Hash{}
 }
@@ -413,7 +413,7 @@ func (self *StateDB) updateStateObject(stateObject *stateObject) {
 //
 // deleteStateObject: 从State Trie中移除给定的对象
 func (self *StateDB) deleteStateObject(stateObject *stateObject) {
-	// 将账户标识位 删除
+	// 将账户标识为 【删除】
 	stateObject.deleted = true
 	addr := stateObject.Address()
 
@@ -437,14 +437,16 @@ func (self *StateDB) getStateObject(addr common.Address) (stateObject *stateObje
 		self.setError(err)
 		return nil
 	}
+
+	// 将 db 中返回的 enc 做 rlp  decode 回  account
 	var data Account
 	if err := rlp.DecodeBytes(enc, &data); err != nil {
 		log.Error("Failed to decode state object", "addr", addr, "err", err)
 		return nil
 	}
 	// Insert into the live set.
-	obj := newObject(self, addr, data)
-	self.setStateObject(obj)
+	obj := newObject(self, addr, data)  // 创建 内存中的 stateObject
+	self.setStateObject(obj)			// 将 stateObject 放入 StateDB 的 map 缓存
 	return obj
 }
 
@@ -507,7 +509,7 @@ func (db *StateDB) ForEachStorage(addr common.Address, cb func(key, value common
 	it := trie.NewIterator(so.getTrie(db.db).NodeIterator(nil))
 	for it.Next() {
 		// ignore cached values
-		key := common.BytesToHash(db.trie.GetKey(it.Key))
+		key := common.BytesToHash(db.trie.GetKey(it.Key))  // 这里获取的是 key 的原始数据, 没做 sha3，  没做 hex，  没做  compact 的
 		if _, ok := so.cachedStorage[key]; !ok {
 			cb(key, common.BytesToHash(it.Value))
 		}
@@ -713,7 +715,7 @@ func (s *StateDB) Commit(deleteEmptyObjects bool) (root common.Hash, err error) 
 			// todo 写入与状态对象关联的任何合约code
 			if stateObject.code != nil && stateObject.dirtyCode {
 
-				// 将code 写入 db
+				// 将 code 直接写入 db
 				s.db.TrieDB().InsertBlob(common.BytesToHash(stateObject.CodeHash()), stateObject.code)
 
 				// 将code 变更标识位 重置

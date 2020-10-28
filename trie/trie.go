@@ -73,8 +73,8 @@ type Trie struct {
 	// http://www.wjblog.top/articles/636a5647/
 	// http://www.wjblog.top/articles/dcade07d/
 
-	db           *Database
-	root         node			// 根结点
+	db           *Database		// 引用了 全局的 db 缓存实例,  里面有 db.nodes  db.images 等缓存
+	root         node			// 当前 trie root node
 	originalRoot common.Hash   	// 32位byte[], 从db中恢复出完整的trie
 
 	// Cache generation values.
@@ -172,8 +172,8 @@ func (t *Trie) TryGet(key []byte) ([]byte, error) {
 
 	// 再去 trie 上 查 value
 	value, newroot, didResolve, err := t.tryGet(t.root, key, 0)
-	if err == nil && didResolve {
-		t.root = newroot
+	if err == nil && didResolve {  	// 	说明 之前在 key 路径上的 node 都是 hashNode, didResolve == true 时, 表示这些 node都从 db 中被恢复会原来的 node类型了
+		t.root = newroot			//	将 db 中恢复的 root node 赋值到 t.root
 	}
 	return value, err
 }
@@ -181,11 +181,18 @@ func (t *Trie) TryGet(key []byte) ([]byte, error) {
 
 // 此时 入参的 key 一定是 16进制的
 //
-//	origNode：	当前查找的起始node位置
-//	key：		输入要查找的数据的 hash
-//	pos：		当前hash匹配到第几位
+//	入参:
 //
+//		origNode：	当前查找的起始node位置
+//		key：		输入要查找的数据的 hash
+//		pos：		当前hash匹配到第几位
+//
+//	返参:
+//
+//	value: 查到的value, 也就是最底层的 valueNode	(最底层找到之后, 会逐级 透传到root层)
+//	newnode: 对应传进来的 originNode 的新形式  (每一层返回后, 都会赋给 入参的 originNode, 直到 最后一级返回的是 新的 rootNode)  todo (因为 originNode 之前可能是 hashNode, 而 newnode 才是从 db 新load 的 node数据啊)
 //  didResolve: 这个东西，用于判断trie树是否会发生变化，按理tryGet()只是用来获取数据的，哪里会影响trie发生变化，todo 但是因为有可能我们会根据hashNode去db中获取该node值，获取到后，需要更新现有的trie，didResolve就会发生变化
+//
 func (t *Trie) tryGet(origNode node, key []byte, pos int) (value []byte, newnode node, didResolve bool, err error) {
 
 	// 第一次 递归进来的  origNode 一定是 root node
@@ -207,9 +214,9 @@ func (t *Trie) tryGet(origNode node, key []byte, pos int) (value []byte, newnode
 		}
 		value, newnode, didResolve, err = t.tryGet(n.Val, key, pos+len(n.Key))
 		if err == nil && didResolve {
-			n = n.copy()
-			n.Val = newnode
-			n.flags.gen = t.cachegen
+			n = n.copy()			  	// 值拷贝, 因为需要变更 n 的一些字段
+			n.Val = newnode				// 在这里我们就看到了 传入 tryGet() 时的 n.Val 和 newnode 的关系了. 其实就是同一个 node  todo (因为 n.Val 之前可能是 hashNode, 而newnode 才是从 db 新load 的 node数据啊)
+			n.flags.gen = t.cachegen  	// 将 trie 的 cachegen 值 覆盖当前节点 n 上 (最终会影响 n 会不会继续留在 内存中)
 		}
 		return value, n, didResolve, err
 
@@ -217,9 +224,9 @@ func (t *Trie) tryGet(origNode node, key []byte, pos int) (value []byte, newnode
 	case *fullNode:
 		value, newnode, didResolve, err = t.tryGet(n.Children[key[pos]], key, pos+1)
 		if err == nil && didResolve {
-			n = n.copy()
-			n.flags.gen = t.cachegen
-			n.Children[key[pos]] = newnode
+			n = n.copy()				// 值拷贝, 因为需要变更 n 的一些字段
+			n.flags.gen = t.cachegen 	// 将 trie 的 cachegen 值 覆盖当前节点 n 上 (最终会影响 n 会不会继续留在 内存中)
+			n.Children[key[pos]] = newnode	// 在这里我们就看到了 传入 tryGet() 时的 n.Val 和 newnode 的关系了. 其实就是同一个 node  todo (因为 n.Val 之前可能是 hashNode, 而newnode 才是从 db 新load 的 node数据啊)
 		}
 		return value, n, didResolve, err
 
@@ -269,7 +276,8 @@ func (t *Trie) Update(key, value []byte) {
 //
 // If a node was not found in the database, a MissingNodeError is returned.
 func (t *Trie) TryUpdate(key, value []byte) error {
-	k := keybytesToHex(key)
+
+	k := keybytesToHex(key)		// sha3 byte  -> hex
 
 	// todo trie的Update() 只有两种,  insert 和 delete
 	if len(value) != 0 {
@@ -442,12 +450,12 @@ func (t *Trie) Delete(key []byte) {
 // TryDelete removes any existing value for key from the trie.
 // If a node was not found in the database, a MissingNodeError is returned.
 func (t *Trie) TryDelete(key []byte) error {
-	k := keybytesToHex(key)
-	_, n, err := t.delete(t.root, nil, k)
+	k := keybytesToHex(key)		// 先做 sha3 key  byte -> hex
+	_, n, err := t.delete(t.root, nil, k)	// 将 k对应的  valueNode 从 trie 删除
 	if err != nil {
 		return err
 	}
-	t.root = n
+	t.root = n	//	 更新 新的 root
 	return nil
 }
 
@@ -684,7 +692,7 @@ func (t *Trie) Commit(onleaf LeafCallback) (root common.Hash, err error) {
 	if err != nil {
 		return common.Hash{}, err
 	}
-	t.root = cached
+	t.root = cached // 返回的  cache 可能是  rootNode 也可能是 rootNode的hashNode (具体 看rootNode 是否近期都没变动过, 并满足了从 内存中 卸载的条件而定)
 	t.cachegen++   // 每次 提交树 的时候, trie 的 cachegen 计数都 +1
 	return common.BytesToHash(hash.(hashNode)), nil
 }
