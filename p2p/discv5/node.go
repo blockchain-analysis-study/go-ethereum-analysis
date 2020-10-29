@@ -261,7 +261,7 @@ const nodeIDBits = 512
 
 // NodeID is a unique identifier for each node.
 // The node identifier is a marshaled elliptic curve public key.
-type NodeID [nodeIDBits / 8]byte
+type NodeID [nodeIDBits / 8]byte   // nodeId的长度为  512/8 == 64 byte
 
 // NodeID prints as a long hexadecimal number.
 func (n NodeID) String() string {
