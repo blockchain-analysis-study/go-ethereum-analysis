@@ -54,8 +54,8 @@ const (
 	tableIPLimit, tableSubnet   = 10, 24
 
 	maxFindnodeFailures = 5 // Nodes exceeding this limit are dropped
-	refreshInterval     = 30 * time.Minute
-	revalidateInterval  = 10 * time.Second
+	refreshInterval     = 30 * time.Minute			// 每 30 分钟做刷桶
+	revalidateInterval  = 10 * time.Second			// 重新验证 k-bucket 间隔,  10 s
 	copyNodesInterval   = 30 * time.Second
 	seedMinTableTime    = 5 * time.Minute
 	seedCount           = 30
@@ -65,6 +65,8 @@ const (
 type Table struct {
 	mutex   sync.Mutex        // protects buckets, bucket content, nursery, rand
 	buckets [nBuckets]*bucket // index of known nodes by distance
+
+	// 存放 引导节点, 种子节点   nursery: 苗圃
 	nursery []*Node           // bootstrap nodes
 	rand    *mrand.Rand       // source of randomness, periodically reseeded
 	ips     netutil.DistinctNetSet
@@ -115,7 +117,7 @@ func newTable(t transport, ourID NodeID, ourAddr *net.UDPAddr, nodeDBPath string
 		rand:       mrand.New(mrand.NewSource(0)),
 		ips:        netutil.DistinctNetSet{Subnet: tableSubnet, Limit: tableIPLimit},
 	}
-	if err := tab.setFallbackNodes(bootnodes); err != nil {
+	if err := tab.setFallbackNodes(bootnodes); err != nil { // 设置启动节点信息到桶的tab.nursery数组中
 		return nil, err
 	}
 	for i := range tab.buckets {
@@ -123,13 +125,14 @@ func newTable(t transport, ourID NodeID, ourAddr *net.UDPAddr, nodeDBPath string
 			ips: netutil.DistinctNetSet{Subnet: bucketSubnet, Limit: bucketIPLimit},
 		}
 	}
-	tab.seedRand()
-	tab.loadSeedNodes()
+
+	tab.seedRand()			// 初始化 table 的 随机种子,  到时候 节点发现生成 随机的target 用的
+	tab.loadSeedNodes()		//
 	// Start the background expiration goroutine after loading seeds so that the search for
 	// seed nodes also considers older nodes that would otherwise be removed by the
 	// expiration.
 	tab.db.ensureExpirer()
-	go tab.loop()
+	go tab.loop()  // 异步启动刷桶逻辑
 	return tab, nil
 }
 
@@ -202,7 +205,7 @@ func (tab *Table) Close() {
 // setFallbackNodes sets the initial points of contact. These nodes
 // are used to connect to the network if the table is empty and there
 // are no known nodes in the database.
-func (tab *Table) setFallbackNodes(nodes []*Node) error {
+func (tab *Table) setFallbackNodes(nodes []*Node) error { // 设置启动节点信息到桶的tab.nursery数组中
 	for _, n := range nodes {
 		if err := n.validateComplete(); err != nil {
 			return fmt.Errorf("bad bootstrap/fallback node %q (%v)", n, err)
@@ -257,9 +260,10 @@ func (tab *Table) Resolve(targetID NodeID) *Node {
 // The given target does not need to be an actual node
 // identifier.
 func (tab *Table) Lookup(targetID NodeID) []*Node {
-	return tab.lookup(targetID, true)
+	return tab.lookup(targetID, true)   // 最终是调用 真正刷桶的动作
 }
 
+// 真正激发刷桶动作的函数
 func (tab *Table) lookup(targetID NodeID, refreshIfEmpty bool) []*Node {
 	var (
 		target         = crypto.Keccak256Hash(targetID[:])
@@ -349,10 +353,10 @@ func (tab *Table) refresh() <-chan struct{} {
 }
 
 // loop schedules refresh, revalidate runs and coordinates shutdown.
-func (tab *Table) loop() {
+func (tab *Table) loop() {  // 异步启动刷桶逻辑
 	var (
-		revalidate     = time.NewTimer(tab.nextRevalidateTime())
-		refresh        = time.NewTicker(refreshInterval)
+		revalidate     = time.NewTimer(tab.nextRevalidateTime())   	// 从 [0, 10s) 随机一个时间, 作为 随机 对 k-bucket 的内容做验证, 更新桶 (清除失效的 node)
+		refresh        = time.NewTicker(refreshInterval)			// 每30分钟 节点发现刷桶
 		copyNodes      = time.NewTicker(copyNodesInterval)
 		revalidateDone = make(chan struct{})
 		refreshDone    = make(chan struct{})           // where doRefresh reports completion
@@ -363,30 +367,35 @@ func (tab *Table) loop() {
 	defer copyNodes.Stop()
 
 	// Start initial refresh.
-	go tab.doRefresh(refreshDone)
+	go tab.doRefresh(refreshDone)  // 进来先刷一波 桶
 
 loop:
 	for {
 		select {
+
+		// 每30分钟 节点发现刷桶
 		case <-refresh.C:
 			tab.seedRand()
 			if refreshDone == nil {
 				refreshDone = make(chan struct{})
-				go tab.doRefresh(refreshDone)
+				go tab.doRefresh(refreshDone)  // 每30分钟 节点发现刷桶
 			}
+		// 接收到 刷桶 req
 		case req := <-tab.refreshReq:
 			waiting = append(waiting, req)
 			if refreshDone == nil {
 				refreshDone = make(chan struct{})
-				go tab.doRefresh(refreshDone)
+				go tab.doRefresh(refreshDone) // 接收到 刷桶 req
 			}
 		case <-refreshDone:
 			for _, ch := range waiting {
 				close(ch)
 			}
 			waiting, refreshDone = nil, nil
+
+		// [0, 10s)
 		case <-revalidate.C:
-			go tab.doRevalidate(revalidateDone)
+			go tab.doRevalidate(revalidateDone)  // [0, 10s) 验证 k-bucket 中的 node 的有效性,  ping-pong
 		case <-revalidateDone:
 			revalidate.Reset(tab.nextRevalidateTime())
 		case <-copyNodes.C:
@@ -421,7 +430,9 @@ func (tab *Table) doRefresh(done chan struct{}) {
 	tab.loadSeedNodes()
 
 	// Run self lookup to discover new neighbor nodes.
-	tab.lookup(tab.self.ID, false)
+	//
+	// 先加载一波静态节点，然后根据当前节点信息先去刷一波桶拉回据当前节点的邻居节点
+	tab.lookup(tab.self.ID, false)  // 这个才是做刷桶的动作
 
 	// The Kademlia paper specifies that the bucket refresh should
 	// perform a lookup in the least recently used bucket. We cannot
@@ -429,16 +440,16 @@ func (tab *Table) doRefresh(done chan struct{}) {
 	// (not hash-sized) and it is not easily possible to generate a
 	// sha3 preimage that falls into a chosen bucket.
 	// We perform a few lookups with a random target instead.
-	for i := 0; i < 3; i++ {
+	for i := 0; i < 3; i++ {  // todo  for 3 次循环，每次生成一个随机nodeID即：target，再根据target去刷桶拉回距随机target节点的邻居节点
 		var target NodeID
 		crand.Read(target[:])
-		tab.lookup(target, false)
+		tab.lookup(target, false) // 这个才是做刷桶的动作
 	}
 }
 
 func (tab *Table) loadSeedNodes() {
 	seeds := tab.db.querySeeds(seedCount, seedMaxAge)
-	seeds = append(seeds, tab.nursery...)
+	seeds = append(seeds, tab.nursery...)  // 将 引导节点(种子节点) 追加进去
 	for i := range seeds {
 		seed := seeds[i]
 		age := log.Lazy{Fn: func() interface{} { return time.Since(tab.db.lastPongReceived(seed.ID)) }}
@@ -449,7 +460,7 @@ func (tab *Table) loadSeedNodes() {
 
 // doRevalidate checks that the last node in a random bucket is still live
 // and replaces or deletes the node if it isn't.
-func (tab *Table) doRevalidate(done chan<- struct{}) {
+func (tab *Table) doRevalidate(done chan<- struct{}) {  // 验证 k-bucket 中的 node 的有效性,  ping-pong
 	defer func() { done <- struct{}{} }()
 
 	last, bi := tab.nodeToRevalidate()
@@ -498,7 +509,7 @@ func (tab *Table) nextRevalidateTime() time.Duration {
 	tab.mutex.Lock()
 	defer tab.mutex.Unlock()
 
-	return time.Duration(tab.rand.Int63n(int64(revalidateInterval)))
+	return time.Duration(tab.rand.Int63n(int64(revalidateInterval)))   // 从 [0, 10s) 随机一个时间
 }
 
 // copyLiveNodes adds nodes from the table to the database if they have been in the table

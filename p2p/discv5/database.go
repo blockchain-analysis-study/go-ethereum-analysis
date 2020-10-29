@@ -327,6 +327,9 @@ func (db *nodeDB) updateLocalEndpoint(id NodeID, ep rpcEndpoint) error {
 
 // querySeeds retrieves random nodes to be used as potential seed nodes
 // for bootstrapping.
+//
+//
+// querySeeds()  检索随机节点，以用作自举的潜在种子节点
 func (db *nodeDB) querySeeds(n int, maxAge time.Duration) []*Node {
 	var (
 		now   = time.Now()

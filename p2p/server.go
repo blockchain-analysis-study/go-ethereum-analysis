@@ -540,7 +540,7 @@ func (srv *Server) Start() (err error) {
 	}
 
 	srv.loopWG.Add(1)
-	go srv.run(dialer)
+	go srv.run(dialer)  // 把p2p的服务run起来
 	srv.running = true
 	return nil
 }
@@ -573,7 +573,7 @@ type dialer interface {
 	addStatic(*discover.Node)
 	removeStatic(*discover.Node)
 }
-
+// 把p2p的服务run起来
 func (srv *Server) run(dialstate dialer) {
 	defer srv.loopWG.Done()
 	var (
@@ -701,7 +701,7 @@ running:
 				}
 				name := truncateName(c.name)
 				srv.log.Debug("Adding p2p peer", "name", name, "addr", c.fd.RemoteAddr(), "peers", len(peers)+1)
-				go srv.runPeer(p)
+				go srv.runPeer(p)  // 启动当前 node 的 p2p
 				peers[c.id] = p
 				if p.Inbound() {
 					inboundCount++
@@ -737,7 +737,7 @@ running:
 	}
 	// Disconnect all peers.
 	for _, p := range peers {
-		p.Disconnect(DiscQuitting)
+		p.Disconnect(DiscQuitting)  // 断开 和远端 peer 的连接
 	}
 	// Wait for peers to shut down. Pending connections and tasks are
 	// not handled here and will terminate soon-ish because srv.quit

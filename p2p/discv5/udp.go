@@ -43,7 +43,7 @@ var (
 
 // Timeouts
 const (
-	respTimeout = 500 * time.Millisecond
+	respTimeout = 500 * time.Millisecond  // 网络请求超时时间,  500 ms
 	expiration  = 20 * time.Second
 
 	driftThreshold = 10 * time.Second // Allowed clock drift before warning user
@@ -292,7 +292,7 @@ func (t *udp) sendNeighbours(remote *Node, results []*Node) {
 		}
 	}
 }
-
+// 向 target 节点发起 FIND_NODE  remote 节点的请求
 func (t *udp) sendFindnodeHash(remote *Node, target common.Hash) {
 	t.sendPacket(remote.ID, remote.addr(), byte(findnodeHashPacket), findnodeHash{
 		Target:     target,

@@ -39,7 +39,7 @@ var (
 )
 
 const (
-	autoRefreshInterval   = 1 * time.Hour
+	autoRefreshInterval   = 1 * time.Hour       // 每小时 刷新
 	bucketRefreshInterval = 1 * time.Minute
 	seedCount             = 30
 	seedMaxAge            = 5 * 24 * time.Hour
@@ -79,7 +79,9 @@ type Network struct {
 	topictab      *topicTable
 	ticketStore   *ticketStore
 	nursery       []*Node
-	nodes         map[NodeID]*Node // tracks active nodes with state != known
+
+	// 记录 追踪 状态为【活动】的节点
+	nodes         map[NodeID]*Node // tracks active nodes with state != known   跟踪状态为==的活动节点
 	timeoutTimers map[timeoutEvent]*time.Timer
 
 	// Revalidation queues.
@@ -147,7 +149,8 @@ func newNetwork(conn transport, ourPubkey ecdsa.PublicKey, dbPath string, netres
 		}
 	}
 
-	tab := newTable(ourID, conn.localAddr())
+	tab := newTable(ourID, conn.localAddr())  // 创建 table 实例, 里面有  k-bucket 的引用
+
 	net := &Network{
 		db:               db,
 		conn:             conn,
@@ -235,7 +238,10 @@ func (net *Network) Resolve(targetID NodeID) *Node {
 // identifier.
 //
 // The local node may be included in the result.
-func (net *Network) Lookup(targetID NodeID) []*Node {
+//
+//
+// 开始  根据 target 做自我查找以填充存储桶
+func (net *Network) Lookup(targetID NodeID) []*Node {  // 这里回去发起 FIND_NODE 请求去 刷桶
 	return net.lookup(crypto.Keccak256Hash(targetID[:]), false)
 }
 
@@ -244,11 +250,11 @@ func (net *Network) lookup(target common.Hash, stopOnMatch bool) []*Node {
 		asked          = make(map[NodeID]bool)
 		seen           = make(map[NodeID]bool)
 		reply          = make(chan []*Node, alpha)
-		result         = nodesByDistance{target: target}
-		pendingQueries = 0
+		result         = nodesByDistance{target: target}		//  用来 接收 返回 一组请求数据的结构
+		pendingQueries = 0										//  正在处理中的 req 计数器
 	)
 	// Get initial answers from the local node.
-	result.push(net.tab.self, bucketSize)
+	result.push(net.tab.self, bucketSize)  // 将 当前本地 node 加入到 result 的 k-bucket 中
 	for {
 		// Ask the α closest nodes that we haven't asked yet.
 		for i := 0; i < len(result.entries) && pendingQueries < alpha; i++ {
@@ -256,7 +262,7 @@ func (net *Network) lookup(target common.Hash, stopOnMatch bool) []*Node {
 			if !asked[n.ID] {
 				asked[n.ID] = true
 				pendingQueries++
-				net.reqQueryFindnode(n, target, reply)
+				net.reqQueryFindnode(n, target, reply)   // 向 target 发起 FIND_NODE n 的请求
 			}
 		}
 		if pendingQueries == 0 {
@@ -265,17 +271,21 @@ func (net *Network) lookup(target common.Hash, stopOnMatch bool) []*Node {
 		}
 		// Wait for the next reply.
 		select {
+
+		// 接收到了  target 返回的一批离 n 近的 node信息
 		case nodes := <-reply:
 			for _, n := range nodes {
 				if n != nil && !seen[n.ID] {
 					seen[n.ID] = true
-					result.push(n, bucketSize)
+					result.push(n, bucketSize)   // 全部收集到 result 中
 					if stopOnMatch && n.sha == target {
 						return result.entries
 					}
 				}
 			}
 			pendingQueries--
+
+		// 超时
 		case <-time.After(respTimeout):
 			// forget all pending requests, start new ones
 			pendingQueries = 0
@@ -319,6 +329,7 @@ func (net *Network) SearchTopic(topic Topic, setPeriod <-chan time.Duration, fou
 	}
 }
 
+// 请求更新 本地 k-bucket 等信息
 func (net *Network) reqRefresh(nursery []*Node) <-chan struct{} {
 	select {
 	case net.refreshReq <- nursery:
@@ -328,6 +339,7 @@ func (net *Network) reqRefresh(nursery []*Node) <-chan struct{} {
 	}
 }
 
+// 发起 FIND_NODE 请求 chan 信号
 func (net *Network) reqQueryFindnode(n *Node, target common.Hash, reply chan []*Node) bool {
 	q := &findnodeQuery{remote: n, target: target, reply: reply}
 	select {
@@ -366,8 +378,8 @@ const maxSearchCount = 5
 
 func (net *Network) loop() {
 	var (
-		refreshTimer       = time.NewTicker(autoRefreshInterval)
-		bucketRefreshTimer = time.NewTimer(bucketRefreshInterval)
+		refreshTimer       = time.NewTicker(autoRefreshInterval)					// 对当前本地node发起刷 bucket 动作				1 小时
+		bucketRefreshTimer = time.NewTimer(bucketRefreshInterval)					// 让 随机的target节点的k-bucket得以更新??      1 分钟
 		refreshDone        chan struct{} // closed when the 'refresh' lookup has ended
 	)
 
@@ -456,9 +468,9 @@ loop:
 			}})
 
 		// Querying.
-		case q := <-net.queryReq:
+		case q := <-net.queryReq:   // 向 target 发起 FIND_NODE 请求
 			log.Trace("<-net.queryReq")
-			if !q.start(net) {
+			if !q.start(net) {  // 向 target 节点发起 FIND_NODE  remote 节点的请求
 				q.remote.deferQuery(q)
 			}
 
@@ -626,16 +638,20 @@ loop:
 			}
 
 		// Periodic / lookup-initiated bucket refresh.
+		//
+		// 每小时 一次
 		case <-refreshTimer.C:
 			log.Trace("<-refreshTimer.C")
 			// TODO: ideally we would start the refresh timer after
 			// fallback nodes have been set for the first time.
 			if refreshDone == nil {
 				refreshDone = make(chan struct{})
-				net.refresh(refreshDone)
+				net.refresh(refreshDone)  // 每小时 一次，  发起对当前本地node做刷桶的请求
 			}
+
+		// 每分钟 一次
 		case <-bucketRefreshTimer.C:
-			target := net.tab.chooseBucketRefreshTarget()
+			target := net.tab.chooseBucketRefreshTarget()  // 让 随机的target节点的k-bucket得以更新??
 			go func() {
 				net.lookup(target, false)
 				bucketRefreshTimer.Reset(bucketRefreshInterval)
@@ -647,9 +663,11 @@ loop:
 			}
 			if refreshDone == nil {
 				refreshDone = make(chan struct{})
-				net.refresh(refreshDone)
+				net.refresh(refreshDone)  // 每分钟 一次，  发起对当前本地node做刷桶的请求
 			}
 			net.refreshResp <- refreshDone
+
+		// 用来监听 刷新 完成 信号
 		case <-refreshDone:
 			log.Trace("<-net.refreshDone", "table size", net.tab.count)
 			if net.tab.count != 0 {
@@ -663,7 +681,7 @@ loop:
 				}()
 			} else {
 				refreshDone = make(chan struct{})
-				net.refresh(refreshDone)
+				net.refresh(refreshDone) // 用来监听 刷新 完成 信号，  发起对当前本地node做刷桶的请求
 			}
 		}
 	}
@@ -690,10 +708,11 @@ loop:
 // Everything below runs on the Network.loop goroutine
 // and can modify Node, Table and Network at any time without locking.
 
+// 发起对当前本地node做刷桶的请求
 func (net *Network) refresh(done chan<- struct{}) {
 	var seeds []*Node
 	if net.db != nil {
-		seeds = net.db.querySeeds(seedCount, seedMaxAge)
+		seeds = net.db.querySeeds(seedCount, seedMaxAge)  // 检索随机节点，以用作自举的潜在种子节点   每次 至少 返回 30 个
 	}
 	if len(seeds) == 0 {
 		seeds = net.nursery
@@ -703,6 +722,8 @@ func (net *Network) refresh(done chan<- struct{}) {
 		time.AfterFunc(time.Second*10, func() { close(done) })
 		return
 	}
+
+	// 根据 随机出来的 node, 我们校验 它的最后一个 和当前本地node的 pong 时间
 	for _, n := range seeds {
 		log.Debug("", "msg", log.Lazy{Fn: func() string {
 			var age string
@@ -719,11 +740,16 @@ func (net *Network) refresh(done chan<- struct{}) {
 		}
 		// Force-add the seed node so Lookup does something.
 		// It will be deleted again if verification fails.
+		//
+		//  强制添加种子节点，以便Lookup执行某些操作
+		//  如果验证失败，它将再次删除
 		net.tab.add(n)
 	}
 	// Start self lookup to fill up the buckets.
+	//
+	// 开始自我查找以填充存储桶
 	go func() {
-		net.Lookup(net.tab.self.ID)
+		net.Lookup(net.tab.self.ID)  // 发起刷桶动作
 		close(done)
 	}()
 }
@@ -788,12 +814,18 @@ func (net *Network) internNodeFromNeighbours(sender *net.UDPAddr, rn rpcNode) (n
 }
 
 // nodeNetGuts is embedded in Node and contains fields.
+//
+// nodeNetGuts嵌入在Node中并包含字段
 type nodeNetGuts struct {
 	// This is a cached copy of sha3(ID) which is used for node
 	// distance calculations. This is part of Node in order to make it
 	// possible to write tests that need a node at a certain distance.
 	// In those tests, the content of sha will not actually correspond
 	// with ID.
+	//
+	//
+	//  这是 sha3(ID 的缓存副本，用于节点距离计算。 这是Node的一部分，以便可以编写需要一定距离的节点的测试。
+	//  在这些测试中，sha的内容实际上不会与ID对应。
 	sha common.Hash
 
 	// State machine fields. Access to these fields
@@ -801,6 +833,8 @@ type nodeNetGuts struct {
 	state             *nodeState
 	pingEcho          []byte           // hash of last ping sent by us
 	pingTopics        []Topic          // topic set sent by us in last ping
+
+	// 一堆 没被发送成功 或者 还未发送的 req
 	deferredQueries   []*findnodeQuery // queries that can't be sent yet
 	pendingNeighbours *findnodeQuery   // current query, waiting for reply
 	queryTimeouts     int
@@ -822,13 +856,15 @@ func (n *nodeNetGuts) startNextQuery(net *Network) {
 
 func (q *findnodeQuery) start(net *Network) bool {
 	// Satisfy queries against the local node directly.
+
+	// 如果 req 中的 远端 node 就是 自己
 	if q.remote == net.tab.self {
 		closest := net.tab.closest(crypto.Keccak256Hash(q.target[:]), bucketSize)
 		q.reply <- closest.entries
 		return true
 	}
 	if q.remote.state.canQuery && q.remote.pendingNeighbours == nil {
-		net.conn.sendFindnodeHash(q.remote, q.target)
+		net.conn.sendFindnodeHash(q.remote, q.target)      // 向 target 节点发起 FIND_NODE  remote 节点的请求
 		net.timedEvent(respTimeout, q.remote, neighboursTimeout)
 		q.remote.pendingNeighbours = q
 		return true
@@ -864,9 +900,9 @@ const (
 	// Non-packet events.
 	// Event values in this category are allocated outside
 	// the packet type range (packet types are encoded as a single byte).
-	pongTimeout nodeEvent = iota + 256
-	pingTimeout
-	neighboursTimeout
+	pongTimeout nodeEvent = iota + 256		// 264
+	pingTimeout								// 265
+	neighboursTimeout						// 266
 )
 
 // Node State Machine.

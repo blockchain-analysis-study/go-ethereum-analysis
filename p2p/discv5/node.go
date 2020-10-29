@@ -53,12 +53,14 @@ func NewNode(id NodeID, ip net.IP, udpPort, tcpPort uint16) *Node {
 	if ipv4 := ip.To4(); ipv4 != nil {
 		ip = ipv4
 	}
+
+	// 实例化一个本地 node 实例
 	return &Node{
-		IP:          ip,
-		UDP:         udpPort,
-		TCP:         tcpPort,
-		ID:          id,
-		nodeNetGuts: nodeNetGuts{sha: crypto.Keccak256Hash(id[:])},
+		IP:          ip,			//	本地 node 的 ip
+		UDP:         udpPort,		//  本地 node 的 udp 端口
+		TCP:         tcpPort,		//  本地 node 的 tcp 端口
+		ID:          id,			//  本地 node 的 ID
+		nodeNetGuts: nodeNetGuts{sha: crypto.Keccak256Hash(id[:])},  // 使用本地nodeId 算出 sha3  Hash
 	}
 }
 
@@ -353,12 +355,20 @@ func recoverNodeID(hash, sig []byte) (id NodeID, err error) {
 // distcmp compares the distances a->target and b->target.
 // Returns -1 if a is closer to target, 1 if b is closer to target
 // and 0 if they are equal.
+//
+//
+// distcmp比较距离 a -> target 和 b -> target
+//
+// 如果 a 更接近目标，则返回-1；如果b更接近目标，则返回1；如果相等则返回0。
 func distcmp(target, a, b common.Hash) int {
+
+	// 逐个 byte 去 做 XOR 运算 <异或运算> 求 a 和 target 的距离 及  b 和 target 的距离
 	for i := range target {
-		da := a[i] ^ target[i]
-		db := b[i] ^ target[i]
+
+		da := a[i] ^ target[i]  // a 和 target 的距离
+		db := b[i] ^ target[i]	// b 和 target 的距离
 		if da > db {
-			return 1
+			return 1		// 说明 b 的距离更 贴近 target
 		} else if da < db {
 			return -1
 		}
