@@ -230,7 +230,7 @@ func TestNodeDBSeedQuery(t *testing.T) {
 	}
 
 	// Retrieve the entire batch and check for duplicates
-	seeds := db.querySeeds(len(nodeDBSeedQueryNodes)*2, time.Hour)
+	seeds := db.querySeeds(len(nodeDBSeedQueryNodes)*2, time.Hour)  // 从 本地 db 中 随机加载一部分 (活跃的) node 信息
 	have := make(map[NodeID]struct{})
 	for _, seed := range seeds {
 		have[seed.ID] = struct{}{}

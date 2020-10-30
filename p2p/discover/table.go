@@ -102,7 +102,7 @@ type bucket struct {
 
 func newTable(t transport, ourID NodeID, ourAddr *net.UDPAddr, nodeDBPath string, bootnodes []*Node) (*Table, error) {
 	// If no node database was given, use an in-memory one
-	db, err := newNodeDB(nodeDBPath, nodeDBVersion, ourID)
+	db, err := newNodeDB(nodeDBPath, nodeDBVersion, ourID)  // todo 实例化一个 存放  node 信息的 leveldb
 	if err != nil {
 		return nil, err
 	}
@@ -120,6 +120,8 @@ func newTable(t transport, ourID NodeID, ourAddr *net.UDPAddr, nodeDBPath string
 	if err := tab.setFallbackNodes(bootnodes); err != nil { // 设置启动节点信息到桶的tab.nursery数组中
 		return nil, err
 	}
+
+	// 先实例化 table 中的  257 个 空的 bucket 实例
 	for i := range tab.buckets {
 		tab.buckets[i] = &bucket{
 			ips: netutil.DistinctNetSet{Subnet: bucketSubnet, Limit: bucketIPLimit},
@@ -127,11 +129,11 @@ func newTable(t transport, ourID NodeID, ourAddr *net.UDPAddr, nodeDBPath string
 	}
 
 	tab.seedRand()			// 初始化 table 的 随机种子,  到时候 节点发现生成 随机的target 用的
-	tab.loadSeedNodes()		//
+	tab.loadSeedNodes()		// 从 本地 db 中 随机加载一部分 (活跃的) node 信息 和 配置的 种子节点一起返回  (用来做 启动引导用)
 	// Start the background expiration goroutine after loading seeds so that the search for
 	// seed nodes also considers older nodes that would otherwise be removed by the
 	// expiration.
-	tab.db.ensureExpirer()
+	tab.db.ensureExpirer()		// 启动  db 中清除 (不活跃) node的信息
 	go tab.loop()  // 异步启动刷桶逻辑
 	return tab, nil
 }
@@ -357,7 +359,7 @@ func (tab *Table) loop() {  // 异步启动刷桶逻辑
 	var (
 		revalidate     = time.NewTimer(tab.nextRevalidateTime())   	// 从 [0, 10s) 随机一个时间, 作为 随机 对 k-bucket 的内容做验证, 更新桶 (清除失效的 node)
 		refresh        = time.NewTicker(refreshInterval)			// 每30分钟 节点发现刷桶
-		copyNodes      = time.NewTicker(copyNodesInterval)
+		copyNodes      = time.NewTicker(copyNodesInterval)			// 30秒
 		revalidateDone = make(chan struct{})
 		refreshDone    = make(chan struct{})           // where doRefresh reports completion
 		waiting        = []chan struct{}{tab.initDone} // holds waiting callers while doRefresh runs
@@ -398,8 +400,9 @@ loop:
 			go tab.doRevalidate(revalidateDone)  // [0, 10s) 验证 k-bucket 中的 node 的有效性,  ping-pong
 		case <-revalidateDone:
 			revalidate.Reset(tab.nextRevalidateTime())
+		// 每 30 s 一次
 		case <-copyNodes.C:
-			go tab.copyLiveNodes()
+			go tab.copyLiveNodes() // （每 30 s 一次） 如果 node 在表中的存在时间超过了minTableTime，则copyLiveNodes() 将表中的 node 添加到 db 中
 		case <-tab.closeReq:
 			break loop
 		}
@@ -427,7 +430,9 @@ func (tab *Table) doRefresh(done chan struct{}) {
 	// Load nodes from the database and insert
 	// them. This should yield a few previously seen nodes that are
 	// (hopefully) still alive.
-	tab.loadSeedNodes()
+	//
+	// 从 db 加载节点并将其插入. 这应该会产生一些以前希望看到的仍然活跃的节点.
+	tab.loadSeedNodes()   // 从 本地 db 中 随机加载一部分 (活跃的) node 信息 和 配置的 种子节点一起返回  (用来做 启动引导用)
 
 	// Run self lookup to discover new neighbor nodes.
 	//
@@ -440,6 +445,12 @@ func (tab *Table) doRefresh(done chan struct{}) {
 	// (not hash-sized) and it is not easily possible to generate a
 	// sha3 preimage that falls into a chosen bucket.
 	// We perform a few lookups with a random target instead.
+	//
+	//
+	// Kademlia论文指定存储桶刷新 应在  最近最少使用  的存储桶中执行查找.
+	// 我们不能坚持这一点，因为findnode目标是512位的值（不是散列大小），并且不容易生成落入所选存储桶的 sha3 preimage
+	// 我们使用随机目标执行一些查找
+	//
 	for i := 0; i < 3; i++ {  // todo  for 3 次循环，每次生成一个随机nodeID即：target，再根据target去刷桶拉回距随机target节点的邻居节点
 		var target NodeID
 		crand.Read(target[:])
@@ -447,9 +458,10 @@ func (tab *Table) doRefresh(done chan struct{}) {
 	}
 }
 
+// 从 本地 db 中 随机加载一部分 (活跃的) node 信息 和 配置的 种子节点一起返回
 func (tab *Table) loadSeedNodes() {
-	seeds := tab.db.querySeeds(seedCount, seedMaxAge)
-	seeds = append(seeds, tab.nursery...)  // 将 引导节点(种子节点) 追加进去
+	seeds := tab.db.querySeeds(seedCount, seedMaxAge)  	// 从 本地 db 中 随机加载一部分 (活跃的) node 信息
+	seeds = append(seeds, tab.nursery...)  				// 将 引导节点(种子节点) 追加进去
 	for i := range seeds {
 		seed := seeds[i]
 		age := log.Lazy{Fn: func() interface{} { return time.Since(tab.db.lastPongReceived(seed.ID)) }}
@@ -514,15 +526,23 @@ func (tab *Table) nextRevalidateTime() time.Duration {
 
 // copyLiveNodes adds nodes from the table to the database if they have been in the table
 // longer then minTableTime.
+//
+// 如果节点在表中的存在时间超过了minTableTime，则copyLiveNodes() 将表中的节点添加到 db 中
+//
+// (在表中 呆的越久, 说明节点 稳定性越高, 大概率上没退出网络)
 func (tab *Table) copyLiveNodes() {
 	tab.mutex.Lock()
 	defer tab.mutex.Unlock()
 
 	now := time.Now()
+
+	// 遍历所有 k-bucket 中的 node
 	for _, b := range &tab.buckets {
 		for _, n := range b.entries {
+
+			// 如果在 bucket 中呆的时间 超过 seedMinTableTime (5分钟), todo 说明节点越稳定,  将它的信息 刷入 db
 			if now.Sub(n.addedAt) >= seedMinTableTime {
-				tab.db.updateNode(n)
+				tab.db.updateNode(n)  // 将一个节点（可能会覆盖）插入到 peer db 中
 			}
 		}
 	}

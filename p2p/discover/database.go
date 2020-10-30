@@ -40,8 +40,8 @@ import (
 
 var (
 	nodeDBNilNodeID      = NodeID{}       // Special node ID to use as a nil element.
-	nodeDBNodeExpiration = 24 * time.Hour // Time after which an unseen node should be dropped.
-	nodeDBCleanupCycle   = time.Hour      // Time period for running the expiration task.
+	nodeDBNodeExpiration = 24 * time.Hour // Time after which an unseen node should be dropped.		24小时
+	nodeDBCleanupCycle   = time.Hour      // Time period for running the expiration task.			每小时
 	nodeDBVersion        = 5
 )
 
@@ -177,6 +177,8 @@ func (db *nodeDB) storeInt64(key []byte, n int64) error {
 }
 
 // node retrieves a node with a given id from the database.
+//
+// 从 db 中查 一个node 信息
 func (db *nodeDB) node(id NodeID) *Node {
 	blob, err := db.lvl.Get(makeKey(id, nodeDBDiscoverRoot), nil)
 	if err != nil {
@@ -192,6 +194,8 @@ func (db *nodeDB) node(id NodeID) *Node {
 }
 
 // updateNode inserts - potentially overwriting - a node into the peer database.
+//
+// `updateNode()` 将一个节点（可能会覆盖）插入到 peer db 中
 func (db *nodeDB) updateNode(node *Node) error {
 	blob, err := rlp.EncodeToBytes(node)
 	if err != nil {
@@ -201,6 +205,8 @@ func (db *nodeDB) updateNode(node *Node) error {
 }
 
 // deleteNode deletes all information/keys associated with a node.
+//
+// `deleteNode()` 删除 peer db 中 与节点关联的所有信息/key
 func (db *nodeDB) deleteNode(id NodeID) error {
 	deleter := db.lvl.NewIterator(util.BytesPrefix(makeKey(id, "")), nil)
 	for deleter.Next() {
@@ -227,12 +233,12 @@ func (db *nodeDB) ensureExpirer() {
 // expirer should be started in a go routine, and is responsible for looping ad
 // infinitum and dropping stale data from the database.
 func (db *nodeDB) expirer() {
-	tick := time.NewTicker(nodeDBCleanupCycle)
+	tick := time.NewTicker(nodeDBCleanupCycle)   // 每小时 执行一次
 	defer tick.Stop()
 	for {
 		select {
 		case <-tick.C:
-			if err := db.expireNodes(); err != nil {
+			if err := db.expireNodes(); err != nil {  // 每小时 执行一次, 将本地 db 中的 (不活跃) node信息删除
 				log.Error("Failed to expire nodedb items", "err", err)
 			}
 		case <-db.quit:
@@ -244,7 +250,7 @@ func (db *nodeDB) expirer() {
 // expireNodes iterates over the database and deletes all nodes that have not
 // been seen (i.e. received a pong from) for some allotted time.
 func (db *nodeDB) expireNodes() error {
-	threshold := time.Now().Add(-nodeDBNodeExpiration)
+	threshold := time.Now().Add(-nodeDBNodeExpiration)   // 时间是否超过 24 小时
 
 	// Find discovered nodes that are older than the allowance
 	it := db.lvl.NewIterator(nil, nil)
@@ -256,12 +262,15 @@ func (db *nodeDB) expireNodes() error {
 		if field != nodeDBDiscoverRoot {
 			continue
 		}
-		// Skip the node if not expired yet (and not self)
+		// Skip the node if not expired yet (and not self)      跳过 当前本地 node
 		if !bytes.Equal(id[:], db.self[:]) {
+
 			if seen := db.lastPongReceived(id); seen.After(threshold) {
 				continue
 			}
 		}
+		// 某个 node 最后一次 和本地node的 PONG 时间已经超过 24 小时, 需要从 本地 db 中删除
+		//
 		// Otherwise delete all associated information
 		db.deleteNode(id)
 	}
@@ -305,6 +314,10 @@ func (db *nodeDB) updateFindFails(id NodeID, fails int) error {
 
 // querySeeds retrieves random nodes to be used as potential seed nodes
 // for bootstrapping.
+//
+// `querySeeds()` 从本地 db 中随机检索 一部分 (活跃的) 节点，以用作 [启动引导] 的潜在种子节点
+//
+// 从 本地 db 中 随机加载一部分 (活跃的) node 信息
 func (db *nodeDB) querySeeds(n int, maxAge time.Duration) []*Node {
 	var (
 		now   = time.Now()
@@ -315,6 +328,8 @@ func (db *nodeDB) querySeeds(n int, maxAge time.Duration) []*Node {
 	defer it.Release()
 
 seek:
+
+	//  从 本地 db 中 随机加载一部分 (活跃的) node 信息, 并返回
 	for seeks := 0; len(nodes) < n && seeks < n*5; seeks++ {
 		// Seek to a random entry. The first byte is incremented by a
 		// random amount each time in order to increase the likelihood
