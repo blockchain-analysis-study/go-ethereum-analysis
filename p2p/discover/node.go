@@ -40,6 +40,8 @@ const NodeIDBits = 512
 
 // Node represents a host on the network.
 // The fields of Node may not be modified.
+//
+// 这个代表 p2p 的 node          和 node/node.go 中的 Node 不是一个东西 (node/node.go 是 Etheruem 的实例)
 type Node struct {
 	IP       net.IP // len 4 for IPv4 or 16 for IPv6
 	UDP, TCP uint16 // port numbers

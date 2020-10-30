@@ -37,6 +37,8 @@ import (
 )
 
 // Node is a container on which services can be registered.
+//
+// 这个是  代表 整个 Etheruem 实例的 node     和 discover\node.go  不是一个东西 (discover\node.go 是 p2p 的node)
 type Node struct {
 	eventmux *event.TypeMux // Event multiplexer used between the services of a stack
 	config   *Config
@@ -48,23 +50,46 @@ type Node struct {
 	serverConfig p2p.Config
 	server       *p2p.Server // Currently running P2P networking layer
 
+	// todo 这个 转载这 各种 服务 (Service) 的 初始化函数指针
+	//
+	// 			ETH 服务、   dashboard 服务、  shh 服务 (whisper 相关)、  EthStats 服务 等等 几个
+	//
 	serviceFuncs []ServiceConstructor     // Service constructors (in dependency order)
+	// todo 上面的 ServiceConstructor 被调用后 所初始化的 服务实例引用
 	services     map[reflect.Type]Service // Currently running services
 
+	// 节点当前提供的API列表
 	rpcAPIs       []rpc.API   // List of APIs currently provided by the node
+
+	// - - - - - - -  cmd - - - - - - -
+	// 进程内RPC请求 处理程序 以处理API请求   todo 当前节点 命令行操作  jsonRpc
 	inprocHandler *rpc.Server // In-process RPC request handler to process the API requests
 
+	// - - - - - - -  IPC - - - - - - -
+	// 要侦听的IPC端点 (empty = 禁用IPC)
 	ipcEndpoint string       // IPC endpoint to listen at (empty = IPC disabled)
+	// IPC RPC侦听器套接字，用于服务API请求
 	ipcListener net.Listener // IPC RPC listener socket to serve API requests
+	// IPC RPC请求 处理程序 以处理API请求
 	ipcHandler  *rpc.Server  // IPC RPC request handler to process the API requests
 
+	// - - - - - - -  HTTP - - - - - - -
+	// 要侦听的HTTP端点  (接口 + 端口) (empty = 禁用IPC)
 	httpEndpoint  string       // HTTP endpoint (interface + port) to listen at (empty = HTTP disabled)
+	// 允许通过此端点的HTTP RPC模块   (api 的白名单, 表明 http 对外的 jsonRpc 接口)
 	httpWhitelist []string     // HTTP RPC modules to allow through this endpoint
+	// 服务器API请求的HTTP RPC侦听器套接字
 	httpListener  net.Listener // HTTP RPC listener socket to server API requests
+	// HTTP RPC请求  处理程序 以处理API请求
 	httpHandler   *rpc.Server  // HTTP RPC request handler to process the API requests
 
+
+	// - - - - - - -  WebSocket - - - - - - -
+	// 要侦听的Websocket端点  (接口 + 端口) (empty = 禁用IPC)
 	wsEndpoint string       // Websocket endpoint (interface + port) to listen at (empty = websocket disabled)
+	// 服务器API请求的Websocket RPC侦听器套接字
 	wsListener net.Listener // Websocket RPC listener socket to server API requests
+	// Websocket RPC请求 处理程序 以处理API请求
 	wsHandler  *rpc.Server  // Websocket RPC request handler to process the API requests
 
 	stop chan struct{} // Channel to wait for termination notifications
@@ -188,7 +213,11 @@ func (n *Node) Start() error {
 	n.log.Info("Starting peer-to-peer node", "instance", n.serverConfig.Name)
 
 	// Otherwise copy and specialize the P2P configuration
+	//
+	// 用来收集 各种 服务引用
 	services := make(map[reflect.Type]Service)
+
+	// 逐个 实例化 各个 服务
 	for _, constructor := range n.serviceFuncs {
 		// Create a new context for the particular service
 		ctx := &ServiceContext{
@@ -297,11 +326,20 @@ func (n *Node) openDataDir() error {
 // assumptions about the state of the node.
 func (n *Node) startRPC(services map[reflect.Type]Service) error {
 	// Gather all the possible APIs to surface
+
+	// 获取 ether node 实例 内置的 api
 	apis := n.apis()
+
+	// 追加收集  各个 服务的api
 	for _, service := range services {
 		apis = append(apis, service.APIs()...)
 	}
+
+
 	// Start the various API endpoints, terminating all in case of errors
+	//
+	// 启动各种API端点，如果发生错误则终止所有端点
+
 	if err := n.startInProc(apis); err != nil {
 		return err
 	}
@@ -479,7 +517,7 @@ func (n *Node) Stop() error {
 	}
 
 	// unblock n.Wait
-	close(n.stop)
+	close(n.stop)  // 关闭 stop  通道, 外面就能收到 nil 信号
 
 	// Remove the keystore if it was created ephemerally.
 	var keystoreErr error
@@ -507,6 +545,7 @@ func (n *Node) Wait() {
 	stop := n.stop
 	n.lock.RUnlock()
 
+	// 其 阻塞 用
 	<-stop
 }
 

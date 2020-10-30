@@ -265,7 +265,7 @@ func main() {
 // It creates a default node based on the command line arguments and runs it in
 // blocking mode, waiting for it to be shut down.
 /**
-以太坊的 执行入口函数
+todo 以太坊的 执行入口函数
  */
 func geth(ctx *cli.Context) error {
 	// 解析命令行参数
@@ -288,9 +288,13 @@ func startNode(ctx *cli.Context, stack *node.Node) {
 	debug.Memsize.Add("node", stack)
 
 	// Start up the node itself
+	//
+	//  启动各个 服务.  ETH服务、dashboard 服务、shh 服务 (whisper 相关)、EthStats 服务 等等
 	utils.StartNode(stack)
 
 	// Unlock any account specifically requested
+	//
+	// 根据本地 keystore 文件, 解锁 一些账户信息
 	ks := stack.AccountManager().Backends(keystore.KeyStoreType)[0].(*keystore.KeyStore)
 
 	passwords := utils.MakePasswordList(ctx)
@@ -300,16 +304,23 @@ func startNode(ctx *cli.Context, stack *node.Node) {
 			unlockAccount(ctx, ks, trimmed, i, passwords)
 		}
 	}
+
+
 	// Register wallet event handlers to open and auto-derive wallets
+	//
+	// 监听 钱包事件
 	events := make(chan accounts.WalletEvent, 16)
 	stack.AccountManager().Subscribe(events)
 
 	go func() {
 		// Create a chain state reader for self-derivation
+		//
+		// 创建一个  链状状态读取器  以进行自我推导
 		rpcClient, err := stack.Attach()
 		if err != nil {
 			utils.Fatalf("Failed to attach to self: %v", err)
 		}
+		// 创建一个 本地的  ethClient 的 rpc 实例
 		stateReader := ethclient.NewClient(rpcClient)
 
 		// Open any wallets already attached
@@ -341,12 +352,15 @@ func startNode(ctx *cli.Context, stack *node.Node) {
 			}
 		}
 	}()
+
+
 	// Start auxiliary services if enabled
 	if ctx.GlobalBool(utils.MiningEnabledFlag.Name) || ctx.GlobalBool(utils.DeveloperFlag.Name) {
 		/**
-		在正常模式下(开启 mine) 或者 开发模式下
+		在  正常模式下(开启 mine)  或者   开发模式下
+
 		如果是 --syncmode light
-		则，不支持 (轻节点不支持 挖矿和开发模式)
+		则，不支持  todo (轻节点不支持 挖矿 和 开发模式)
 		 */
 		// Mining only makes sense if a full Ethereum node is running
 		if ctx.GlobalString(utils.SyncModeFlag.Name) == "light" {
@@ -369,12 +383,14 @@ func startNode(ctx *cli.Context, stack *node.Node) {
 				th.SetThreads(threads)
 			}
 		}
-		// Set the gas price to the limits from the CLI and start mining
+		// Set the gas price to the limits from the CLI and start mining   通过CLI将天然气价格设置为极限并开始开采
+		//
+		// 本地设置 gasPrice, 这个值在 tx_pool 中有用到
 		gasprice := utils.GlobalBig(ctx, utils.MinerLegacyGasPriceFlag.Name)
 		if ctx.IsSet(utils.MinerGasPriceFlag.Name) {
 			gasprice = utils.GlobalBig(ctx, utils.MinerGasPriceFlag.Name)
 		}
-		ethereum.TxPool().SetGasPrice(gasprice)
+		ethereum.TxPool().SetGasPrice(gasprice)   // 将 gasPrice 设置到 tx_pool 中， 用来给 矿工 过滤 低价tx 的
 		if err := ethereum.StartMining(true); err != nil {
 			utils.Fatalf("Failed to start mining: %v", err)
 		}

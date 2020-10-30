@@ -64,6 +64,8 @@ func Fatalf(format string, args ...interface{}) {
 }
 
 func StartNode(stack *node.Node) {
+
+	//  启动  eth 节点  todo (其中包含各个服务: ETH服务、dashboard 服务、shh 服务 (whisper 相关)、EthStats 服务 等等)  和  (启动 p2p 服务)
 	if err := stack.Start(); err != nil {
 		Fatalf("Error starting protocol stack: %v", err)
 	}

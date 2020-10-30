@@ -28,10 +28,18 @@ import (
 )
 
 // API describes the set of methods offered over the RPC interface
+//
+// 实现 jsonRPC API 的接口结构
 type API struct {
+
+	// 整个 api 模块名, 如:  eth、  miner、  debug 等等
 	Namespace string      // namespace under which the rpc methods of Service are exposed
+	// api 的版本
 	Version   string      // api version for DApp's
+	// 当前 模块 api 方法的 receiver
 	Service   interface{} // receiver instance which holds the methods
+
+	// 当前 模块 api 是否对外开放 (在 HTTP  的 rpc 服务中 whitelist 中用到)
 	Public    bool        // indication if the methods must be considered safe for public use
 }
 

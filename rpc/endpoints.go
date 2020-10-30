@@ -32,6 +32,8 @@ func StartHTTPEndpoint(endpoint string, apis []API, modules []string, cors []str
 	// Register all the APIs exposed by the services
 	handler := NewServer()
 	for _, api := range apis {
+
+		// 判断 api 是否 对外开放
 		if whitelist[api.Namespace] || (len(whitelist) == 0 && api.Public) {
 			if err := handler.RegisterName(api.Namespace, api.Service); err != nil {
 				return nil, nil, err
