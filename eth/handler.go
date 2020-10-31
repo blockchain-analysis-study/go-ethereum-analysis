@@ -146,14 +146,20 @@ func NewProtocolManager(config *params.ChainConfig, mode downloader.SyncMode, ne
 			Version: version,
 			Length:  ProtocolLengths[i],
 
-			// todo 回调函数 (生成一个 p2p node 实例)
+			// todo 回调函数 (生成一个 protocalManager管理的 p2p node 实例,  用来做 广播 tx  和 block 用)
+			//
+			// todo 这个回调 最终会在 p2p\peer.go 的 startProtocols() 中被调用
 			Run: func(p *p2p.Peer, rw p2p.MsgReadWriter) error {
+
+				// 将 p2p的 peer 封装成一个 ProtocalManager 管理的 peer 实例
 				peer := manager.newPeer(int(version), p, rw)
 				select {
+				// 每一个 peer.run 的时候
 				case manager.newPeerCh <- peer:
 					manager.wg.Add(1)
 					defer manager.wg.Done()
-					return manager.handle(peer)
+
+					return manager.handle(peer) // todo 处理 各类消息
 				case <-manager.quitSync:
 					return p2p.DiscQuitting
 				}
@@ -233,6 +239,8 @@ func (pm *ProtocolManager) removePeer(id string) {
 
 /**
 todo 启动 全节点的 pm
+
+maxPeers: 在外面我们取的是 (p2p 服务的 最大允许 peer 连接数)
  */
 func (pm *ProtocolManager) Start(maxPeers int) {
 	pm.maxPeers = maxPeers
@@ -349,7 +357,7 @@ func (pm *ProtocolManager) handle(p *peer) error {
 	}
 	// main loop. handle incoming messages.
 	for {
-		if err := pm.handleMsg(p); err != nil {
+		if err := pm.handleMsg(p); err != nil { // todo 这里处理 各类  tx  和 block 消息
 			p.Log().Debug("Ethereum message handling failed", "err", err)
 			return err
 		}

@@ -204,7 +204,9 @@ func (p *Peer) run() (remoteRequested bool, err error) {
 
 	// Start all protocol handlers.
 	writeStart <- struct{}{}
-	p.startProtocols(writeStart, writeErr)
+
+	// 执行 p2p  peer 的 protocal 部分
+	p.startProtocols(writeStart, writeErr)  // todo 这里面最终会调到 ProtocalManager 中实现的 protocol.Run() 回调
 
 	// Wait for an error or disconnect.
 loop:
@@ -277,6 +279,8 @@ func (p *Peer) readLoop(errc chan<- error) {
 
 func (p *Peer) handle(msg Msg) error {
 	switch {
+
+	// 处理 ping-pong 消息
 	case msg.Code == pingMsg:
 		msg.Discard()
 		go SendItems(p.rw, pongMsg)
@@ -342,6 +346,8 @@ outer:
 	return result
 }
 
+
+// 执行 p2p  peer 的 protocal 部分
 func (p *Peer) startProtocols(writeStart <-chan struct{}, writeErr chan<- error) {
 	p.wg.Add(len(p.running))
 	for _, proto := range p.running {
@@ -355,7 +361,7 @@ func (p *Peer) startProtocols(writeStart <-chan struct{}, writeErr chan<- error)
 		}
 		p.log.Trace(fmt.Sprintf("Starting protocol %s/%d", proto.Name, proto.Version))
 		go func() {
-			err := proto.Run(p, rw)
+			err := proto.Run(p, rw)  // todo 这个就是 eth\handler.go 的 ProtocalManager的 NewProtocolManager() 中实现的 protocol.Run() 回调
 			if err == nil {
 				p.log.Trace(fmt.Sprintf("Protocol %s/%d returned", proto.Name, proto.Version))
 				err = errProtocolReturned

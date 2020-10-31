@@ -1056,6 +1056,8 @@ func (srv *Server) runPeer(p *Peer) {  // 处理 当前 peer 和 某个对端 pe
 	})
 
 	// run the protocol
+	//
+	// 这里的 run 其实对应的是
 	remoteRequested, err := p.run()  // 这个才是 最终 最底层的 p2p run()   todo <处理 当前 peer 和 某个对端 peer 的消息来往>    只要好友消息来往, 这个方法就会阻塞
 
 	// broadcast peer drop   发送 删除 peer 事件 (用在 jsonrpc api 中查看 节点连接信息)
