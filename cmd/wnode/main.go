@@ -283,7 +283,7 @@ func initialize() {
 			Name:           common.MakeName("wnode", "6.0"),
 			Protocols:      shh.Protocols(),
 			ListenAddr:     *argIP,
-			NAT:            nat.Any(),
+			NAT:            nat.Any(),   // 使用的 nat 机制为: any (兼容了 UPnP 和 NAT-PMP 两种实现)
 			BootstrapNodes: peers,
 			StaticNodes:    peers,
 			TrustedNodes:   peers,

@@ -70,7 +70,7 @@ type Ethereum struct {
 	txPool          *core.TxPool
 	blockchain      *core.BlockChain
 	protocolManager *ProtocolManager
-	lesServer       LesServer
+	lesServer       LesServer  // 全节点 在启动了  轻节点的服务端时,  这个是当前全节点的 轻节点服务端
 
 	// DB interfaces
 	chainDb ethdb.Database // Block chain database
@@ -162,7 +162,7 @@ func New(ctx *node.ServiceContext, config *Config) (*Ethereum, error) {
 		etherbase:      config.Etherbase,
 		// 一个 布隆服务的 什么什么 通道
 		bloomRequests:  make(chan chan *bloombits.Retrieval),
-		// 布隆服务器
+		// 布隆服务器 (轻节点用)
 		bloomIndexer:   NewBloomIndexer(chainDb, params.BloomBitsBlocks, bloomConfirms),
 	}
 
@@ -199,12 +199,12 @@ func New(ctx *node.ServiceContext, config *Config) (*Ethereum, error) {
 		eth.blockchain.SetHead(compat.RewindTo)
 		rawdb.WriteChainConfig(chainDb, genesisHash, chainConfig)
 	}
-	eth.bloomIndexer.Start(eth.blockchain)
+	eth.bloomIndexer.Start(eth.blockchain) // 启动 布隆索引器
 
 	if config.TxPool.Journal != "" {
 		config.TxPool.Journal = ctx.ResolvePath(config.TxPool.Journal)
 	}
-	eth.txPool = core.NewTxPool(config.TxPool, eth.chainConfig, eth.blockchain)
+	eth.txPool = core.NewTxPool(config.TxPool, eth.chainConfig, eth.blockchain)  // 创建 交易池
 
 	/**
 	协议管理器, 主要管理同步之类的
@@ -450,7 +450,7 @@ func (s *Ethereum) Protocols() []p2p.Protocol {
 // Ethereum protocol implementation.
 func (s *Ethereum) Start(srvr *p2p.Server) error {
 	// Start the bloom bits servicing goroutines
-	s.startBloomHandlers()
+	s.startBloomHandlers()   // todo 启动 布隆处理器
 
 	// Start the RPC service
 	s.netRPCService = ethapi.NewPublicNetAPI(srvr, s.NetVersion())
@@ -464,6 +464,8 @@ func (s *Ethereum) Start(srvr *p2p.Server) error {
 		maxPeers -= s.config.LightPeers
 	}
 	// Start the networking layer and the light server if requested
+	//
+	// todo 启动 protocalManager
 	s.protocolManager.Start(maxPeers)
 
 	// todo #############################

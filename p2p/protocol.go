@@ -23,6 +23,10 @@ import (
 )
 
 // Protocol represents a P2P subprotocol implementation.
+//
+// 协议表示P2P子协议实现
+//
+// 有轻节点， 还有真正的 正常的p2p 节点实现
 type Protocol struct {
 	// Name should contain the official protocol name,
 	// often a three-letter word.

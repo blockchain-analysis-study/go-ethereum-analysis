@@ -68,20 +68,28 @@ func (t TCPDialer) Dial(dest *discover.Node) (net.Conn, error) {
 // dialstate schedules dials and discovery lookups.
 // it get's a chance to compute new tasks on every iteration
 // of the main loop in Server.run.
+//
+// 连接状态 结构实现
 type dialstate struct {
+
+	// 最大 动态连接数
 	maxDynDials int
-	ntab        discoverTable
+	ntab        discoverTable		// 用于做节点发现 的 table
 	netrestrict *netutil.Netlist
 
 	lookupRunning bool
 	dialing       map[discover.NodeID]connFlag
-	lookupBuf     []*discover.Node // current discovery lookup results
+	// 用于 节点发现
+	lookupBuf     []*discover.Node // current discovery lookup results 当前发现查找结果
 	randomNodes   []*discover.Node // filled from Table
-	static        map[discover.NodeID]*dialTask
-	hist          *dialHistory
+	static        map[discover.NodeID]*dialTask   //  静态链接任务 集合
+	hist          *dialHistory		// 指向 全局用来记录  历史连接过的  对端 peer 集合的指针
 
+	// 首次使用拨号程序的时间
 	start     time.Time        // time when the dialer was first used
-	bootnodes []*discover.Node // default dials when there are no peers
+
+	// 引导节点集合
+	bootnodes []*discover.Node // default dials when there are no peers   当没有 对端 peer 时, 我们 默认连接到 引导节点上
 }
 
 type discoverTable interface {
@@ -92,7 +100,9 @@ type discoverTable interface {
 	ReadRandomNodes([]*discover.Node) int
 }
 
-// the dial history remembers recent dials.
+// the dial history remembers recent dials.   拨号历史记录会记住最近的拨号
+//
+// 全局用来记录  历史连接过的  对端 peer
 type dialHistory []pastDial
 
 // pastDial is an entry in the dial history.
@@ -127,25 +137,27 @@ type waitExpireTask struct {
 	time.Duration
 }
 
+// 实例化 连接状态结构 (拨号状态结构)
 func newDialState(static []*discover.Node, bootnodes []*discover.Node, ntab discoverTable, maxdyn int, netrestrict *netutil.Netlist) *dialstate {
 	s := &dialstate{
-		maxDynDials: maxdyn,
+		maxDynDials: maxdyn,    // 最大 动态连接数
 		ntab:        ntab,
 		netrestrict: netrestrict,
 		static:      make(map[discover.NodeID]*dialTask),
 		dialing:     make(map[discover.NodeID]connFlag),
 		bootnodes:   make([]*discover.Node, len(bootnodes)),
 		randomNodes: make([]*discover.Node, maxdyn/2),
-		hist:        new(dialHistory),
+		hist:        new(dialHistory),  // 设置 全局用来记录  历史连接过的  对端 peer
 	}
 	copy(s.bootnodes, bootnodes)
-	for _, n := range static {
+
+	for _, n := range static { // 根据 静态节点列表 设置静态链接  任务集合
 		s.addStatic(n)
 	}
 	return s
 }
 
-func (s *dialstate) addStatic(n *discover.Node) {
+func (s *dialstate) addStatic(n *discover.Node) { // 设置静态链接  任务集合
 	// This overwites the task instead of updating an existing
 	// entry, giving users the opportunity to force a resolve operation.
 	s.static[n.ID] = &dialTask{flags: staticDialedConn, dest: n}
@@ -159,14 +171,18 @@ func (s *dialstate) removeStatic(n *discover.Node) {
 	s.hist.remove(n.ID)
 }
 
+
+// 组装 新的连接任务   (基本是 向 【staticNode】  和 【bootstrapNode】 和 【当前节点发现查找到的node】 和 【配置文件中指定需要去连接的node】  发起  拨号连接的任务)
 func (s *dialstate) newTasks(nRunning int, peers map[discover.NodeID]*Peer, now time.Time) []task {
 	if s.start.IsZero() {
 		s.start = now
 	}
 
 	var newtasks []task
+
+	// todo 根据 peer 信息 添加新的拨号 任务
 	addDial := func(flag connFlag, n *discover.Node) bool {
-		if err := s.checkDial(n, peers); err != nil {
+		if err := s.checkDial(n, peers); err != nil {  // 检查拨号状态
 			log.Trace("Skipping dial candidate", "id", n.ID, "addr", &net.TCPAddr{IP: n.IP, Port: int(n.TCP)}, "err", err)
 			return false
 		}
@@ -200,7 +216,7 @@ func (s *dialstate) newTasks(nRunning int, peers map[discover.NodeID]*Peer, now 
 			delete(s.static, t.dest.ID)
 		case nil:
 			s.dialing[id] = t.flags
-			newtasks = append(newtasks, t)
+			newtasks = append(newtasks, t)   // static 静态节点
 		}
 	}
 	// If we don't have any peers whatsoever, try to dial a random bootnode. This
@@ -211,7 +227,7 @@ func (s *dialstate) newTasks(nRunning int, peers map[discover.NodeID]*Peer, now 
 		s.bootnodes = append(s.bootnodes[:0], s.bootnodes[1:]...)
 		s.bootnodes = append(s.bootnodes, bootnode)
 
-		if addDial(dynDialedConn, bootnode) {
+		if addDial(dynDialedConn, bootnode) {  // bootstrap 引导节点
 			needDynDials--
 		}
 	}
@@ -221,7 +237,7 @@ func (s *dialstate) newTasks(nRunning int, peers map[discover.NodeID]*Peer, now 
 	if randomCandidates > 0 {
 		n := s.ntab.ReadRandomNodes(s.randomNodes)
 		for i := 0; i < randomCandidates && i < n; i++ {
-			if addDial(dynDialedConn, s.randomNodes[i]) {
+			if addDial(dynDialedConn, s.randomNodes[i]) {   // 配置文件中指定的节点
 				needDynDials--
 			}
 		}
@@ -230,7 +246,7 @@ func (s *dialstate) newTasks(nRunning int, peers map[discover.NodeID]*Peer, now 
 	// items from the result buffer.
 	i := 0
 	for ; i < len(s.lookupBuf) && needDynDials > 0; i++ {
-		if addDial(dynDialedConn, s.lookupBuf[i]) {
+		if addDial(dynDialedConn, s.lookupBuf[i]) {   // 动态连接 当前节点发现查找结果
 			needDynDials--
 		}
 	}
@@ -246,7 +262,7 @@ func (s *dialstate) newTasks(nRunning int, peers map[discover.NodeID]*Peer, now 
 	// This should prevent cases where the dialer logic is not ticked
 	// because there are no pending events.
 	if nRunning == 0 && len(newtasks) == 0 && s.hist.Len() > 0 {
-		t := &waitExpireTask{s.hist.min().exp.Sub(now)}
+		t := &waitExpireTask{s.hist.min().exp.Sub(now)}  // 将 历史连接中的  超时的 peer 封装到  等待过时处理 task 队列中
 		newtasks = append(newtasks, t)
 	}
 	return newtasks
@@ -260,6 +276,7 @@ var (
 	errNotWhitelisted   = errors.New("not contained in netrestrict whitelist")
 )
 
+// 检查连接状态   检查拨号状态
 func (s *dialstate) checkDial(n *discover.Node, peers map[discover.NodeID]*Peer) error {
 	_, dialing := s.dialing[n.ID]
 	switch {
@@ -269,7 +286,7 @@ func (s *dialstate) checkDial(n *discover.Node, peers map[discover.NodeID]*Peer)
 		return errAlreadyConnected
 	case s.ntab != nil && n.ID == s.ntab.Self().ID:
 		return errSelf
-	case s.netrestrict != nil && !s.netrestrict.Contains(n.IP):
+	case s.netrestrict != nil && !s.netrestrict.Contains(n.IP):  // 如果不在 白名单
 		return errNotWhitelisted
 	case s.hist.contains(n.ID):
 		return errRecentlyDialed
@@ -279,9 +296,13 @@ func (s *dialstate) checkDial(n *discover.Node, peers map[discover.NodeID]*Peer)
 
 func (s *dialstate) taskDone(t task, now time.Time) {
 	switch t := t.(type) {
+
+	// 如果 已完成的 任务是 拨号任务
 	case *dialTask:
-		s.hist.add(t.dest.ID, now.Add(dialHistoryExpiration))
+		s.hist.add(t.dest.ID, now.Add(dialHistoryExpiration))  // 将 nodeId 追加到  历史连接 peer 信息集合中
 		delete(s.dialing, t.dest.ID)
+
+	// 如果 已完成的 任务是 节点发现任务
 	case *discoverTask:
 		s.lookupRunning = false
 		s.lookupBuf = append(s.lookupBuf, t.results...)
@@ -290,16 +311,18 @@ func (s *dialstate) taskDone(t task, now time.Time) {
 
 func (t *dialTask) Do(srv *Server) {
 	if t.dest.Incomplete() {
-		if !t.resolve(srv) {
+		if !t.resolve(srv) {  // 这里也会做  k-bucket 的刷桶
 			return
 		}
 	}
+
+	// todo 这里会以 当前 peer 作为 客户端, 向 对端 peer 发起 拨号连接
 	err := t.dial(srv, t.dest)
 	if err != nil {
 		log.Trace("Dial error", "task", t, "err", err)
 		// Try resolving the ID of static nodes if dialing failed.
 		if _, ok := err.(*dialError); ok && t.flags&staticDialedConn != 0 {
-			if t.resolve(srv) {
+			if t.resolve(srv) {  // 这里也会做 k-bucket 的刷桶
 				t.dial(srv, t.dest)
 			}
 		}
@@ -323,7 +346,7 @@ func (t *dialTask) resolve(srv *Server) bool {
 	if time.Since(t.lastResolved) < t.resolveDelay {
 		return false
 	}
-	resolved := srv.ntab.Resolve(t.dest.ID)
+	resolved := srv.ntab.Resolve(t.dest.ID)  // 这里也是会做 k-bucket 的刷桶
 	t.lastResolved = time.Now()
 	if resolved == nil {
 		t.resolveDelay *= 2
@@ -358,6 +381,7 @@ func (t *dialTask) String() string {
 	return fmt.Sprintf("%v %x %v:%d", t.flags, t.dest.ID[:8], t.dest.IP, t.dest.TCP)
 }
 
+// 节点发现任务 的Do中会做  k-bucket 的刷桶 (table.Lookup())
 func (t *discoverTask) Do(srv *Server) {
 	// newTasks generates a lookup task whenever dynamic dials are
 	// necessary. Lookups need to take some time, otherwise the
@@ -369,7 +393,7 @@ func (t *discoverTask) Do(srv *Server) {
 	srv.lastLookup = time.Now()
 	var target discover.NodeID
 	rand.Read(target[:])
-	t.results = srv.ntab.Lookup(target)
+	t.results = srv.ntab.Lookup(target)  // 做 k-bucket 的刷桶
 }
 
 func (t *discoverTask) String() string {

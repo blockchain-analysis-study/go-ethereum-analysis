@@ -127,7 +127,7 @@ func NewNode(datadir string, config *NodeConfig) (stack *Node, _ error) {
 			DiscoveryV5:      true,
 			BootstrapNodesV5: config.BootstrapNodes.nodes,
 			ListenAddr:       ":0",
-			NAT:              nat.Any(),
+			NAT:              nat.Any(),   // 使用的 nat 机制为: any (兼容了 UPnP 和 NAT-PMP 两种实现)
 			MaxPeers:         config.MaxPeers,
 		},
 	}

@@ -227,6 +227,8 @@ type Config struct {
 }
 
 // ListenUDP returns a new table that listens for UDP packets on laddr.
+//
+// ListenUDP  根据 配置文件返回一个新 table，该table 在laddr上侦听UDP数据包
 func ListenUDP(c conn, cfg Config) (*Table, error) {
 	tab, _, err := newUDP(c, cfg)
 	if err != nil {

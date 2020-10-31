@@ -51,7 +51,7 @@ var DefaultConfig = Config{
 	P2P: p2p.Config{
 		ListenAddr: ":30303",
 		MaxPeers:   25, // 默认连接 25个对端 peer
-		NAT:        nat.Any(),
+		NAT:        nat.Any(),  // 使用的 nat 机制为: any (兼容了 UPnP 和 NAT-PMP 两种实现)
 	},
 }
 

@@ -45,9 +45,13 @@ type Node struct {
 	accman   *accounts.Manager
 
 	ephemeralKeystore string         // if non-empty, the key directory that will be removed by Stop
+
+	// 防止并发使用实例目录    flock  为 文件锁
 	instanceDirLock   flock.Releaser // prevents concurrent use of instance directory
 
 	serverConfig p2p.Config
+
+	// todo p2p 服务
 	server       *p2p.Server // Currently running P2P networking layer
 
 	// todo 这个 转载这 各种 服务 (Service) 的 初始化函数指针
@@ -55,7 +59,7 @@ type Node struct {
 	// 			ETH 服务、   dashboard 服务、  shh 服务 (whisper 相关)、  EthStats 服务 等等 几个
 	//
 	serviceFuncs []ServiceConstructor     // Service constructors (in dependency order)
-	// todo 上面的 ServiceConstructor 被调用后 所初始化的 服务实例引用
+	// todo 上面的 ServiceConstructor 被调用后 所初始化的 服务实例引用       (ETH 服务、   dashboard 服务、  shh 服务 (whisper 相关)、  EthStats 服务 等等)
 	services     map[reflect.Type]Service // Currently running services
 
 	// 节点当前提供的API列表
@@ -190,25 +194,29 @@ func (n *Node) Start() error {
 	if n.server != nil {
 		return ErrNodeRunning
 	}
+	// 打开 ether node 的目录
 	if err := n.openDataDir(); err != nil {
 		return err
 	}
 
-	// Initialize the p2p server. This creates the node key and
-	// discovery databases.
+	// Initialize the p2p server. This creates the node key and discovery databases.
+	//
+	// 初始化p2p服务端. 这将创建 node key 和 节点发现的 db
 	n.serverConfig = n.config.P2P
-	n.serverConfig.PrivateKey = n.config.NodeKey()
-	n.serverConfig.Name = n.config.NodeName()
+	n.serverConfig.PrivateKey = n.config.NodeKey() 	// 设置当前 node 的私钥
+	n.serverConfig.Name = n.config.NodeName()		// node 的name
 	n.serverConfig.Logger = n.log
 	if n.serverConfig.StaticNodes == nil {
-		n.serverConfig.StaticNodes = n.config.StaticNodes()
+		n.serverConfig.StaticNodes = n.config.StaticNodes()  // todo 加载配置文件的  静态节点
 	}
 	if n.serverConfig.TrustedNodes == nil {
-		n.serverConfig.TrustedNodes = n.config.TrustedNodes()
+		n.serverConfig.TrustedNodes = n.config.TrustedNodes()	// todo 加载配置文件的  可信任节点
 	}
 	if n.serverConfig.NodeDatabase == "" {
-		n.serverConfig.NodeDatabase = n.config.NodeDB()
+		n.serverConfig.NodeDatabase = n.config.NodeDB()			// 根据配置文件 指定  p2p node 的 db 目录
 	}
+
+	// todo 初始化 p2p Server 实例
 	running := &p2p.Server{Config: n.serverConfig}
 	n.log.Info("Starting peer-to-peer node", "instance", n.serverConfig.Name)
 
@@ -217,7 +225,7 @@ func (n *Node) Start() error {
 	// 用来收集 各种 服务引用
 	services := make(map[reflect.Type]Service)
 
-	// 逐个 实例化 各个 服务
+	// todo 逐个实例化 各个服务  (ETH 服务、   dashboard 服务、  shh 服务 (whisper 相关)、  EthStats 服务 等等)
 	for _, constructor := range n.serviceFuncs {
 		// Create a new context for the particular service
 		ctx := &ServiceContext{
@@ -230,7 +238,7 @@ func (n *Node) Start() error {
 			ctx.services[kind] = s
 		}
 		// Construct and save the service
-		service, err := constructor(ctx)
+		service, err := constructor(ctx)     // todo 逐个实例化 各个服务  (ETH 服务、   dashboard 服务、  shh 服务 (whisper 相关)、  EthStats 服务 等等)
 		if err != nil {
 			return err
 		}
@@ -262,9 +270,7 @@ func (n *Node) Start() error {
 		running.Protocols = append(running.Protocols, service.Protocols()...)
 	}
 
-	//
-	// todo 这里启动 p2p 服务, 不是 peer 实例哦
-	if err := running.Start(); err != nil {
+	if err := running.Start(); err != nil {  // todo 这里启动 p2p 服务, 不是 peer 实例哦
 		return convertFileLockError(err)
 	}
 	// Start each of the services
@@ -274,20 +280,19 @@ func (n *Node) Start() error {
 		//
 		// 启动下一个服务，一旦失败就停止所有先前的服务
 		//
-		// todo 这里 逐个 启动各个 peer 实例
+		// todo 这里 逐个 启动各个 服务 (Service) 实例,        (ETH 服务、   dashboard 服务、  shh 服务 (whisper 相关)、  EthStats 服务 等等 )
 		if err := service.Start(running); err != nil {
 			for _, kind := range started {
 				services[kind].Stop()
 			}
 			running.Stop()
-
 			return err
 		}
 		// Mark the service started for potential cleanup
-		started = append(started, kind)
+		started = append(started, kind)  // 收集 所有已经启动了的  服务kind    (ETH 服务、   dashboard 服务、  shh 服务 (whisper 相关)、  EthStats 服务 等等 )
 	}
 	// Lastly start the configured RPC interfaces
-	if err := n.startRPC(services); err != nil {
+	if err := n.startRPC(services); err != nil {   // todo 启动 各种 jsonrpc 服务   (inproc<进程内部rpc>、 IPC、 HTTP、 WebSocket)
 		for _, service := range services {
 			service.Stop()
 		}
@@ -295,13 +300,14 @@ func (n *Node) Start() error {
 		return err
 	}
 	// Finish initializing the startup
-	n.services = services
-	n.server = running
-	n.stop = make(chan struct{})
+	n.services = services			//	节点的各种服务  (ETH 服务、   dashboard 服务、  shh 服务 (whisper 相关)、  EthStats 服务 等等)
+	n.server = running				//  p2p 服务
+	n.stop = make(chan struct{})	// 节点停止 信号通道
 
 	return nil
 }
 
+// 打开 ether node 的数据目录 (锁定目录, 放置并发修改)
 func (n *Node) openDataDir() error {
 	if n.config.DataDir == "" {
 		return nil // ephemeral
@@ -313,6 +319,8 @@ func (n *Node) openDataDir() error {
 	}
 	// Lock the instance directory to prevent concurrent use by another instance as well as
 	// accidental use of the instance directory as a database.
+	//
+	// 锁定实例目录 以防止被另一个实例并发使用，以及意外地将该实例目录用作数据库     flock  为 文件锁
 	release, _, err := flock.New(filepath.Join(instdir, "LOCK"))
 	if err != nil {
 		return convertFileLockError(err)
@@ -324,13 +332,13 @@ func (n *Node) openDataDir() error {
 // startRPC is a helper method to start all the various RPC endpoint during node
 // startup. It's not meant to be called at any time afterwards as it makes certain
 // assumptions about the state of the node.
-func (n *Node) startRPC(services map[reflect.Type]Service) error {
+func (n *Node) startRPC(services map[reflect.Type]Service) error {  // 启动各种 jsonrpc 服务    (inproc<进程内部rpc>、 IPC、 HTTP、 WebSocket)
 	// Gather all the possible APIs to surface
 
 	// 获取 ether node 实例 内置的 api
 	apis := n.apis()
 
-	// 追加收集  各个 服务的api
+	// 追加收集  各个 服务的api     (ETH 服务、   dashboard 服务、  shh 服务 (whisper 相关)、  EthStats 服务 等等 )
 	for _, service := range services {
 		apis = append(apis, service.APIs()...)
 	}
@@ -338,21 +346,21 @@ func (n *Node) startRPC(services map[reflect.Type]Service) error {
 
 	// Start the various API endpoints, terminating all in case of errors
 	//
-	// 启动各种API端点，如果发生错误则终止所有端点
+	// 启动各种API端点，如果发生错误则终止所有端点    todo  逐个 启动各个 jsonrpc 服务
 
-	if err := n.startInProc(apis); err != nil {
+	if err := n.startInProc(apis); err != nil {  // 启动 inproc<进程内部rpc>
 		return err
 	}
-	if err := n.startIPC(apis); err != nil {
+	if err := n.startIPC(apis); err != nil {	// 启动 IPC
 		n.stopInProc()
 		return err
 	}
-	if err := n.startHTTP(n.httpEndpoint, apis, n.config.HTTPModules, n.config.HTTPCors, n.config.HTTPVirtualHosts, n.config.HTTPTimeouts); err != nil {
+	if err := n.startHTTP(n.httpEndpoint, apis, n.config.HTTPModules, n.config.HTTPCors, n.config.HTTPVirtualHosts, n.config.HTTPTimeouts); err != nil {	// 启动 HTTP
 		n.stopIPC()
 		n.stopInProc()
 		return err
 	}
-	if err := n.startWS(n.wsEndpoint, apis, n.config.WSModules, n.config.WSOrigins, n.config.WSExposeAll); err != nil {
+	if err := n.startWS(n.wsEndpoint, apis, n.config.WSModules, n.config.WSOrigins, n.config.WSExposeAll); err != nil {		// 启动 WebSocket
 		n.stopHTTP()
 		n.stopIPC()
 		n.stopInProc()

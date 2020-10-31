@@ -55,6 +55,8 @@ const (
 )
 
 // protoHandshake is the RLP structure of the protocol handshake.
+//
+// protoHandshake是协议握手的RLP结构
 type protoHandshake struct {
 	Version    uint64
 	Name       string
@@ -167,7 +169,7 @@ func (p *Peer) String() string {
 }
 
 // Inbound returns true if the peer is an inbound connection
-func (p *Peer) Inbound() bool {
+func (p *Peer) Inbound() bool {  // 当前 peer 是否为 接进来的 peer
 	return p.rw.is(inboundConn)
 }
 

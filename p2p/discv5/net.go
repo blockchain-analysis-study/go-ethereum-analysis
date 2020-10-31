@@ -203,6 +203,11 @@ func (net *Network) ReadRandomNodes(buf []*Node) (n int) {
 // SetFallbackNodes sets the initial points of contact. These nodes
 // are used to connect to the network if the table is empty and there
 // are no known nodes in the database.
+//
+//  todo 设置 种子节点
+//
+// `SetFallbackNodes()` 设置 初始 连接点 peer.
+// 						如果 table 为空并且 本地 db 中没有已知 peer，这些节点将用于连接到网络.
 func (net *Network) SetFallbackNodes(nodes []*Node) error {
 	nursery := make([]*Node, 0, len(nodes))
 	for _, n := range nodes {

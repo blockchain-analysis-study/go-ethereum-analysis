@@ -146,7 +146,7 @@ func NewProtocolManager(config *params.ChainConfig, mode downloader.SyncMode, ne
 			Version: version,
 			Length:  ProtocolLengths[i],
 
-			// 我是 回调函数 (生成一个 node 实例)
+			// todo 回调函数 (生成一个 p2p node 实例)
 			Run: func(p *p2p.Peer, rw p2p.MsgReadWriter) error {
 				peer := manager.newPeer(int(version), p, rw)
 				select {
@@ -177,9 +177,8 @@ func NewProtocolManager(config *params.ChainConfig, mode downloader.SyncMode, ne
 		return nil, errIncompatibleConfig
 	}
 
-	/**
-	初始化一个 downloader 实例
-	 */
+	// 初始化一个 downloader 实例
+	//
 	// Construct the different synchronisation mechanisms
 	manager.downloader = downloader.New(mode, chaindb, manager.eventMux, blockchain, nil, manager.removePeer)
 
@@ -241,13 +240,13 @@ func (pm *ProtocolManager) Start(maxPeers int) {
 	// broadcast transactions
 	pm.txsCh = make(chan core.NewTxsEvent, txChanSize)
 	pm.txsSub = pm.txpool.SubscribeNewTxsEvent(pm.txsCh)
-	go pm.txBroadcastLoop()
+	go pm.txBroadcastLoop()  		// 处理 tx 广播
 
 	// broadcast mined blocks
 	pm.minedBlockSub = pm.eventMux.Subscribe(core.NewMinedBlockEvent{})
-	go pm.minedBroadcastLoop()
+	go pm.minedBroadcastLoop()		// 处理 block 广播
 
-	// start sync handlers
+	// start sync handlers			处理同步 相关
 	go pm.syncer()
 	go pm.txsyncLoop()
 }

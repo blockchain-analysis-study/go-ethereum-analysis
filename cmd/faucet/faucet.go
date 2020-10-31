@@ -216,7 +216,7 @@ func newFaucet(genesis *core.Genesis, port int, enodes []*discv5.Node, network u
 		Version: params.VersionWithMeta,
 		DataDir: filepath.Join(os.Getenv("HOME"), ".faucet"),
 		P2P: p2p.Config{
-			NAT:              nat.Any(),
+			NAT:              nat.Any(),   // 使用的 nat 机制为: any (兼容了 UPnP 和 NAT-PMP 两种实现)
 			NoDiscovery:      true,
 			DiscoveryV5:      true,
 			ListenAddr:       fmt.Sprintf(":%d", port),

@@ -66,7 +66,7 @@ func init() {
 }
 
 // Netlist is a list of IP networks.
-type Netlist []net.IPNet
+type Netlist []net.IPNet   // IP连接 的集合
 
 // ParseNetlist parses a comma-separated list of CIDR masks.
 // Whitespace and extra commas are ignored.

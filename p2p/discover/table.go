@@ -247,9 +247,9 @@ func (tab *Table) Resolve(targetID NodeID) *Node {
 		return cl.entries[0]
 	}
 	// Otherwise, do a network lookup.
-	result := tab.Lookup(targetID)
+	result := tab.Lookup(targetID)  // 做 k-bucket 的刷桶
 	for _, n := range result {
-		if n.ID == targetID {
+		if n.ID == targetID {   // 返回 目标节点
 			return n
 		}
 	}

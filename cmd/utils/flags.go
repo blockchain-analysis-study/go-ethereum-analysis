@@ -510,8 +510,8 @@ var (
 	}
 	NATFlag = cli.StringFlag{
 		Name:  "nat",
-		Usage: "NAT port mapping mechanism (any|none|upnp|pmp|extip:<IP>)",
-		Value: "any",
+		Usage: "NAT port mapping mechanism (any|none|upnp|pmp|extip:<IP>)",   // NAT端口映射机制 (any|none|upnp|pmp|extip:<IP>)
+		Value: "any",	// 默认是 any
 	}
 	NoDiscoverFlag = cli.BoolFlag{
 		Name:  "nodiscover",
@@ -747,13 +747,14 @@ func setListenAddress(ctx *cli.Context, cfg *p2p.Config) {
 func setNAT(ctx *cli.Context, cfg *p2p.Config) {
 
 	// Name: "nat"
+	// NAT端口映射机制 (any|none|upnp|pmp|extip:<IP>)
+	// 根据 配置文件 决定使用 哪种  nat 机制   (默认是 any; any 是同时兼容了 UPnP 和 NAT-PMP 两种实现)
 	if ctx.GlobalIsSet(NATFlag.Name) {
 		natif, err := nat.Parse(ctx.GlobalString(NATFlag.Name))
 		if err != nil {
 			Fatalf("Option %s: %v", NATFlag.Name, err)
 		}
-		// 设置 NAT
-		cfg.NAT = natif
+		cfg.NAT = natif // 根据配置文件的 natif, 设置 NAT
 	}
 }
 
