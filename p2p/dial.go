@@ -182,7 +182,7 @@ func (s *dialstate) newTasks(nRunning int, peers map[discover.NodeID]*Peer, now 
 
 	// todo 根据 peer 信息 添加新的拨号 任务
 	addDial := func(flag connFlag, n *discover.Node) bool {
-		if err := s.checkDial(n, peers); err != nil {  // 检查拨号状态
+		if err := s.checkDial(n, peers); err != nil {  // todo 检查拨号状态  (跳过已经拨号的 和 已经连接的 和 err 的)
 			log.Trace("Skipping dial candidate", "id", n.ID, "addr", &net.TCPAddr{IP: n.IP, Port: int(n.TCP)}, "err", err)
 			return false
 		}
@@ -316,14 +316,13 @@ func (t *dialTask) Do(srv *Server) {
 		}
 	}
 
-	// todo 这里会以 当前 peer 作为 客户端, 向 对端 peer 发起 拨号连接
-	err := t.dial(srv, t.dest)
+	err := t.dial(srv, t.dest) // todo 这里会以 当前 peer 作为 客户端, 向 对端 peer 发起 拨号连接   (里面会处理:  往 `srv.posthandshake` 通道 和 往 `srv.addpeer` 添加 conn 信号)
 	if err != nil {
 		log.Trace("Dial error", "task", t, "err", err)
 		// Try resolving the ID of static nodes if dialing failed.
 		if _, ok := err.(*dialError); ok && t.flags&staticDialedConn != 0 {
 			if t.resolve(srv) {  // 这里也会做 k-bucket 的刷桶
-				t.dial(srv, t.dest)
+				t.dial(srv, t.dest)  // todo 当前 peer 向 t.dest远端 peer 发起拨号连接. (里面会处理:  往 `srv.posthandshake` 通道 和 往 `srv.addpeer` 添加 conn 信号)
 			}
 		}
 	}
@@ -369,12 +368,12 @@ type dialError struct {
 
 // dial performs the actual connection attempt.
 func (t *dialTask) dial(srv *Server, dest *discover.Node) error {
-	fd, err := srv.Dialer.Dial(dest)
+	fd, err := srv.Dialer.Dial(dest)  // 通过 当前 peer 往 远端peer (dest) 发起 TCP 拨号, 得到 conn
 	if err != nil {
 		return &dialError{err}
 	}
 	mfd := newMeteredConn(fd, false)
-	return srv.SetupConn(mfd, t.flags, dest)
+	return srv.SetupConn(mfd, t.flags, dest)  // 启用 一个连接 conn   (里面会处理:  往 `srv.posthandshake` 通道 和 往 `srv.addpeer` 添加 conn 信号)
 }
 
 func (t *dialTask) String() string {

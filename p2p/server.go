@@ -695,7 +695,7 @@ func (srv *Server) run(dialstate dialer) {
 
 			// 这里 添加的基本是  dialTask (基本是 向 【staticNode】  和 【bootstrapNode】 和 【当前节点发现查找到的node】 和 【配置文件中指定需要去连接的node】  发起  拨号连接的任务)
 			// 					和 waitExpireTask
-			nt := dialstate.newTasks(len(runningTasks)+len(queuedTasks), peers, time.Now())
+			nt := dialstate.newTasks(len(runningTasks)+len(queuedTasks), peers, time.Now())   // 在  (srv *Server) run() 的主流程的  临时函数 `scheduleTasks()` 将 全局 peers 集合中的 peer 封装成 dialTask
 			queuedTasks = append(queuedTasks, startTasks(nt)...)
 		}
 	}
@@ -703,8 +703,7 @@ func (srv *Server) run(dialstate dialer) {
 running:
 	for {
 
-		// 每次 for 都先发起一波 任务执行的 调度
-		scheduleTasks()
+		scheduleTasks()  // 每次 for 都先发起一波 任务执行的 调度    todo (主要是 当前 peer 向 对端peer 发起拨号的任务调度)
 
 		select {
 
@@ -788,6 +787,12 @@ running:
 
 		// 如果有 新的对端 peer 连接进来
 		case c := <-srv.addpeer:
+
+			// todo 注意:
+			// 		srv.addpeer 中的 conn 主要有 `(srv *Server) SetupConn()` 中将 conn 发送过来的.
+			// 		而 `SetupConn()` 只有 【dialTask.Do()处理当前 peer向 对端peer拨号】 和  【`(srv *Server) listenLoop()`当前peer接收 对端peer的连入】  两个地方 使用.
+			// 		其中 在 `dialstate.newTasks()`创建 dialTask时 会调用 `checkDial(n, peers)` 检查拨号状态  (跳过已经拨号的 和 已经连接的 和 err 的 conn)
+
 			// At this point the connection is past the protocol handshake.
 			// Its capabilities are known and the remote identity is verified.
 			err := srv.protoHandshakeChecks(peers, inboundCount, c)
@@ -804,7 +809,7 @@ running:
 
 				// todo 里面有 调到 ProtocalManager 中实现的 protocol.Run() 回调
 				go srv.runPeer(p)  // todo 处理 当前 peer 和 某个对端 peer 的消息来往
-				peers[c.id] = p    // 往全局容器记录 peer 信息
+				peers[c.id] = p    // todo 往全局容器记录 peer 信息
 				if p.Inbound() {
 					inboundCount++  // 记录 被连接进来的 peer 的数量
 				}
@@ -950,7 +955,7 @@ func (srv *Server) listenLoop() {   // todo 启动当前 peer 的 TCP 服务监�
 		fd = newMeteredConn(fd, true)
 		srv.log.Trace("Accepted connection", "addr", fd.RemoteAddr())
 		go func() {
-			srv.SetupConn(fd, inboundConn, nil)  // 启用 一个连接 conn
+			srv.SetupConn(fd, inboundConn, nil)  // 启用 一个连接 conn   (里面会处理:  往 `srv.posthandshake` 通道 和 往 `srv.addpeer` 添加 conn 信号)
 			slots <- struct{}{}   // todo 处理完 这个对端peer 和当前peer的连接后,  将 连接槽 放行, 让外面的 for 处理 下一个 对端peer和当前peer的连接
 		}()
 	}
@@ -965,14 +970,14 @@ func (srv *Server) SetupConn(fd net.Conn, flags connFlag, dialDest *discover.Nod
 		return errors.New("shutdown")
 	}
 	c := &conn{fd: fd, transport: srv.newTransport(fd), flags: flags, cont: make(chan error)}
-	err := srv.setupConn(c, flags, dialDest)  // 启用 一个连接 conn
+	err := srv.setupConn(c, flags, dialDest)  // 启用 一个连接 conn   (里面会处理:  往 `srv.posthandshake` 通道 和 往 `srv.addpeer` 添加 conn 信号)
 	if err != nil {
 		c.close(err)
 		srv.log.Trace("Setting up connection failed", "id", c.id, "err", err)
 	}
 	return err
 }
-// 启用 一个连接 conn
+// todo 启用 一个连接 conn   (里面会处理:  往 `srv.posthandshake` 通道 和 往 `srv.addpeer` 添加 conn 信号)
 func (srv *Server) setupConn(c *conn, flags connFlag, dialDest *discover.Node) error {
 	// Prevent leftover pending conns from entering the handshake.
 	srv.lock.Lock()
@@ -993,13 +998,13 @@ func (srv *Server) setupConn(c *conn, flags connFlag, dialDest *discover.Node) e
 		clog.Trace("Dialed identity mismatch", "want", c, dialDest.ID)
 		return DiscUnexpectedIdentity
 	}
-	err = srv.checkpoint(c, srv.posthandshake)  // 处理 握手
+	err = srv.checkpoint(c, srv.posthandshake)  // todo 处理 握手
 	if err != nil {
 		clog.Trace("Rejected peer before protocol handshake", "err", err)
 		return err
 	}
 	// Run the protocol handshake
-	phs, err := c.doProtoHandshake(srv.ourHandshake)
+	phs, err := c.doProtoHandshake(srv.ourHandshake)   // 基于 rlpx 的传输
 	if err != nil {
 		clog.Trace("Failed proto handshake", "err", err)
 		return err
@@ -1009,7 +1014,7 @@ func (srv *Server) setupConn(c *conn, flags connFlag, dialDest *discover.Node) e
 		return DiscUnexpectedIdentity
 	}
 	c.caps, c.name = phs.Caps, phs.Name
-	err = srv.checkpoint(c, srv.addpeer)  // 将 连接实例  conn 发送到 chan 中
+	err = srv.checkpoint(c, srv.addpeer)  // todo 将 连接实例  conn 发送到 chan 中
 	if err != nil {
 		clog.Trace("Rejected peer", "err", err)
 		return err

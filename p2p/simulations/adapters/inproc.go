@@ -132,7 +132,7 @@ func (s *SimAdapter) Dial(dest *discover.Node) (conn net.Conn, err error) {
 	// this is simulated 'listening'
 	// asynchronously call the dialed destintion node's p2p server
 	// to set up connection on the 'listening' side
-	go srv.SetupConn(pipe1, 0, nil)
+	go srv.SetupConn(pipe1, 0, nil)  // 启用 一个连接 conn   (里面会处理:  往 `srv.posthandshake` 通道 和 往 `srv.addpeer` 添加 conn 信号)
 	return pipe2, nil
 }
 
