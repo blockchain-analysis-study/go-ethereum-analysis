@@ -772,6 +772,9 @@ running:
 
 		// 	接收到 有 rlpx 握手信号    todo  rlpx 协议传输 是 可信任 peer 间用的 ??
 		case c := <-srv.posthandshake:
+
+			// srv.posthandshake 中的 conn 主要有 `(srv *Server) SetupConn()` 中将 conn 发送过来的.   (和 srv.addpeer 的处理在同一个 `SetupConn()` 方法中)
+
 			// A connection has passed the encryption handshake so
 			// the remote identity is known (but hasn't been verified yet).
 			if trusted[c.id] {
@@ -798,7 +801,7 @@ running:
 			err := srv.protoHandshakeChecks(peers, inboundCount, c)
 			if err == nil {
 				// The handshakes are done and it passed all checks.
-				p := newPeer(c, srv.Protocols)
+				p := newPeer(c, srv.Protocols)  // 根据 conn 封装成  p2p.peer
 				// If message events are enabled, pass the peerFeed
 				// to the peer
 				if srv.EnableMsgEvents {
@@ -808,7 +811,7 @@ running:
 				srv.log.Debug("Adding p2p peer", "name", name, "addr", c.fd.RemoteAddr(), "peers", len(peers)+1)
 
 				// todo 里面有 调到 ProtocalManager 中实现的 protocol.Run() 回调
-				go srv.runPeer(p)  // todo 处理 当前 peer 和 某个对端 peer 的消息来往
+				go srv.runPeer(p)  // todo 处理 当前 peer 和 某个对端 peer 的消息来往    (到了 ProtocalManager 那边, p2p2.peer 还会被封装成 eth.peer 交由 Protocolmanager 管理)
 				peers[c.id] = p    // todo 往全局容器记录 peer 信息
 				if p.Inbound() {
 					inboundCount++  // 记录 被连接进来的 peer 的数量
