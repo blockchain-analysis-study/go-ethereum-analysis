@@ -46,6 +46,8 @@ var ProtocolLengths = []uint64{17, 8}
 const ProtocolMaxMsgSize = 10 * 1024 * 1024 // Maximum cap on the size of a protocol message
 
 // eth protocol message codes
+//
+// 下面这些 基本是 p2p Msg 的 code   todo RLPx 传输中使用的  code 做为 MsgId 功能复用的话, 应当大于0x11  (0x00 - 0x10 保留用于 "p2p" 功能)
 const (
 	// Protocol messages belonging to eth/62
 	StatusMsg          = 0x00

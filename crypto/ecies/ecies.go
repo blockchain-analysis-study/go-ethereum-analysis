@@ -50,6 +50,8 @@ var (
 	ErrSharedKeyTooBig            = fmt.Errorf("ecies: shared key params are too big")
 )
 
+// todo ECIES (Elliptic Curve Integrated Encryption Scheme) 是在RLPx握手中使用的 非对称加密方法
+
 // PublicKey is a representation of an elliptic curve public key.
 type PublicKey struct {
 	X *big.Int
@@ -76,7 +78,7 @@ func ImportECDSAPublic(pub *ecdsa.PublicKey) *PublicKey {
 // PrivateKey is a representation of an elliptic curve private key.
 type PrivateKey struct {
 	PublicKey
-	D *big.Int
+	D *big.Int  // D*Pk = Sk
 }
 
 // Export an ECIES private key as an ECDSA private key.
@@ -118,6 +120,10 @@ func MaxSharedKeyLength(pub *PublicKey) int {
 }
 
 // ECDH key agreement method used to establish secret keys for encryption.
+//
+// ECDH 密钥 协商方法，用于建立用于 加密的 秘密密钥
+//
+// S = P_x, 其中 (P_x, P_y) = r * PK_b
 func (prv *PrivateKey) GenerateShared(pub *PublicKey, skLen, macLen int) (sk []byte, err error) {
 	if prv.PublicKey.Curve != pub.Curve {
 		return nil, ErrInvalidCurve

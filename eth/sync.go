@@ -45,6 +45,12 @@ type txsync struct {
 // syncTransactions starts sending all currently pending transactions to the given peer.
 func (pm *ProtocolManager) syncTransactions(p *peer) {
 	var txs types.Transactions
+
+	// 抓拍 tx_pool 的 pending 中的 tx 快照
+	//
+	// todo 为什么只用 pengding 不用 queue中的 txs？
+	//
+	// 	因为 pending是准备好执行的tx, 但是 queue中的tx 很可能会被 替换或者失效掉. 所以 值广播 准备好的
 	pending, _ := pm.txpool.Pending()
 	for _, batch := range pending {
 		txs = append(txs, batch...)
@@ -53,7 +59,7 @@ func (pm *ProtocolManager) syncTransactions(p *peer) {
 		return
 	}
 	select {
-	case pm.txsyncCh <- &txsync{p, txs}:
+	case pm.txsyncCh <- &txsync{p, txs}:  // 用来做 广播用
 	case <-pm.quitSync:
 	}
 }
@@ -62,14 +68,16 @@ func (pm *ProtocolManager) syncTransactions(p *peer) {
 // connection. When a new peer appears, we relay all currently pending
 // transactions. In order to minimise egress bandwidth usage, we send
 // the transactions in small packs to one peer at a time.
-func (pm *ProtocolManager) txsyncLoop() {
+func (pm *ProtocolManager) txsyncLoop() {   // tx 广播
 	var (
+		// [对端 peer => txs]对
 		pending = make(map[discover.NodeID]*txsync)
 		sending = false               // whether a send is active
 		pack    = new(txsync)         // the pack that is being sent
-		done    = make(chan error, 1) // result of the send
+		done    = make(chan error, 1) // result of the send   全局的 tx 发送槽 (是的 [对端 peer => txs]对 是逐个发送)
 	)
 
+	// 发送tx
 	// send starts a sending a pack of transactions from the sync.
 	send := func(s *txsync) {
 		// Fill pack with transactions up to the target size.
@@ -88,9 +96,10 @@ func (pm *ProtocolManager) txsyncLoop() {
 		// Send the pack in the background.
 		s.p.Log().Trace("Sending batch of transactions", "count", len(pack.txs), "bytes", size)
 		sending = true
-		go func() { done <- pack.p.SendTransactions(pack.txs) }()
+		go func() { done <- pack.p.SendTransactions(pack.txs) }()  // done 是 全局的 tx 发送槽 (是的 [对端 peer => txs]对 是逐个发送)
 	}
 
+	// 随机选择 一个 [对端 peer => txs]对 用来做发送
 	// pick chooses the next pending sync.
 	pick := func() *txsync {
 		if len(pending) == 0 {
@@ -107,20 +116,24 @@ func (pm *ProtocolManager) txsyncLoop() {
 
 	for {
 		select {
+
+		// 收到新交易 直接发
 		case s := <-pm.txsyncCh:
 			pending[s.p.ID()] = s
 			if !sending {
 				send(s)
 			}
-		case err := <-done:
+
+		// 当前 [对端 peer => txs]对 发送失败
+		case err := <-done:  // done 是 全局的 tx 发送槽 (是的 [p => txs]对 是逐个发送)
 			sending = false
 			// Stop tracking peers that cause send failures.
 			if err != nil {
 				pack.p.Log().Debug("Transaction send failed", "err", err)
-				delete(pending, pack.p.ID())
+				delete(pending, pack.p.ID()) // 移除该 [对端 peer => txs]对
 			}
 			// Schedule the next send.
-			if s := pick(); s != nil {
+			if s := pick(); s != nil {  // 随机选择一个  [对端 peer => txs]对 发送
 				send(s)
 			}
 		case <-pm.quitSync:
@@ -138,21 +151,24 @@ func (pm *ProtocolManager) syncer() {
 	defer pm.downloader.Terminate()
 
 	// Wait for different events to fire synchronisation operations
-	forceSync := time.NewTicker(forceSyncCycle)
+	forceSync := time.NewTicker(forceSyncCycle)  // 10s 会去做一次 downloader 尝试同步
 	defer forceSync.Stop()
 
 	for {
 		select {
+
+		// 只要有 新对端 peer 加入, 我们都启动 downloader 尝试下 同步
 		case <-pm.newPeerCh:
 			// Make sure we have peers to select from, then sync
 			if pm.peers.Len() < minDesiredPeerCount {
 				break
 			}
-			go pm.synchronise(pm.peers.BestPeer())
+			go pm.synchronise(pm.peers.BestPeer())  // 向 td 越大的 对端 peer  发起同步
 
+		// 10s 会去做一次 downloader 尝试同步
 		case <-forceSync.C:
 			// Force a sync even if not enough peers are present
-			go pm.synchronise(pm.peers.BestPeer())
+			go pm.synchronise(pm.peers.BestPeer())  // 向 td 越大的 对端 peer  发起同步
 
 		case <-pm.noMorePeers:
 			return

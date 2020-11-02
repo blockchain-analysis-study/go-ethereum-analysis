@@ -38,8 +38,8 @@ import (
 // structure, encode the payload into a byte array and create a
 // separate Msg with a bytes.Reader as Payload for each send.
 type Msg struct {
-	Code       uint64
-	Size       uint32 // size of the paylod
+	Code       uint64	// code 被定义在 eth\protocol.go 中  todo RLPx 传输中使用的  code 做为 MsgId 功能复用的话, 应当大于0x11  (0x00 - 0x10 保留用于 "p2p" 功能)
+	Size       uint32 	// size of the paylod
 	Payload    io.Reader
 	ReceivedAt time.Time
 }

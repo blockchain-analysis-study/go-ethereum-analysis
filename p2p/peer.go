@@ -37,7 +37,7 @@ var (
 )
 
 const (
-	baseProtocolVersion    = 5
+	baseProtocolVersion    = 5  // 当前p2p功能版本为第5版
 	baseProtocolLength     = uint64(16)
 	baseProtocolMaxMsgSize = 2 * 1024
 
@@ -47,22 +47,30 @@ const (
 )
 
 const (
-	// devp2p message codes
-	handshakeMsg = 0x00
-	discMsg      = 0x01
-	pingMsg      = 0x02
-	pongMsg      = 0x03
+
+	// 初始握手后，连接的两端都必须发送 Hello 或 Disconnect 消息
+	//
+	//		握手完成后，双方发送的第一包数据。在收到Hello消息前，不能发送任何其他消息.
+	// 		接收到Hello消息后，会话就进入激活状态，并且可以开始发送其他消息
+	//
+	//		Disconnect 消息, 通知节点断开连接. 收到该消息后，节点应当立即断开连接. 如果是发送，正常的主机会给节点2秒钟读取时间，使其主动断开连接.
+
+	// devp2p message codes   一些 测试 p2p 连接的 状态码
+	handshakeMsg = 0x00		//  发起一个 是否已经握手 信号   【Hello 消息】   todo  P2P 通讯的起始 消息 (hello 消息)
+	discMsg      = 0x01		//  p2p 连接已经断开  【Disconnect 消息】
+	pingMsg      = 0x02		// 	ping
+	pongMsg      = 0x03		// 	pong
 )
 
 // protoHandshake is the RLP structure of the protocol handshake.
 //
 // protoHandshake是协议握手的RLP结构
 type protoHandshake struct {
-	Version    uint64
-	Name       string
-	Caps       []Cap
-	ListenPort uint64
-	ID         discover.NodeID
+	Version    uint64   // 当前p2p功能版本为第5版
+	Name       string   // 表示客户端软件身份，人类可读字符串, 比如: "Ethereum(++)/1.0.0"
+	Caps       []Cap    // 支持的子协议列表，Name 及其 Version    如: [[cap1, capVersion1], [cap2, capVersion2], ...]
+	ListenPort uint64	// 节点的收听端口 (位于当前连接路径的接口)，0表示没有收听
+	ID         discover.NodeID  // secp256k1的公钥，对应节点私钥
 
 	// Ignore additional fields (for forward compatibility).
 	Rest []rlp.RawValue `rlp:"tail"`
@@ -206,7 +214,7 @@ func (p *Peer) run() (remoteRequested bool, err error) {
 	writeStart <- struct{}{}
 
 	// 执行 p2p  peer 的 protocal 部分
-	p.startProtocols(writeStart, writeErr)  // todo 这里面最终会调到 ProtocalManager 中实现的 protocol.Run() 回调
+	p.startProtocols(writeStart, writeErr)  // todo 这里面最终会调到 ProtocalManager 中实现的 protocol.Run() 回调, 最终会调用 `manager.handle(peer)`
 
 	// Wait for an error or disconnect.
 loop:
@@ -284,7 +292,7 @@ func (p *Peer) handle(msg Msg) error {
 	case msg.Code == pingMsg:
 		msg.Discard()
 		go SendItems(p.rw, pongMsg)
-	case msg.Code == discMsg:
+	case msg.Code == discMsg:   // Disconnect 消息, 收到后, 需要断开连接
 		var reason [1]DiscReason
 		// This is the last message. We don't need to discard or
 		// check errors because, the connection will be closed after it.
@@ -361,7 +369,7 @@ func (p *Peer) startProtocols(writeStart <-chan struct{}, writeErr chan<- error)
 		}
 		p.log.Trace(fmt.Sprintf("Starting protocol %s/%d", proto.Name, proto.Version))
 		go func() {
-			err := proto.Run(p, rw)  // todo 这个就是 eth\handler.go 的 ProtocalManager的 NewProtocolManager() 中实现的 protocol.Run() 回调
+			err := proto.Run(p, rw)  // todo 这个就是 eth\handler.go 的 ProtocalManager的 NewProtocolManager() 中实现的 protocol.Run() 回调, 最终会调用 `manager.handle(peer)`
 			if err == nil {
 				p.log.Trace(fmt.Sprintf("Protocol %s/%d returned", proto.Name, proto.Version))
 				err = errProtocolReturned

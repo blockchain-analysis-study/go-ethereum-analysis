@@ -151,11 +151,11 @@ func NewProtocolManager(config *params.ChainConfig, mode downloader.SyncMode, ne
 			// todo 这个回调 最终会在 p2p\peer.go 的 startProtocols() 中被调用
 			Run: func(p *p2p.Peer, rw p2p.MsgReadWriter) error {
 
-				// 将 p2p的 peer 封装成一个 ProtocalManager 管理的 peer 实例
-				peer := manager.newPeer(int(version), p, rw)
+				peer := manager.newPeer(int(version), p, rw)   // todo 将 p2p.peer 封装成一个 ProtocalManager 管理的 eth.peer 实例
+
 				select {
 				// 每一个 peer.run 的时候
-				case manager.newPeerCh <- peer:
+				case manager.newPeerCh <- peer:  // 这里发信号, 主要影响到  触发 downloader 去尝试做 同步
 					manager.wg.Add(1)
 					defer manager.wg.Done()
 
@@ -248,15 +248,15 @@ func (pm *ProtocolManager) Start(maxPeers int) {
 	// broadcast transactions
 	pm.txsCh = make(chan core.NewTxsEvent, txChanSize)
 	pm.txsSub = pm.txpool.SubscribeNewTxsEvent(pm.txsCh)
-	go pm.txBroadcastLoop()  		// 处理 tx 广播
+	go pm.txBroadcastLoop()  		// 处理 新 tx 广播
 
 	// broadcast mined blocks
 	pm.minedBlockSub = pm.eventMux.Subscribe(core.NewMinedBlockEvent{})
-	go pm.minedBroadcastLoop()		// 处理 block 广播
+	go pm.minedBroadcastLoop()		 // 处理 block 广播和 hash、Number 等发布
 
-	// start sync handlers			处理同步 相关
-	go pm.syncer()
-	go pm.txsyncLoop()
+	// start sync handlers
+	go pm.syncer()					// downloader 和 fetcher 相关
+	go pm.txsyncLoop()				// 处理 tx_pool.pending 的 txs 发送  (选择 [对端peer => txs] 对来操作)
 }
 
 func (pm *ProtocolManager) Stop() {
@@ -313,8 +313,7 @@ func (pm *ProtocolManager) handle(p *peer) error {
 		td      = pm.blockchain.GetTd(hash, number) // 当前链上的最新难度值
 	)
 
-	// 处理当前本地节点和 该远点节点p的破p消息
-	if err := p.Handshake(pm.networkID, td, hash, genesis.Hash()); err != nil {
+	if err := p.Handshake(pm.networkID, td, hash, genesis.Hash()); err != nil {  // todo 处理当前 本地节点 和 该远点节点 p的 p2p消息
 		p.Log().Debug("Ethereum handshake failed", "err", err)
 		return err
 	}
@@ -322,7 +321,7 @@ func (pm *ProtocolManager) handle(p *peer) error {
 		rw.Init(p.version)
 	}
 	// Register the peer locally
-	if err := pm.peers.Register(p); err != nil {
+	if err := pm.peers.Register(p); err != nil {   // todo 将远端 peer 的信息, 加到本地 pm.peerSet 中  (用来广播 tx  和 block 用)
 		p.Log().Error("Ethereum peer registration failed", "err", err)
 		return err
 	}
@@ -334,7 +333,7 @@ func (pm *ProtocolManager) handle(p *peer) error {
 	}
 	// Propagate existing transactions. new transactions appearing
 	// after this will be sent via broadcasts.
-	pm.syncTransactions(p)
+	pm.syncTransactions(p)  // todo 往对端 peer 尝试做一次 tx 广播  (只用 pending 中的txs)
 
 	// If we're DAO hard-fork aware, validate any remote peer with regard to the hard-fork
 	if daoBlock := pm.chainconfig.DAOForkBlock; daoBlock != nil {
@@ -384,7 +383,7 @@ func (pm *ProtocolManager) handleMsg(p *peer) error {
 	// Handle the message depending on its contents
 	switch {
 	case msg.Code == StatusMsg:
-		// Status messages should never arrive after the handshake
+		// Status messages should never arrive after the handshake   握手后 StatusMsg 永远不会到达  (那在这之前的)
 		return errResp(ErrExtraStatusMsg, "uncontrolled status message")
 
 	// Block header query, collect the requested headers and reply
@@ -761,9 +760,9 @@ func (pm *ProtocolManager) handleMsg(p *peer) error {
 // will only announce it's availability (depending what's requested).
 func (pm *ProtocolManager) BroadcastBlock(block *types.Block, propagate bool) {
 	hash := block.Hash()
-	peers := pm.peers.PeersWithoutBlock(hash)
+	peers := pm.peers.PeersWithoutBlock(hash)  // 获取所有 对该 blockHash 还未知的 peers
 
-	// If propagation is requested, send to a subset of the peer
+	// If propagation is requested, send to a subset of the peer   如果请求“传播”，则发送给 一部分 对端 peer
 	if propagate {
 		// Calculate the TD of the block (it's not imported yet, so block.Td is not valid)
 		var td *big.Int
@@ -773,8 +772,10 @@ func (pm *ProtocolManager) BroadcastBlock(block *types.Block, propagate bool) {
 			log.Error("Propagating dangling block", "number", block.Number(), "hash", hash)
 			return
 		}
-		// Send the block to a subset of our peers
+		// Send the block to a subset of our peers    todo 这里取到 [0, 开平方 len)
 		transfer := peers[:int(math.Sqrt(float64(len(peers))))]
+
+		// 将当前 block 逐个往 还未知道该 blockHash 的 对端 peer 上发送   (这里还没发送 只往通道里面写 block 和 td) (到时候用来 发送整个  block 和 td 的)
 		for _, peer := range transfer {
 			peer.AsyncSendNewBlock(block, td)
 		}
@@ -782,6 +783,8 @@ func (pm *ProtocolManager) BroadcastBlock(block *types.Block, propagate bool) {
 		return
 	}
 	// Otherwise if the block is indeed in out own chain, announce it
+	//
+	// 否则，如果该区块确实在自己的链中，则宣布它的存在   (这里还没发送 只往通道里面写 block )  (到时候用来 发布 block的 Hash 和 number 的)
 	if pm.blockchain.HasBlock(hash, block.NumberU64()) {
 		for _, peer := range peers {
 			peer.AsyncSendNewBlockHash(block)
@@ -797,7 +800,7 @@ func (pm *ProtocolManager) BroadcastTxs(txs types.Transactions) {
 
 	// Broadcast transactions to a batch of peers not knowing about it
 	for _, tx := range txs {
-		peers := pm.peers.PeersWithoutTx(tx.Hash())
+		peers := pm.peers.PeersWithoutTx(tx.Hash())  // 准备逐个往 未知当前 txHash 的 peer 上发送 该 tx
 		for _, peer := range peers {
 			txset[peer] = append(txset[peer], tx)
 		}
@@ -805,26 +808,28 @@ func (pm *ProtocolManager) BroadcastTxs(txs types.Transactions) {
 	}
 	// FIXME include this again: peers = peers[:int(math.Sqrt(float64(len(peers))))]
 	for peer, txs := range txset {
-		peer.AsyncSendTransactions(txs)
+		peer.AsyncSendTransactions(txs)  // 逐个往 未知 txHash 的 peer 上发送 txs  (这里还未真的 发送,  只往通道里发消息)
 	}
 }
 
 // Mined broadcast loop
-func (pm *ProtocolManager) minedBroadcastLoop() {
+func (pm *ProtocolManager) minedBroadcastLoop() {  // 处理 block 广播和 hash、Number 等发布
 	// automatically stops if unsubscribe
 	for obj := range pm.minedBlockSub.Chan() {
 		if ev, ok := obj.Data.(core.NewMinedBlockEvent); ok {
+			// 首先将块传播到同级  (最终造成影响:  将block 和 td发给 一部分对端 peer 且 blockHash 和 blockNumber 发布给 全部对端 peer)  todo 这里的对端peer 都是对 该block 未知的
 			pm.BroadcastBlock(ev.Block, true)  // First propagate block to peers
+			// 然后向其他人宣布   (最终造成影响: 只将 blockHash 和 blockNumber 发布给对端 peer) todo 这里的对端peer 都是对 该block 未知的
 			pm.BroadcastBlock(ev.Block, false) // Only then announce to the rest
 		}
 	}
 }
 
-func (pm *ProtocolManager) txBroadcastLoop() {
+func (pm *ProtocolManager) txBroadcastLoop() {  // 处理 tx 广播
 	for {
 		select {
 		case event := <-pm.txsCh:
-			pm.BroadcastTxs(event.Txs)
+			pm.BroadcastTxs(event.Txs)  // 里面最终做到： 逐个往 未知 txHash 的 peer 上发送 txs  (这里还未真的 发送,  只往通道里发消息)
 
 		// Err() channel will be closed when unsubscribing.
 		case <-pm.txsSub.Err():

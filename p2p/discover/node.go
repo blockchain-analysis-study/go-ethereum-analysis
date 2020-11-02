@@ -224,8 +224,8 @@ func (n *Node) UnmarshalText(text []byte) error {
 }
 
 // NodeID is a unique identifier for each node.
-// The node identifier is a marshaled elliptic curve public key.
-type NodeID [NodeIDBits / 8]byte
+// The node identifier is a marshaled elliptic curve public key.   节点标识符 是 封送的椭圆曲线公钥
+type NodeID [NodeIDBits / 8]byte   // 64 byte 长度的 nodeId 实际上是 publicKey 的 X 和 Y 的合并  todo publicKey.X|publicKeyY == nodeId
 
 // Bytes returns a byte slice representation of the NodeID
 func (n NodeID) Bytes() []byte {
@@ -322,9 +322,9 @@ func PubkeyID(pub *ecdsa.PublicKey) NodeID {
 func (id NodeID) Pubkey() (*ecdsa.PublicKey, error) {
 	p := &ecdsa.PublicKey{Curve: crypto.S256(), X: new(big.Int), Y: new(big.Int)}
 	half := len(id) / 2
-	p.X.SetBytes(id[:half])
-	p.Y.SetBytes(id[half:])
-	if !p.Curve.IsOnCurve(p.X, p.Y) {
+	p.X.SetBytes(id[:half])   	// 前 32 byte 是 publicKey.X
+	p.Y.SetBytes(id[half:])		// 后 32 byte 是 publicKey.Y
+	if !p.Curve.IsOnCurve(p.X, p.Y) {  // 判断一波 从 nodeId 中解出来的 X 和 Y 是否在 曲线上
 		return nil, errors.New("id is invalid secp256k1 curve point")
 	}
 	return p, nil

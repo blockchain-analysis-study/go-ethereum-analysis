@@ -189,7 +189,7 @@ type Server struct {
 
 	ntab         discoverTable
 	listener     net.Listener
-	ourHandshake *protoHandshake   // protoHandshake是协议握手的RLP结构
+	ourHandshake *protoHandshake   // protoHandshake是 协议握手的RLP结构
 	lastLookup   time.Time
 	DiscV5       *discv5.Network   // 对 V5发现协议的一些封装
 
@@ -231,7 +231,7 @@ const (
 // during the two handshakes.
 type conn struct {
 	fd net.Conn
-	transport
+	transport  // todo 继承 transport 接口 (只有  rlpx 实现了这个接口,  所以 conn 是继承了 rlpx)
 	flags connFlag
 	cont  chan error      // The run loop uses cont to signal errors to SetupConn.
 	id    discover.NodeID // valid after the encryption handshake
@@ -973,7 +973,7 @@ func (srv *Server) SetupConn(fd net.Conn, flags connFlag, dialDest *discover.Nod
 		return errors.New("shutdown")
 	}
 	c := &conn{fd: fd, transport: srv.newTransport(fd), flags: flags, cont: make(chan error)}
-	err := srv.setupConn(c, flags, dialDest)  // 启用 一个连接 conn   (里面会处理:  往 `srv.posthandshake` 通道 和 往 `srv.addpeer` 添加 conn 信号)
+	err := srv.setupConn(c, flags, dialDest)  // 启用 一个连接 conn   (里面会处理:  往 `srv.posthandshake` 通道 和 往 `srv.addpeer` 添加 conn 信号)   todo 使用 rlpx 传输协议
 	if err != nil {
 		c.close(err)
 		srv.log.Trace("Setting up connection failed", "id", c.id, "err", err)
@@ -981,6 +981,8 @@ func (srv *Server) SetupConn(fd net.Conn, flags connFlag, dialDest *discover.Nod
 	return err
 }
 // todo 启用 一个连接 conn   (里面会处理:  往 `srv.posthandshake` 通道 和 往 `srv.addpeer` 添加 conn 信号)
+//
+// todo 在TCP的连接 conn 上, 建立  RLPx 协议传输. 通信双方进行【加密握手】，生成 <共享秘钥> 创建 <加密信道>，再进行【协议握手】. 后续业务数据 <tx、block 等消息传输> 在这个加密信道中传输
 func (srv *Server) setupConn(c *conn, flags connFlag, dialDest *discover.Node) error {
 	// Prevent leftover pending conns from entering the handshake.
 	srv.lock.Lock()
@@ -989,9 +991,11 @@ func (srv *Server) setupConn(c *conn, flags connFlag, dialDest *discover.Node) e
 	if !running {
 		return errServerStopped
 	}
+
+
 	// Run the encryption handshake.
 	var err error
-	if c.id, err = c.doEncHandshake(srv.PrivateKey, dialDest); err != nil {  // todo  处理加密传输  (rlpx 协议)
+	if c.id, err = c.doEncHandshake(srv.PrivateKey, dialDest); err != nil {  // todo  处理 rlpx 的加密握手
 		srv.log.Trace("Failed RLPx handshake", "addr", c.fd.RemoteAddr(), "conn", c.flags, "err", err)
 		return err
 	}
@@ -1001,13 +1005,13 @@ func (srv *Server) setupConn(c *conn, flags connFlag, dialDest *discover.Node) e
 		clog.Trace("Dialed identity mismatch", "want", c, dialDest.ID)
 		return DiscUnexpectedIdentity
 	}
-	err = srv.checkpoint(c, srv.posthandshake)  // todo 处理 握手
+	err = srv.checkpoint(c, srv.posthandshake)
 	if err != nil {
 		clog.Trace("Rejected peer before protocol handshake", "err", err)
 		return err
 	}
 	// Run the protocol handshake
-	phs, err := c.doProtoHandshake(srv.ourHandshake)   // 基于 rlpx 的传输
+	phs, err := c.doProtoHandshake(srv.ourHandshake)   // todo 处理 rlpx 的协议握手
 	if err != nil {
 		clog.Trace("Failed proto handshake", "err", err)
 		return err

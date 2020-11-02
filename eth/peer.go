@@ -67,8 +67,10 @@ type PeerInfo struct {
 }
 
 // propEvent is a block propagation, waiting for its turn in the broadcast queue.
+//
+// propEvent是一个块传播，等待其在广播队列中轮到
 type propEvent struct {
-	block *types.Block
+	block *types.Block   //
 	td    *big.Int
 }
 
@@ -87,11 +89,19 @@ type peer struct {
 	td   *big.Int
 	lock sync.RWMutex
 
-	knownTxs    mapset.Set                // Set of transaction hashes known to be known by this peer  该节点的某些已知的TxHash
-	knownBlocks mapset.Set                // Set of block hashes known to be known by this peer  该节点的某些已知的blockHash
+	// 该节点的某些已知的TxHash
+	knownTxs    mapset.Set                // Set of transaction hashes known to be known by this peer
+	// 该节点的某些已知的blockHash
+	knownBlocks mapset.Set                // Set of block hashes known to be known by this peer
+
+	// tx队列 广播给 对端peer
 	queuedTxs   chan []*types.Transaction // Queue of transactions to broadcast to the peer
+	// 新 block 广播给 对端peer		(用来 直接将 block 和 当前 td 发送个 对端peer)
 	queuedProps chan *propEvent           // Queue of blocks to broadcast to the peer
+	// 向 对端peer宣布 当前peer链上存在的 block  (用来 向 对端 peer 宣布 当前 peer 链上存在的block的 Hash 和 number)
 	queuedAnns  chan *types.Block         // Queue of blocks to announce to the peer
+
+	// 停止 广播 信号
 	term        chan struct{}             // Termination channel to stop the broadcaster
 }
 
@@ -113,27 +123,31 @@ func newPeer(version int, p *p2p.Peer, rw p2p.MsgReadWriter) *peer {
 // broadcast is a write loop that multiplexes block propagations, announcements
 // and transaction broadcasts into the remote peer. The goal is to have an async
 // writer that does not lock up node internals.
-func (p *peer) broadcast() {
+func (p *peer) broadcast() {  // 处理 tx  和 block 信息的广播
 	for {
 		select {
+		// 将 tx_pool 中某个时刻 queue 中的 txs 直接发给 对端节点peer
 		case txs := <-p.queuedTxs:
 			if err := p.SendTransactions(txs); err != nil {
 				return
 			}
 			p.Log().Trace("Broadcast transactions", "count", len(txs))
 
+		// 直接将 block 和 当前 td 发送个 对端peer
 		case prop := <-p.queuedProps:
 			if err := p.SendNewBlock(prop.block, prop.td); err != nil {
 				return
 			}
 			p.Log().Trace("Propagated block", "number", prop.block.Number(), "hash", prop.block.Hash(), "td", prop.td)
 
+		// 向 对端 peer 宣布 当前 peer 链上存在的block的 Hash 和 number
 		case block := <-p.queuedAnns:
 			if err := p.SendNewBlockHashes([]common.Hash{block.Hash()}, []uint64{block.NumberU64()}); err != nil {
 				return
 			}
 			p.Log().Trace("Announced block", "number", block.Number(), "hash", block.Hash())
 
+		// 停止 广播动作 信号
 		case <-p.term:
 			return
 		}
@@ -257,7 +271,11 @@ func (p *peer) SendNewBlock(block *types.Block, td *big.Int) error {
 
 // AsyncSendNewBlock queues an entire block for propagation to a remote peer. If
 // the peer's broadcast queue is full, the event is silently dropped.
-func (p *peer) AsyncSendNewBlock(block *types.Block, td *big.Int) {
+//
+//
+// AsyncSendNewBlock() 将整个块排队，以传播到 对端peer.
+// 						如果 对端peer 的广播队列已满，则事件将被静默删除
+func (p *peer) AsyncSendNewBlock(block *types.Block, td *big.Int) {  //  将当前 block 往 还未知道该 blockHash 的 对端 peer 上发送
 	select {
 	case p.queuedProps <- &propEvent{block: block, td: td}:
 		p.knownBlocks.Add(block.Hash())
@@ -345,7 +363,7 @@ func (p *peer) Handshake(network uint64, td *big.Int, head common.Hash, genesis 
 	var status statusData // safe to read after two values have been received from errc   从errc接收到两个值后可以安全读取
 
 	go func() {
-		// 这里发送一个 ok 消息给远端peer
+		// 这里发送一个 ok 消息给远端 peer
 		errc <- p2p.Send(p.rw, StatusMsg, &statusData{
 			// 填入对端peer的version
 			ProtocolVersion: uint32(p.version),
@@ -358,7 +376,7 @@ func (p *peer) Handshake(network uint64, td *big.Int, head common.Hash, genesis 
 	go func() {
 		errc <- p.readStatus(network, &status, genesis)
 	}()
-	timeout := time.NewTimer(handshakeTimeout)
+	timeout := time.NewTimer(handshakeTimeout)  // 5s 握手时间
 	defer timeout.Stop()
 	for i := 0; i < 2; i++ {
 		select {
@@ -478,10 +496,13 @@ func (ps *peerSet) Len() int {
 
 // PeersWithoutBlock retrieves a list of peers that do not have a given block in
 // their set of known hashes.
+//
+// PeersWithoutBlock()  检索在其已知 blockHash集 中没有给 定块 的 peer的列表
 func (ps *peerSet) PeersWithoutBlock(hash common.Hash) []*peer {
 	ps.lock.RLock()
 	defer ps.lock.RUnlock()
 
+	// 收集所有 对该 blockHash 还未知的 peer
 	list := make([]*peer, 0, len(ps.peers))
 	for _, p := range ps.peers {
 		if !p.knownBlocks.Contains(hash) {
@@ -507,6 +528,11 @@ func (ps *peerSet) PeersWithoutTx(hash common.Hash) []*peer {
 }
 
 // BestPeer retrieves the known peer with the currently highest total difficulty.
+//
+// todo 返回 td 越大的 对端 peer
+//
+// BestPeer 检索当前总难度最高的已知对等方
+//
 func (ps *peerSet) BestPeer() *peer {
 	ps.lock.RLock()
 	defer ps.lock.RUnlock()

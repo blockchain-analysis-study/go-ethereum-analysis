@@ -62,7 +62,7 @@ func (p Protocol) cap() Cap {
 	return Cap{p.Name, p.Version}
 }
 
-// Cap is the structure of a peer capability.
+// Cap is the structure of a peer capability.    [capabilities 能力] 支持的子协议列表，Name 及其 Version
 type Cap struct {
 	Name    string
 	Version uint
