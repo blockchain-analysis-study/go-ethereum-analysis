@@ -72,13 +72,13 @@ type stateSyncStats struct {
 
 // syncState starts downloading state with the given root hash.
 //
+// todo 同步StateDB数据
+//
 // syncState开始使用给定的root哈希值下载state
 func (d *Downloader) syncState(root common.Hash) *stateSync {
 	s := newStateSync(d, root)
 	select {
-
-	/** todo 发送state 同步信号 */
-	case d.stateSyncStart <- s:
+	case d.stateSyncStart <- s:  /** todo 发送state 同步信号 */
 	case <-d.quitCh:
 		s.err = errCancelStateFetch
 
@@ -277,6 +277,9 @@ func (d *Downloader) runStateSync(s *stateSync) *stateSync {
 // by a given state root.
 //
 /**
+
+todo statedb的同步数据结构  StateDB的同步数据结构
+
 stateSync 计划请求那种根据给定的root 定义特定state的下载任务
  */
 type stateSync struct {
@@ -376,7 +379,7 @@ func (s *stateSync) Cancel() error {
 // and timeouts.
 //
 /**
-TODO loop是state Trie同步的主要事件循环。
+TODO loop 是state Trie同步的主要事件循环
 它负责将新任务分配给 对端peers（包括将其发送给 peers）以及入站数据的处理。
 
 请注意，循环不会直接从 对端的 peers 接收数据，而是将这些数据在downloader中缓冲并异步推送到此处。
@@ -427,7 +430,7 @@ func (s *stateSync) loop() (err error) {
 				// 2 items are the minimum requested, if even that times out, we've no use of
 				// this peer at the moment.
 				log.Warn("Stalling state sync, dropping peer", "peer", req.peer.id)
-				s.d.dropPeer(req.peer.id)
+				s.d.dropPeer(req.peer.id)  // 将该对端peer 从本地 ProtocolManager.peerSet 和 Downloader.peerSet 中移除   `ProtocolManager.removePeer()` 函数指针
 			}
 			// Process all the received blobs and check for stale delivery
 			if err = s.process(req); err != nil {

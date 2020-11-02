@@ -218,6 +218,9 @@ func NewProtocolManager(config *params.ChainConfig, mode downloader.SyncMode, ne
 	return manager, nil
 }
 
+// 将该对端peer 从本地ProtocolManager.peerSet中移除
+// 将该对端peer 从本地 Downloader.peerSet中移除
+// 断开和对端peer 的p2p连接
 func (pm *ProtocolManager) removePeer(id string) {
 	// Short circuit if the peer was already removed
 	peer := pm.peers.Peer(id)
@@ -227,13 +230,13 @@ func (pm *ProtocolManager) removePeer(id string) {
 	log.Debug("Removing Ethereum peer", "peer", id)
 
 	// Unregister the peer from the downloader and Ethereum peer set
-	pm.downloader.UnregisterPeer(id)
-	if err := pm.peers.Unregister(id); err != nil {
+	pm.downloader.UnregisterPeer(id)					// 将该对端peer 从本地 Downloader.peerSet中移除
+	if err := pm.peers.Unregister(id); err != nil {  	// 将该对端peer 从本地ProtocolManager.peerSet中移除
 		log.Error("Peer removal failed", "peer", id, "err", err)
 	}
 	// Hard disconnect at the networking layer
 	if peer != nil {
-		peer.Peer.Disconnect(p2p.DiscUselessPeer)
+		peer.Peer.Disconnect(p2p.DiscUselessPeer) // 断开和对端peer 的p2p连接
 	}
 }
 

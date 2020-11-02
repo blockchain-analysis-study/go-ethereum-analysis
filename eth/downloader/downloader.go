@@ -127,6 +127,7 @@ type Downloader struct {
 	blockchain BlockChain
 
 	// Callbacks
+	// 将该对端peer 从本地 ProtocolManager.peerSet 和 Downloader.peerSet 中移除   `ProtocolManager.removePeer()` 函数指针
 	dropPeer peerDropFn // Drops a peer for misbehaving
 
 	// Status
@@ -329,7 +330,7 @@ func (d *Downloader) UnregisterPeer(id string) error {
 	// Unregister the peer from the active peer set and revoke any fetch tasks
 	logger := log.New("peer", id)
 	logger.Trace("Unregistering sync peer")
-	if err := d.peers.Unregister(id); err != nil {
+	if err := d.peers.Unregister(id); err != nil {  // 将该对端peer 从本地 Downloader.peerSet中移除
 		logger.Error("Failed to unregister sync peer", "err", err)
 		return err
 	}
@@ -363,7 +364,7 @@ func (d *Downloader) Synchronise(id string, head common.Hash, td *big.Int, mode 
 			// Timeouts can occur if e.g. compaction hits at the wrong time, and can be ignored
 			log.Warn("Downloader wants to drop peer, but peerdrop-function is not set", "peer", id)
 		} else {
-			d.dropPeer(id)
+			d.dropPeer(id)  // 将该对端peer 从本地 ProtocolManager.peerSet 和 Downloader.peerSet 中移除   `ProtocolManager.removePeer()` 函数指针
 		}
 	default:
 		log.Warn("Synchronisation failed, retrying", "err", err)
@@ -1044,7 +1045,7 @@ func (d *Downloader) fetchHeaders(p *peerConnection, from uint64, pivot uint64) 
 			// Header retrieval timed out, consider the peer bad and drop
 			p.log.Debug("Header request timed out", "elapsed", ttl)
 			headerTimeoutMeter.Mark(1)
-			d.dropPeer(p.id)
+			d.dropPeer(p.id)  // 将该对端peer 从本地 ProtocolManager.peerSet 和 Downloader.peerSet 中移除   `ProtocolManager.removePeer()` 函数指针
 
 			// Finish the sync gracefully instead of dumping the gathered data though
 			for _, ch := range []chan bool{d.bodyWakeCh, d.receiptWakeCh} {
@@ -1317,7 +1318,7 @@ func (d *Downloader) fetchParts(errCancel error, deliveryCh chan dataPack, deliv
 							// Timeouts can occur if e.g. compaction hits at the wrong time, and can be ignored
 							peer.log.Warn("Downloader wants to drop peer, but peerdrop-function is not set", "peer", pid)
 						} else {
-							d.dropPeer(pid)
+							d.dropPeer(pid)  // 将该对端peer 从本地 ProtocolManager.peerSet 和 Downloader.peerSet 中移除   `ProtocolManager.removePeer()` 函数指针
 						}
 					}
 				}
@@ -1721,7 +1722,7 @@ func (d *Downloader) processFastSyncContent(latest *types.Header) error {
 	// (什么 枢纽块, state 同步不是只有 lastest块的同步么)
 	//
 	// todo 这里就是发起state 同步的开始
-	stateSync := d.syncState(latest.Root)
+	stateSync := d.syncState(latest.Root)  // 启动同步StateDB数据
 	defer stateSync.Cancel()
 	go func() {
 		// 阻塞,等待接收 结束信号
@@ -1819,7 +1820,7 @@ func (d *Downloader) processFastSyncContent(latest *types.Header) error {
 				stateSync.Cancel()
 
 				// todo 由于找到了新的 pivot, 则重新启动同步 state 数据
-				stateSync = d.syncState(P.Header.Root)
+				stateSync = d.syncState(P.Header.Root)   // 启动同步StateDB数据
 				defer stateSync.Cancel()
 				go func() {
 					if err := stateSync.Wait(); err != nil && err != errCancelStateFetch {
