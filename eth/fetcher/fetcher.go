@@ -117,7 +117,9 @@ type Fetcher struct {
 	done chan common.Hash
 	quit chan struct{}
 
-	// Announce states
+	// Announce states  通知状态
+	//
+	// 每个 peer 对外发布  block 的计数以防止内存耗尽
 	announces  map[string]int              // Per peer announce counts to prevent memory exhaustion
 	announced  map[common.Hash][]*announce // Announced blocks, scheduled for fetching
 	fetching   map[common.Hash]*announce   // Announced blocks, currently fetching
@@ -284,7 +286,7 @@ func (f *Fetcher) FilterBodies(peer string, transactions [][]*types.Transaction,
 
 // Loop is the main fetcher loop, checking and processing various notification
 // events.
-func (f *Fetcher) loop() {
+func (f *Fetcher) loop() {   // todo Fetcher 的守护进程. 一直处理 Fetcher 的逻辑
 	// Iterate the block fetching until a quit is requested
 	fetchTimer := time.NewTimer(0)
 	completeTimer := time.NewTimer(0)

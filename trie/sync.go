@@ -95,7 +95,7 @@ type Sync struct {
 	// 内存缓冲区以避免 频繁的 数据库写入
 	// 开始同步过来的数据都滞留在这里头
 	membatch *syncMemBatch            // Memory buffer to avoid frequest database writes
-	// 与Hash有关的待处理请求 (其中数据缓存在request中)
+	// 与 statedb.Trie的 node Hash 有关的待处理请求 (其中数据缓存在request中)
 	requests map[common.Hash]*request // Pending requests pertaining to a key hash
 	// pending 请求的优先级队列   (queue和requests 一一对应)
 	queue    *prque.Prque             // Priority queue with the pending requests

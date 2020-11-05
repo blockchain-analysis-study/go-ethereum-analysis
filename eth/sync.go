@@ -144,9 +144,12 @@ func (pm *ProtocolManager) txsyncLoop() {   // tx 广播
 
 // syncer is responsible for periodically synchronising with the network, both
 // downloading hashes and blocks as well as handling the announcement handler.
-func (pm *ProtocolManager) syncer() {
-	// Start and ensure cleanup of sync mechanisms
-	pm.fetcher.Start()
+func (pm *ProtocolManager) syncer() {   // todo 处理同步逻辑 (关于 Fetcher 和 Downloader 的逻辑起始点)
+
+	// Start and ensure cleanup of sync mechanisms   启动 并确保清除 同步机制
+
+	pm.fetcher.Start()  // todo qido
+
 	defer pm.fetcher.Stop()
 	defer pm.downloader.Terminate()
 

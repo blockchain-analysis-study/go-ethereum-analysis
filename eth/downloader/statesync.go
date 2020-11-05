@@ -91,7 +91,7 @@ func (d *Downloader) syncState(root common.Hash) *stateSync {
 // stateFetcher manages the active state sync and accepts requests
 // on its behalf.
 //
-// stateFetcher管理活动state同步并代表其接受请求
+// stateFetcher() 管理活动state同步并代表其接受请求
 func (d *Downloader) stateFetcher() {
 	for {
 		select {
@@ -101,7 +101,7 @@ func (d *Downloader) stateFetcher() {
 
 		这是第一次接收到的入口, 后续都是  d.runStateSync(next) 里头接收到了
 		 */
-		case s := <-d.stateSyncStart:
+		case s := <-d.stateSyncStart:   // todo 收到 pivot block 的 statedb 的同步信号
 			for next := s; next != nil; {
 
 				// 将运行state同步，直到完成同步或请求将另一个 root 哈希切换到该state
@@ -164,7 +164,7 @@ func (d *Downloader) runStateSync(s *stateSync) *stateSync {
 
 		select {
 		// The stateSync lifecycle:
-		case next := <-d.stateSyncStart:
+		case next := <-d.stateSyncStart:   // todo 在 执行 statedb 的 同步过程中, 收到了新的 pivot block 的 statedb 的同步信号
 			return next
 
 		case <-s.done:
@@ -244,7 +244,7 @@ func (d *Downloader) runStateSync(s *stateSync) *stateSync {
 				// Make sure the previous one doesn't get siletly lost
 				//
 				// 确保前一个 req 不会丢失
-				old.timer.Stop()   // 关闭掉超市 触发器
+				old.timer.Stop()   // 关闭掉  超时触发器
 				old.dropped = true // 标识为 移除状态
 
 				finished = append(finished, old)
@@ -348,7 +348,7 @@ func newStateSync(d *Downloader, root common.Hash) *stateSync {
 todo 重要的方法
 run启动任务分配和响应处理循环，阻塞直到完成，最后通知所有等待循环的goroutine。
  */
-func (s *stateSync) run() {
+func (s *stateSync) run() {  // todo  真正去做 statedb 同步的最底层方法
 
 	/** TODO 重要的方法 */
 	s.err = s.loop()

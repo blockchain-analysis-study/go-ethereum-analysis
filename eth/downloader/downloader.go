@@ -1711,7 +1711,7 @@ func (d *Downloader) importBlockResults(results []*fetchResult) error {
 //
 /**
 processFastSyncContent:
-从队列中获取结果并将其写入leveldb。 它还控制枢纽块(pivot block) state trie node 的同步
+从队列中获取结果并将其写入leveldb。 它还控制 枢纽块(pivot block) state trie node 的同步
  */
 func (d *Downloader) processFastSyncContent(latest *types.Header) error {
 	// Start syncing state of the reported head block. This should get us most of
@@ -1722,7 +1722,7 @@ func (d *Downloader) processFastSyncContent(latest *types.Header) error {
 	// (什么 枢纽块, state 同步不是只有 lastest块的同步么)
 	//
 	// todo 这里就是发起state 同步的开始
-	stateSync := d.syncState(latest.Root)  // 启动同步StateDB数据
+	stateSync := d.syncState(latest.Root)  // todo 启动同步StateDB数据
 	defer stateSync.Cancel()
 	go func() {
 		// 阻塞,等待接收 结束信号
@@ -1820,7 +1820,7 @@ func (d *Downloader) processFastSyncContent(latest *types.Header) error {
 				stateSync.Cancel()
 
 				// todo 由于找到了新的 pivot, 则重新启动同步 state 数据
-				stateSync = d.syncState(P.Header.Root)   // 启动同步StateDB数据
+				stateSync = d.syncState(P.Header.Root)   // todo 启动同步StateDB数据
 				defer stateSync.Cancel()
 				go func() {
 					if err := stateSync.Wait(); err != nil && err != errCancelStateFetch {

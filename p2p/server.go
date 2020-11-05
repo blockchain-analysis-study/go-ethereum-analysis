@@ -788,7 +788,7 @@ running:
 				break running
 			}
 
-		// 如果有 新的对端 peer 连接进来
+		// 如果有 新的对端 peer 连接进来  (不管是 自己去连接别人 还是 别人连接自己,  都会有 peer 进来)
 		case c := <-srv.addpeer:
 
 			// todo 注意:

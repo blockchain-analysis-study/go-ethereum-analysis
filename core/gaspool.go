@@ -22,10 +22,10 @@ import (
 )
 
 // GasPool tracks the amount of gas available during execution of the transactions
-// in a block. The zero value is a pool with zero gas available.
-/**
-GasPool 跟踪 block 中执行 tx 期间可用的 gas 量。 零值是可用零气体的池。
- */
+// in a block. The zero value is a pool with zero gas available.   GasPool 跟踪 block 中执行 tx 期间可用的 gas 量。 零值是可用零气体的池
+//
+//
+// todo  使用 block.GasLimit 做初始化,  用来计算 当前 block 还可以执行多少 tx
 type GasPool uint64
 
 // AddGas makes gas available for execution.
@@ -41,7 +41,7 @@ func (gp *GasPool) AddGas(amount uint64) *GasPool {
 // available and returns an error otherwise.
 func (gp *GasPool) SubGas(amount uint64) error {
 	if uint64(*gp) < amount {
-		return ErrGasLimitReached
+		return ErrGasLimitReached  // 当前需要执行的tx 的gas 已经不足 block剩余的 gasLimit了.  (amount: 当前tx的gas, gp: 当前 block 的剩余 gasLimit)
 	}
 	*(*uint64)(gp) -= amount
 	return nil

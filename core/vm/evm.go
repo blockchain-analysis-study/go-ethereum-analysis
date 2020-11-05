@@ -63,13 +63,26 @@ func run(evm *EVM, contract *Contract, input []byte) ([]byte, error) {
 		if interpreter.CanRun(contract.Code) {
 			if evm.interpreter != interpreter {
 				// Ensure that the interpreter pointer is set back
-				// to its current value upon return.
-				// todo 确保在返回时将解 释器指针设置回其当前值。 （干嘛的？ 不懂）
+				// to its current value upon return.   确保在返回时将解 释器指针设置回其当前值
+				//
+				// todo 牛逼使用技巧
+				//
+				//    	利用 defer 的延迟调用及 值copy快照 等特性, 处理 多级 合约调用时使用的 iterpreter
+				//
+				//	 	如:  A -> B -> C 当 C合约调用完成 会回到 B 合约上下文这是使用的 interpreter 应该是 B的, 当B 合约调用完成后同理回到A
+				//
+				//   	这样做到了 todo  开始处理 A  -> 开始处理 B -> 开始处理 C -> C 处理完毕 -> B 处理完毕 -> A 处理完毕
+				//
 				defer func(i Interpreter) {
 					evm.interpreter = i
-				}(evm.interpreter)
-				evm.interpreter = interpreter
+				}(evm.interpreter)  	// 先将 A_interpreter 传给 defer
+
+				evm.interpreter = interpreter  // 再将 B_interpreter 置换全局的 evm.interpreter 变量
 			}
+
+			// 等到 当前 B_interpreter.Run() 执行完毕后. 会去执行 defer
+			//
+			// 此时会将之前被 defer记录的 A_interpreter 置换回给 evm.interpreter 变量
 			return interpreter.Run(contract, input)
 		}
 	}

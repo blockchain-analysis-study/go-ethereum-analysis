@@ -74,11 +74,12 @@ type ProtocolManager struct {
 	chainconfig *params.ChainConfig
 	maxPeers    int  //本地节点做大允许连接的远端节点数目
 
+	// downloader  和 fetcher 都是在 ProtocolManager 中 NewProtocolManager() 实例化的
 	downloader *downloader.Downloader
 	fetcher    *fetcher.Fetcher
-	peers      *peerSet
+	peers      *peerSet	 // 这个也是 NewProtocolManager() 中实例化
 
-	SubProtocols []p2p.Protocol
+	SubProtocols []p2p.Protocol  // 这些最终就是  p2p.peer.Run() 拉
 
 	eventMux      *event.TypeMux
 	txsCh         chan core.NewTxsEvent
@@ -183,8 +184,9 @@ func NewProtocolManager(config *params.ChainConfig, mode downloader.SyncMode, ne
 		return nil, errIncompatibleConfig
 	}
 
-	// 初始化一个 downloader 实例
-	//
+	/**
+	todo  初始化一个 downloader 实例
+	 */
 	// Construct the different synchronisation mechanisms
 	manager.downloader = downloader.New(mode, chaindb, manager.eventMux, blockchain, nil, manager.removePeer)
 
@@ -211,7 +213,7 @@ func NewProtocolManager(config *params.ChainConfig, mode downloader.SyncMode, ne
 	}
 
 	/**
-	初始化一个 fetcher 实例
+	todo 初始化一个 fetcher 实例
 	 */
 	manager.fetcher = fetcher.New(blockchain.GetBlockByHash, validator, manager.BroadcastBlock, heighter, inserter, manager.removePeer)
 

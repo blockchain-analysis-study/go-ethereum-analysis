@@ -5277,7 +5277,7 @@ var methods = function () {
 
     var getStorageAt = new Method({
         name: 'getStorageAt',
-        call: 'eth_getStorageAt',
+        call: 'eth_getStorageAt',  // eth_getStorageAt(contractAddress, slot) 可以获取 合约账户中某个 存储槽的数据
         params: 3,
         inputFormatter: [null, utils.toHex, formatters.inputDefaultBlockNumberFormatter]
     });

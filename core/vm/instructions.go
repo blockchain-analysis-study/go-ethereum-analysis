@@ -1007,7 +1007,7 @@ func makeLog(size int) executionFunc {
 		// todo  沃日， 从memory中获取 data？  event xxx (topic1, ..., topicN, ...args)
 		d := memory.Get(mStart.Int64(), mSize.Int64())
 		interpreter.evm.StateDB.AddLog(&types.Log{
-			Address: contract.Address(),
+			Address: contract.Address(), // 当前合约 地址
 			Topics:  topics,
 			Data:    d,
 			// This is a non-consensus field, but assigned here because

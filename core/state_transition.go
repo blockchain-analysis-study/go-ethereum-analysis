@@ -51,7 +51,7 @@ The state transitioning model does all the necessary work to work out a valid ne
 type StateTransition struct {
 	gp         *GasPool
 	msg        Message
-	gas        uint64
+	gas        uint64  // 当前剩余可用的  gas
 	gasPrice   *big.Int
 	initialGas uint64
 	value      *big.Int
@@ -106,13 +106,13 @@ func IntrinsicGas(data []byte, contractCreation, homestead bool) (uint64, error)
 		if (math.MaxUint64-gas)/params.TxDataNonZeroGas < nz {
 			return 0, vm.ErrOutOfGas
 		}
-		gas += nz * params.TxDataNonZeroGas
+		gas += nz * params.TxDataNonZeroGas   // 非0 的byte个数 * 68
 
 		z := uint64(len(data)) - nz
 		if (math.MaxUint64-gas)/params.TxDataZeroGas < z {
 			return 0, vm.ErrOutOfGas
 		}
-		gas += z * params.TxDataZeroGas
+		gas += z * params.TxDataZeroGas  // 0 的byte个数 * 4
 	}
 	return gas, nil
 }
@@ -173,15 +173,15 @@ func (st *StateTransition) buyGas() error {
 	if st.state.GetBalance(st.msg.From()).Cmp(mgval) < 0 {
 		return errInsufficientBalanceForGas
 	}
-	// 从区块的允许消耗最大gas的计数中减去 当前tx的gas消耗
+	//  当前 block 的剩余gasLimit - 当前tx的gas
 	if err := st.gp.SubGas(st.msg.Gas()); err != nil {
 		return err
 	}
-	// 先记录当前tx愿意花费的gas，后续没操作一次这上面都会被减
+	// 初始化当前 tx 剩余可用的gas (后学合约或者tx 需要使用)
 	st.gas += st.msg.Gas()
-	// 先记录着当前tx中愿意花费的gas（最后面用做剩余退回需要）
+	// 先记录着当前tx中愿意花费的gas  (st.initialGas - st.gas == st.UseGas <本次交易 所消耗的 gas>)
 	st.initialGas = st.msg.Gas()
-	// 账户上先减掉这部分 tx的gas消耗
+	// 账户上先减掉这部分 tx的gas消耗  (不怕, 后面有剩的 会被加回来的)
 	st.state.SubBalance(st.msg.From(), mgval)
 	return nil
 }
@@ -205,8 +205,9 @@ func (st *StateTransition) preCheck() error {
 // An error indicates a consensus issue.
 /** EVM 真正执行tx */
 func (st *StateTransition) TransitionDb() (ret []byte, usedGas uint64, failed bool, err error) {
+
 	// 执行前的检查
-	// 主要是nonce的检查，及初始化Gas
+	// 主要是nonce的检查 及 初始化Gas
 	if err = st.preCheck(); err != nil {
 		return
 	}
@@ -219,7 +220,7 @@ func (st *StateTransition) TransitionDb() (ret []byte, usedGas uint64, failed bo
 	// 是否是部署合约的tx标识位
 	contractCreation := msg.To() == nil
 
-	// 先计算当前data字段中的字节数锁消耗的固定gas
+	// 先计算当前data字段中的字节数锁消耗的固定gas  (非0的byte个数 X 68 + 0的byte个数 X 4)
 	gas, err := IntrinsicGas(st.data, contractCreation, homestead)
 	if err != nil {
 		return nil, 0, false, err

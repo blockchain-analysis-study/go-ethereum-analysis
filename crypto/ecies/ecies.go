@@ -56,8 +56,8 @@ var (
 type PublicKey struct {
 	X *big.Int
 	Y *big.Int
-	elliptic.Curve
-	Params *ECIESParams
+	elliptic.Curve		 // 曲线
+	Params *ECIESParams  // 椭圆曲线的特征参数,  即: y² = x³ + ax + b 中的  a 和 b
 }
 
 // Export an ECIES public key as an ECDSA public key.
@@ -78,7 +78,7 @@ func ImportECDSAPublic(pub *ecdsa.PublicKey) *PublicKey {
 // PrivateKey is a representation of an elliptic curve private key.
 type PrivateKey struct {
 	PublicKey
-	D *big.Int  // D*Pk = Sk
+	D *big.Int  // D*Pk = Sk   私钥的数字，即 k G 中的 k  (严格来说, k 就是私钥的数字, G 是曲线的 基点, kG 对私钥对用的公钥 <也就是该去线上的一点的坐标(x, y)>)
 }
 
 // Export an ECIES private key as an ECDSA private key.
