@@ -256,7 +256,7 @@ func (pm *ProtocolManager) Start(maxPeers int) {
 	go pm.txBroadcastLoop()  		// 处理 新 tx 广播
 
 	// broadcast mined blocks
-	pm.minedBlockSub = pm.eventMux.Subscribe(core.NewMinedBlockEvent{})
+	pm.minedBlockSub = pm.eventMux.Subscribe(core.NewMinedBlockEvent{})  // todo 监听 当亲本地 node 的  miner 挖出的 新 block 事件
 	go pm.minedBroadcastLoop()		 // 处理 block 广播和 hash、Number 等发布
 
 	// start sync handlers
@@ -505,7 +505,9 @@ func (pm *ProtocolManager) handleMsg(p *peer) error {
 				return nil
 			}
 		}
-		// Filter out any explicitly requested headers, deliver the rest to the downloader
+		// Filter out any explicitly requested headers, deliver the rest to the downloader   过滤掉任何显式请求的 header，其余的传递给下载器
+		//
+		// todo 【注意】 只有 收到的 header 是一个header时, 才继续处理
 		filter := len(headers) == 1
 		if filter {
 			// If it's a potential DAO fork check, validate against the rules
@@ -522,9 +524,13 @@ func (pm *ProtocolManager) handleMsg(p *peer) error {
 				p.Log().Debug("Verified to be on the same side of the DAO fork")
 				return nil
 			}
-			// Irrelevant of the fork checks, send the header to the fetcher just in case
+			// Irrelevant of the fork checks, send the header to the fetcher just in case  与fork检查无关，以防万一，将 header 发送到 fecther
+			//
+			// 将 接收到 对端peer 发来的 一串 headers 交由 做过滤,  并可能返回一串 【未知hash 的header】
 			headers = pm.fetcher.FilterHeaders(p.id, headers, time.Now())
 		}
+
+		// todo 否则, 全部交给 downloader 去做一大段 block 的下载
 		if len(headers) > 0 || !filter {
 			err := pm.downloader.DeliverHeaders(p.id, headers)
 			if err != nil {
@@ -694,13 +700,16 @@ func (pm *ProtocolManager) handleMsg(p *peer) error {
 			p.MarkBlock(block.Hash)
 		}
 		// Schedule all the unknown hashes for retrieval
-		unknown := make(newBlockHashesData, 0, len(announces))
+		unknown := make(newBlockHashesData, 0, len(announces))   // todo 用来收集 存在于 对端peer 但是不存在当前本地 peer 的chain 中的block
 		for _, block := range announces {
 			if !pm.blockchain.HasBlock(block.Hash, block.Number) {
 				unknown = append(unknown, block)
 			}
 		}
+
+		// 逐个 处理 不存在 于 当前本地 peer 的chain 中的 block
 		for _, block := range unknown {
+			// p 这里是对端 peer
 			pm.fetcher.Notify(p.id, block.Hash, block.Number, time.Now(), p.RequestOneHeader, p.RequestBodies)
 		}
 
@@ -763,6 +772,8 @@ func (pm *ProtocolManager) handleMsg(p *peer) error {
 
 // BroadcastBlock will either propagate a block to a subset of it's peers, or
 // will only announce it's availability (depending what's requested).
+//
+// 给所有的的 对端 peer 广播 blockHash 和 部分对端 peer广播 block
 func (pm *ProtocolManager) BroadcastBlock(block *types.Block, propagate bool) {
 	hash := block.Hash()
 	peers := pm.peers.PeersWithoutBlock(hash)  // 获取所有 对该 blockHash 还未知的 peers
@@ -820,8 +831,11 @@ func (pm *ProtocolManager) BroadcastTxs(txs types.Transactions) {
 // Mined broadcast loop
 func (pm *ProtocolManager) minedBroadcastLoop() {  // 处理 block 广播和 hash、Number 等发布
 	// automatically stops if unsubscribe
-	for obj := range pm.minedBlockSub.Chan() {
+	for obj := range pm.minedBlockSub.Chan() {  // todo 读取出 当前本地 node 的 miner 挖出来的 新block 的 event
 		if ev, ok := obj.Data.(core.NewMinedBlockEvent); ok {
+
+			// todo 下面这两个 广播信息, 会被 对端 peer 的 Fecther 模块处理
+
 			// 首先将块传播到同级  (最终造成影响:  将block 和 td发给 一部分对端 peer 且 blockHash 和 blockNumber 发布给 全部对端 peer)  todo 这里的对端peer 都是对 该block 未知的
 			pm.BroadcastBlock(ev.Block, true)  // First propagate block to peers
 			// 然后向其他人宣布   (最终造成影响: 只将 blockHash 和 blockNumber 发布给对端 peer) todo 这里的对端peer 都是对 该block 未知的

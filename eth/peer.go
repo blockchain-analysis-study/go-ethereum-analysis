@@ -89,9 +89,9 @@ type peer struct {
 	td   *big.Int
 	lock sync.RWMutex
 
-	// 该节点的某些已知的TxHash
+	// 当前节点的某些已知的TxHash
 	knownTxs    mapset.Set                // Set of transaction hashes known to be known by this peer
-	// 该节点的某些已知的blockHash
+	// 当前节点的某些已知的blockHash
 	knownBlocks mapset.Set                // Set of block hashes known to be known by this peer
 
 	// tx队列 广播给 对端peer

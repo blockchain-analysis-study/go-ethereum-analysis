@@ -147,8 +147,8 @@ func (pm *ProtocolManager) txsyncLoop() {   // tx 广播
 func (pm *ProtocolManager) syncer() {   // todo 处理同步逻辑 (关于 Fetcher 和 Downloader 的逻辑起始点)
 
 	// Start and ensure cleanup of sync mechanisms   启动 并确保清除 同步机制
-
-	pm.fetcher.Start()  // todo qido
+	//
+	pm.fetcher.Start()  // todo 启动 fecther
 
 	defer pm.fetcher.Stop()
 	defer pm.downloader.Terminate()

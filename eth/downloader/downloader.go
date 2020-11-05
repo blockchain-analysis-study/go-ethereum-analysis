@@ -100,6 +100,11 @@ var (
 	errTooOld                  = errors.New("peer doesn't speak recent enough protocol version (need version >= 62)")
 )
 
+//  fetcher 模块和 downloader 模块所承担的任务是不同的.
+// 			downloader 功能比较重，用来保证自己的 chain 和其它节点之间不会有太多差距
+// 			fetcher 功能较轻，只会对 miner 新产生的 block 进行同步和广播
+//
+//
 type Downloader struct {
 	mode SyncMode       // Synchronisation mode defining the strategy used (per sync cycle)
 	mux  *event.TypeMux // Event multiplexer to announce sync operation events
@@ -224,13 +229,22 @@ type BlockChain interface {
 // New creates a new downloader to fetch hashes and blocks from remote peers.
 // 创建 Downloader 对象
 // 到时候同步是根据 mode 来同步的
+//
+// 三个地方调用,
+//
+//		geth\chaincmd.go 的 copyDb() 中使用到了
+//
+//		eth\handler.go 的 NewProtocolManager() 中使用  <full  和 fast>
+//
+//		les\handler.go 的 NewProtocolManager() 中使用  <light>
+//
 func New(mode SyncMode, stateDb ethdb.Database, mux *event.TypeMux, chain BlockChain, lightchain LightChain, dropPeer peerDropFn) *Downloader {
 	if lightchain == nil {
 		lightchain = chain
 	}
 
 	dl := &Downloader{
-		mode:           mode, // mode: full/fast/light 三种模式
+		mode:           mode, // todo 同步模式:   full/fast/light  三种模式
 		stateDB:        stateDb,
 		mux:            mux,
 		queue:          newQueue(),
