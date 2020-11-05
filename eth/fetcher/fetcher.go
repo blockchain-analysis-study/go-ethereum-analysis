@@ -408,7 +408,7 @@ func (f *Fetcher) loop() {   // todo Fetcher 的守护进程. 一直处理 Fetch
 			// Fetcher terminating, abort all operations
 			return
 
-		// 接收到 需要向目标对端 peer 抓取 某个 block 的 通知信息.
+		// todo 接收到 需要向目标对端 peer 抓取 某个 block 的 通知信息.
 		case notification := <-f.notify:
 			// A block was announced, make sure the peer isn't DOSing us
 			propAnnounceInMeter.Mark(1)
@@ -456,7 +456,7 @@ func (f *Fetcher) loop() {   // todo Fetcher 的守护进程. 一直处理 Fetch
 				f.rescheduleFetch(fetchTimer)
 			}
 
-		// 收到 需要将远端发过来的 block 插入本地 chain 的  插入通知
+		// todo 收到 需要将远端发过来的 block 插入本地 chain 的  插入通知
 		case op := <-f.inject:
 			// A direct block insertion was requested, try and fill any pending gaps
 			//
@@ -464,15 +464,17 @@ func (f *Fetcher) loop() {   // todo Fetcher 的守护进程. 一直处理 Fetch
 			propBroadcastInMeter.Mark(1)
 			f.enqueue(op.origin, op.block)  // todo 先缓存其 block 用于 异步的 插入 本地 chain中
 
-		// 某个 blockHash 的block 已经完成了 插入到 本地chain中
+		// todo 某个 blockHash 的block 已经完成了 插入到 本地chain中
 		case hash := <-f.done:
 			// A pending import finished, remove all traces of the notification
 			f.forgetHash(hash)			// 删除该 blockHash 的 抓取通知 annonces
 			f.forgetBlock(hash)			// 删除该 blockHash 的 插入通知 inject
 
-		// 定时调度,  header 的抓取 (从对端peer下载)
-		// 通知 以后的 block 信息，其状态从「通知」变成了「下载中」是在 fetchTimer 这个消息的处理代码中完成的
+		// todo 定时调度,  header 的抓取 (从对端peer下载)
 		case <-fetchTimer.C:
+
+			// 通知 以后的 block 信息，其状态从「通知」变成了「下载中」是在 fetchTimer 这个消息的处理代码中完成的
+
 			// At least one block's timer ran out, check for needing retrieval  至少一个块的计时器用完了，检查是否需要检索
 			request := make(map[string][]common.Hash)   // (对端peer 的 nodeId => 需要下载的 block的Hash)
 
@@ -521,7 +523,7 @@ func (f *Fetcher) loop() {   // todo Fetcher 的守护进程. 一直处理 Fetch
 			f.rescheduleFetch(fetchTimer)
 
 
-		// 定时调度,  body 的抓取 (从对端peer下载)
+		// todo 定时调度,  body 的抓取 (从对端peer下载)
 		case <-completeTimer.C:
 
 
@@ -561,7 +563,7 @@ func (f *Fetcher) loop() {   // todo Fetcher 的守护进程. 一直处理 Fetch
 			// Schedule the next fetch if blocks are still pending
 			f.rescheduleComplete(completeTimer)   // 和 Fetcher.rescheduleFetch() 类似 的调用处理
 
-		// 接收一个专门用来处理  header 的 chan
+		// todo 接收一个专门用来处理  header 的 chan
 		case filter := <-f.headerFilter:
 			// Headers arrived from a remote peer. Extract those that were explicitly
 			// requested by the fetcher, and return everything else so it's delivered
@@ -685,7 +687,7 @@ func (f *Fetcher) loop() {   // todo Fetcher 的守护进程. 一直处理 Fetch
 			}
 
 
-		// 接收一个专门用来处理  body 的 chan
+		// todo 接收一个专门用来处理  body 的 chan
 		case filter := <-f.bodyFilter:
 
 			// Block bodies arrived, extract any explicitly requested blocks, return the rest
