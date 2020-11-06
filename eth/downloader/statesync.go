@@ -92,7 +92,7 @@ func (d *Downloader) syncState(root common.Hash) *stateSync {
 // on its behalf.
 //
 // stateFetcher() 管理活动state同步并代表其接受请求
-func (d *Downloader) stateFetcher() {
+func (d *Downloader) stateFetcher() {  // 在 New Downloader 时, 起一个 协程调用
 	for {
 		select {
 		/**
@@ -102,10 +102,30 @@ func (d *Downloader) stateFetcher() {
 		这是第一次接收到的入口, 后续都是  d.runStateSync(next) 里头接收到了
 		 */
 		case s := <-d.stateSyncStart:   // todo 收到 pivot block 的 statedb 的同步信号
+
+			// 为什么这么写？
+			//
+			// todo 原因: d.syncState() 会因为 pivot 的变化而被多次调用. 那么每次  d.stateSyncStart通道 收到的 s 都会是不一样的,
+			//		这时候,  就 可能进入了 新的 for next ...  todo 里面会有一句:  go s.run() 才是真正的去同步 statedb ...
+			//
+			//  代码这么写是为了在同步某个 state 数据的同时，能够及时发现新的 state 同步请求并进行处理，而处理方式就是停掉之前的同步进程.
+			//	（注意 Downloader.runStateSync 中 defer s.Cancel() 这条语句），然后返回新的请求并重新调用 Downloader.runStateSync 进行处理.
+			//
+			//  从而做到, 在整个区块同步过程中，同一时间只有一个区块的 state 数据被同步；如果要同步新的 state，需要先停掉旧的同步过程.
+			//
+			/**
+			todo 注意:
+
+			（在 Downloader.processFastSyncContent 中发起新的 state 同步之前，已经调用了 stateSync.Cannel 方法，并且这个方法会一直等待同步过程真的退出了才会返回.
+			因此我认为代码实际运行时，Downloader.runStateSync 方法中应该接收到 stateSync.done 的消息的概率远大于 收到 Downloader.stateSyncStart 消息的概率，
+			甚至没有必要在 Downloader.stateFetcher 中弄一个 for 循环和在 Downloader.runStateSync 中接收处理 Downloader.stateSyncStart 消息.）
+
+			（无论如何，我都觉得 Downloader.stateFetcher 中的这个 for 循环设计得相当另类，完全有其它更清淅的方法实现同步的功能和逻辑）
+			 */
 			for next := s; next != nil; {
 
 				// 将运行state同步，直到完成同步或请求将另一个 root 哈希切换到该state
-				next = d.runStateSync(next)
+				next = d.runStateSync(next)  // 这里面也监听了  `d.stateSyncStart`
 			}
 		case <-d.stateCh:
 			// Ignore state responses while no sync is running.
@@ -119,14 +139,19 @@ func (d *Downloader) stateFetcher() {
 // hash is requested to be switched over to.
 //
 // runStateSync将运行state同步，直到完成同步或请求将另一个 root 哈希切换到该state
+//
+// todo 这个方法是连接接收返回的 state 数据和 stateSync 对象的中枢，它记录 stateSync 对象发出的请求，并将对方返回的数据传送给 stateSync 对象.
+//
 func (d *Downloader) runStateSync(s *stateSync) *stateSync {
 	var (
-		// 记录当前进行中的请求
+		// 正在处理中的请求集合
 		// todo 这个相当有用,用来记录是否活跃
 		active   = make(map[string]*stateReq) // Currently in-flight requests
-		// 完成或失败的请求
+
+		// 已经完成的请求集合（不管成功或失败）
 		finished []*stateReq                  // Completed or failed requests
-		// 活动请求超时
+
+		// 如果正在处理的请求发生超时，使用这个 channel 进行通知
 		timeout  = make(chan *stateReq)       // Timed out active requests
 	)
 	defer func() {
@@ -144,7 +169,7 @@ func (d *Downloader) runStateSync(s *stateSync) *stateSync {
 	}()
 	// Run the state sync.
 	go s.run()   /** todo 这个 是真的 state 同步 */
-	defer s.Cancel()
+	defer s.Cancel() // 代码这么写是为了在同步某个 state 数据的同时，能够及时发现新的 state 同步请求并进行处理，而处理方式就是停掉之前的同步进程 ...
 
 	// Listen for peer departure events to cancel assigned tasks
 	peerDrop := make(chan *peerConnection, 1024)
@@ -163,22 +188,41 @@ func (d *Downloader) runStateSync(s *stateSync) *stateSync {
 		}
 
 		select {
-		// The stateSync lifecycle:
+		// The stateSync lifecycle:    在外面调用 当前本方法: runStateSync() 的地方, 也监听了 d.stateSyncStart
 		case next := <-d.stateSyncStart:   // todo 在 执行 statedb 的 同步过程中, 收到了新的 pivot block 的 statedb 的同步信号
-			return next
+			return next		// 收到然后 立马将信号返回出去
 
-		case <-s.done:
+		case <-s.done:  // 代表 state 同步完成了 ...
 			return nil
 
 		// Send the next finished request to the current sync:
-		case deliverReqCh <- deliverReq:
+		case deliverReqCh <- deliverReq:   // 不管是正常接收到数据还是超时，都会将结果写入 finished 变量中，然后就该 deliverReqCh 发挥作用了
+
+			// 因为 deliverReqCh 是 for 循环的内部变量，因此循环一遍，deliverReqCh 都会被重新定义.
+			// 		如果有完成的请求（finished 的长度大于 0），则 deliverReqCh 的值为 stateSync.deliver， 而另一个局部变量 deliverReq 的值为 finished 的第一个元素;
+			// 		否则 deliverReqCh 和 deliverReq 都为默认值 nil.
+			//
+			// 接下来在 select/case 语句中，如果 deliverReqCh 和 deliverReq 两个变量都是有效值，
+			// 那么 deliverReq 中的值就会发送给 deliverReqCh，也就是说 finished 集合中的第一个已完成的请求就会发送给 stateSync.deliver.
+			// 而消息处理中则将 finished 中的第一个元素抹掉（因为这个元素已经通知给 stateSync.deliver 了）.
+			//
+			//
+			// 可以看到，deliverReqCh 这个 channel 实际上是为了将已经完成的请求发送给 stateSync.deliver.
+
 			// Shift out the first request, but also set the emptied slot to nil for GC
 			copy(finished, finished[1:])
 			finished[len(finished)-1] = nil
 			finished = finished[:len(finished)-1]
 
 		// Handle incoming state packs:
-		case pack := <-d.stateCh:
+		case pack := <-d.stateCh:   // 成功接收到 req 的数据
+
+			// 当 eth 模块接收到 「NodeDataMsg」消息时会调用 Downloader.DeliverNodeData() 方法，而 Downloader.stateCh 正在在这个方法中被触发的.
+			//
+			// 接收到 对端peer 返回的数据后，首先判断是否在 active 中.
+			// 如果在则将返回的数据放到 req.response 中，并将 req 写入 finished 中，然后从 active中删除.
+
+
 			// Discard any data not requested (or previously timed out)
 			req := active[pack.PeerId()]
 			if req == nil {
@@ -193,7 +237,7 @@ func (d *Downloader) runStateSync(s *stateSync) *stateSync {
 			delete(active, pack.PeerId())
 
 			// Handle dropped peer connections:
-		case p := <-peerDrop:
+		case p := <-peerDrop:   // 代表 有节点 断开连接了，因此要作一些相应的处理
 			// Skip if no request is currently pending
 			req := active[p.id]
 			if req == nil {
@@ -210,6 +254,11 @@ func (d *Downloader) runStateSync(s *stateSync) *stateSync {
 		//
 		// 处理超时的请求
 		case req := <-timeout:
+
+			// 当 timeout 收到消息时，代表某个请求超时了 ...
+			//
+			// 如果超时的请求在 active 中，则将其从 active 中删除，并将其加入到 finished 中（完成但失败了）...
+
 			// If the peer is already requesting something else, ignore the stale timeout.
 			// This can happen when the timeout and the delivery happens simultaneously,
 			// causing both pathways to trigger.
@@ -223,7 +272,14 @@ func (d *Downloader) runStateSync(s *stateSync) *stateSync {
 		// Track outgoing state requests:
 		//
 		// 跟踪传出 state req：
-		case req := <-d.trackStateReq:
+		case req := <-d.trackStateReq:  // 首先接收到的消息是 Downloader.trackStateReq，它实际上代表 stateSync 对象发起了一次请求
+
+
+			// 收到请求数据 req 后，首先通过 active 判断这个节点是否有正在处理的请求，
+			// 如果是则将旧的请求中断并加入 finished中（完成但失败了）.
+			// 然后为新的 req 设置一个 timer 后，将 req 加入到 active 中.
+
+
 			// If an active request already exists for this peer, we have a problem. In
 			// theory the trie node schedule must never assign two requests to the same
 			// peer. In practice however, a peer might receive a request, disconnect and

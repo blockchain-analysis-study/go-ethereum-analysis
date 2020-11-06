@@ -1980,7 +1980,7 @@ func (d *Downloader) processFastSyncContent(latest *types.Header) error {
 				stateSync.Cancel()
 
 				// todo 由于找到了新的 pivot, 则重新启动同步 state 数据
-				stateSync = d.syncState(P.Header.Root)   // todo 启动同步StateDB数据  (这里才是真的 同步 pivot 块的数据 ...)
+				stateSync = d.syncState(P.Header.Root)   // todo 启动同步StateDB数据  (这里才是真的 同步 pivot 块的数据 ...)  因为 是在 for 中被调用的, 所以  d.syncState() 可能会被调用很多次， 因为 pivot 可能会变化 ...
 				defer stateSync.Cancel()
 				go func() {
 					if err := stateSync.Wait(); err != nil && err != errCancelStateFetch {  // todo 阻塞 等待下载 stateDB 数据
@@ -2148,11 +2148,14 @@ func (d *Downloader) deliver(id string, destCh chan dataPack, packet dataPack, i
 // qosTuner()   是服务质量调整循环，它偶尔会收集 对端peer 延迟统计信息并更新估计的请求往返时间
 //
 //
+// todo downloader 模块使用 「RTT」 和 「TTL」 这两个数据控制超时时间，并根据通信情况动态更新.
+//
 // 知识点:
 //
-// RTT(Round Trip Time)：一个连接的往返时间，即数据发送时刻到接收到确认的时刻的差值；
-// RTO(Retransmission Time Out)：重传超时时间，即从数据发送时刻算起，超过这个时间便执行重传。
-// RTT和RTO 的关系是：由于网络波动的不确定性，每个RTT都是动态变化的，所以RTO也应随着RTT动态变化。
+// RTT(Round Trip Time)：一个连接的往返时间，即数据发送时刻到接收到确认的时刻的差值. (代表的是从发起请求到获取数据所需要的总时间)
+// TTL(Time To Live)：代表的是单个请求所允许的最长时间.
+// RTO(Retransmission Time Out)：重传超时时间，即从数据发送时刻算起，超过这个时间便执行重传.
+// RTT和RTO 的关系是：由于网络波动的不确定性，每个RTT都是动态变化的，所以RTO也应随着RTT动态变化.
 //
 //
 //
