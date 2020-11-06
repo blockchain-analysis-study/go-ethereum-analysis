@@ -77,9 +77,9 @@ type fetchResult struct {
 
 // queue represents hashes that are either need fetching or are being fetched
 /**
-queue: 代表需要获取或正在获取的hashes
+todo queue: 代表  需要获取  或  正在获取  的hashes
 
-即: 正在被处理的block 相关的 部件集合/队列等等杂七杂八的
+即: 正在被处理的block 相关的 部件集合/ 队列 等等杂七杂八的
  */
 type queue struct {
 	// 同步模式决定要计划要提取的block的部件
@@ -802,6 +802,10 @@ func (q *queue) expire(timeout time.Duration, pendPool map[string]*fetchRequest,
 // If the headers are accepted, the method makes an attempt to deliver the set
 // of ready headers to the processor to keep the pipeline full. However it will
 // not block to prevent stalling other pending deliveries.
+//
+// deliver	英[dɪˈlɪvə(r)]  传送; 交付
+//
+//
 func (q *queue) DeliverHeaders(id string, headers []*types.Header, headerProcCh chan []*types.Header) (int, error) {
 	q.lock.Lock()
 	defer q.lock.Unlock()
@@ -870,7 +874,7 @@ func (q *queue) DeliverHeaders(id string, headers []*types.Header, headerProcCh 
 		copy(process, q.headerResults[q.headerProced:q.headerProced+ready])
 
 		select {
-		case headerProcCh <- process:
+		case headerProcCh <- process:   // 传递 一批 headers
 			log.Trace("Pre-scheduled new headers", "peer", id, "count", len(process), "from", process[0].Number)
 			q.headerProced += len(process)
 		default:
@@ -996,11 +1000,13 @@ func (q *queue) deliver(id string, taskPool map[common.Hash]*types.Header, taskQ
 
 // Prepare configures the result cache to allow accepting and caching inbound
 // fetch results.
+//
+//`Prepare()`  配置  结果缓存 以允许 接受 和缓存 入站 同步结果
 func (q *queue) Prepare(offset uint64, mode SyncMode) {
 	q.lock.Lock()
 	defer q.lock.Unlock()
 
-	// Prepare the queue for sync results
+	// Prepare the queue for sync results    准备队列以获取同步结果
 	if q.resultOffset < offset {
 		q.resultOffset = offset
 	}

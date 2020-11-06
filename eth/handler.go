@@ -66,13 +66,18 @@ func errResp(code errCode, format string, v ...interface{}) error {
 type ProtocolManager struct {
 	networkID uint64
 
-	fastSync  uint32 // Flag whether fast sync is enabled (gets disabled if we already have blocks)
-	acceptTxs uint32 // Flag whether we're considered synchronised (enables transaction processing)
+	fastSync  uint32 // Flag whether fast sync is enabled (gets disabled if we already have blocks)     快速同步开关 0：关闭, 1: 开启
+	acceptTxs uint32 // Flag whether we're considered synchronised (enables transaction processing)		(看了代码目前只会是 1 这个值) 是否允许同步 txs 的开关  0: 关闭,  1: 允许   todo 只有 block 同步已完成才开启  tx同步标识
 
+	// tx_pool 引用
 	txpool      txPool
+	// chain 引用
 	blockchain  *core.BlockChain
+	// 链配置 信息
 	chainconfig *params.ChainConfig
-	maxPeers    int  //本地节点做大允许连接的远端节点数目
+
+	// 本地节点做大允许连接的远端节点数目
+	maxPeers    int
 
 	// downloader  和 fetcher 都是在 ProtocolManager 中 NewProtocolManager() 实例化的
 	downloader *downloader.Downloader
@@ -208,7 +213,7 @@ func NewProtocolManager(config *params.ChainConfig, mode downloader.SyncMode, ne
 			log.Warn("Discarded bad propagated block", "number", blocks[0].Number(), "hash", blocks[0].Hash())
 			return 0, nil
 		}
-		atomic.StoreUint32(&manager.acceptTxs, 1) // Mark initial sync done on any fetcher import
+		atomic.StoreUint32(&manager.acceptTxs, 1) // Mark initial sync done on any fetcher import   将任何 fecther 标记为已完成初始同步
 		return manager.blockchain.InsertChain(blocks)
 	}
 
@@ -252,16 +257,16 @@ func (pm *ProtocolManager) Start(maxPeers int) {
 
 	// broadcast transactions
 	pm.txsCh = make(chan core.NewTxsEvent, txChanSize)
-	pm.txsSub = pm.txpool.SubscribeNewTxsEvent(pm.txsCh)
-	go pm.txBroadcastLoop()  		// 处理 新 tx 广播
+	pm.txsSub = pm.txpool.SubscribeNewTxsEvent(pm.txsCh)  // todo 监听 当前本地 tx_pool 中的 新 txs
+	go pm.txBroadcastLoop()  		// todo 处理 新 tx 广播
 
 	// broadcast mined blocks
-	pm.minedBlockSub = pm.eventMux.Subscribe(core.NewMinedBlockEvent{})  // todo 监听 当亲本地 node 的  miner 挖出的 新 block 事件
-	go pm.minedBroadcastLoop()		 // 处理 block 广播和 hash、Number 等发布
+	pm.minedBlockSub = pm.eventMux.Subscribe(core.NewMinedBlockEvent{})  // todo 监听 当前本地 node 的  miner 挖出的 新 block 事件
+	go pm.minedBroadcastLoop()		 // todo 处理 block 广播和 hash、Number 等发布  <最终由对端 peer 的 Fecther 来处理>
 
 	// start sync handlers
-	go pm.syncer()					// downloader 和 fetcher 相关
-	go pm.txsyncLoop()				// 处理 tx_pool.pending 的 txs 发送  (选择 [对端peer => txs] 对来操作)
+	go pm.syncer()					// todo downloader 和 fetcher 相关
+	go pm.txsyncLoop()				// todo 处理 tx_pool.pending 的 txs 发送  (选择 [对端peer => txs] 对来操作)
 }
 
 func (pm *ProtocolManager) Stop() {
@@ -333,7 +338,7 @@ func (pm *ProtocolManager) handle(p *peer) error {
 	defer pm.removePeer(p.id)
 
 	// Register the peer in the downloader. If the downloader considers it banned, we disconnect
-	if err := pm.downloader.RegisterPeer(p.id, p.version, p); err != nil {
+	if err := pm.downloader.RegisterPeer(p.id, p.version, p); err != nil {  // todo 将远端 peer 的信息, 加到本地 downloader.peerSet 中  (用来 同步数据用)
 		return err
 	}
 	// Propagate existing transactions. new transactions appearing
@@ -738,14 +743,14 @@ func (pm *ProtocolManager) handleMsg(p *peer) error {
 		)
 		// Update the peers total difficulty if better than the previous
 		if _, td := p.Head(); trueTD.Cmp(td) > 0 {
-			p.SetHead(trueHead, trueTD)
+			p.SetHead(trueHead, trueTD)   // 没收到一个 对端 peer 发来的 block 时, 更新在本地 peerSet 中的对端 peer 快照的  td 和 header
 
 			// Schedule a sync if above ours. Note, this will not fire a sync for a gap of
 			// a singe block (as the true TD is below the propagated block), however this
 			// scenario should easily be covered by the fetcher.
 			currentBlock := pm.blockchain.CurrentBlock()
 			if trueTD.Cmp(pm.blockchain.GetTd(currentBlock.Hash(), currentBlock.NumberU64())) > 0 {
-				go pm.synchronise(p)
+				go pm.synchronise(p)  // 向 td 越大的 对端peer 发起同步作业
 			}
 		}
 

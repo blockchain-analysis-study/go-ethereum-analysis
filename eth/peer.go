@@ -177,7 +177,7 @@ func (p *peer) Head() (hash common.Hash, td *big.Int) {
 	defer p.lock.RUnlock()
 
 	copy(hash[:], p.head[:])
-	return hash, new(big.Int).Set(p.td)
+	return hash, new(big.Int).Set(p.td) // 获取 本地 peerSet 中对端 peer 快照中的 td 和 最高块的Hash
 }
 
 // SetHead updates the head hash and total difficulty of the peer.
@@ -388,7 +388,7 @@ func (p *peer) Handshake(network uint64, td *big.Int, head common.Hash, genesis 
 			return p2p.DiscReadTimeout
 		}
 	}
-	p.td, p.head = status.TD, status.CurrentBlock
+	p.td, p.head = status.TD, status.CurrentBlock  // 和对端 peer 发出 第一次 msg 握手信号时, 更新 存在本地 peerSet 中的对端peer快照的 td 和 最高blockHeader
 	return nil
 }
 

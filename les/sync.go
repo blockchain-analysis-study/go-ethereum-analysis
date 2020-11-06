@@ -85,5 +85,5 @@ func (pm *ProtocolManager) synchronise(peer *peer) {
 	/**
 	todo 这里才是开始同步 light 模式
 	 */
-	pm.downloader.Synchronise(peer.id, peer.Head(), peer.Td(), downloader.LightSync)
+	pm.downloader.Synchronise(peer.id, peer.Head(), peer.Td(), downloader.LightSync)  // todo (downloader 的工作入口点)   light 模式
 }

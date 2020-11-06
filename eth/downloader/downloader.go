@@ -69,9 +69,12 @@ var (
 	fsHeaderSafetyNet      = 2048            // Number of headers to discard in case a chain violation is detected
 	fsHeaderForceVerify    = 24              // Number of headers to verify before and after the pivot to accept it
 	fsHeaderContCheck      = 3 * time.Second // Time interval to check for header continuations during state download
+
 	// 即使在 fast 同步下也能完全拉取的块数
 	// fast其实不是从当前对端节点的最高块开始,而是从最高块往前64个块开始同步
-	// 这里是以太坊故意留64个块,在fast之后赶紧做full以校验数据的准确性
+	//
+	// 这里是 todo 以太坊故意留64个块,在fast之后赶紧做full以校验数据的准确性
+	//
 	fsMinFullBlocks        = 64              // Number of blocks to retrieve fully even in fast sync
 )
 
@@ -123,8 +126,8 @@ type Downloader struct {
 	rttConfidence uint64
 
 	// Statistics
-	syncStatsChainOrigin uint64 // Origin block number where syncing started at
-	syncStatsChainHeight uint64 // Highest block number known when syncing started
+	syncStatsChainOrigin uint64 // Origin block number where syncing started at			开始同步的原始块号
+	syncStatsChainHeight uint64 // Highest block number known when syncing started		开始同步时已知的最高块号
 	syncStatsState       stateSyncStats
 	syncStatsLock        sync.RWMutex // Lock protecting the sync stats fields
 
@@ -137,8 +140,9 @@ type Downloader struct {
 
 	// Status
 	synchroniseMock func(id string, hash common.Hash) error // Replacement for synchronise during testing
-	synchronising   int32
-	notified        int32
+
+	synchronising   int32	// 同步作业中 标识位  0： 为同步作业,  1：同步作业中
+	notified        int32   // 代码中目前只看到 将值改为1, 然后没用了 ...
 	committed       int32
 
 	// Channels
@@ -150,12 +154,12 @@ type Downloader struct {
 	// 接收入站 receipts的通道
 	receiptCh     chan dataPack        // [eth/63] Channel receiving inbound receipts
 
-	// 向新tasks的block body获取程序(fetcher)发送信号的chan
+	// 向新tasks的block body获取程序(fetcher)发送信号的chan   	(false: 同步已完成，不需要启动新的任务了   true: 启动新的 body 同步任务信号)
 	bodyWakeCh    chan bool            // [eth/62] Channel to signal the block body fetcher of new tasks
-	// 向新tasks的receipt获取者(fetcher)发送信号的chan
+	// 向新tasks的receipt获取者(fetcher)发送信号的chan			(false: 同步已完成，不需要启动新的任务了   true: 启动新的 receipts 同步任务信号)
 	receiptWakeCh chan bool            // [eth/63] Channel to signal the receipt fetcher of new tasks
 
-	// 向header处理器提供新tasks的chan
+	// 向 header 处理器  提供新tasks的chan  (用来处理 下载回来的 一批 headers)
 	headerProcCh  chan []*types.Header // [eth/62] Channel to feed the header processor new tasks
 
 	// for stateFetcher
@@ -164,6 +168,8 @@ type Downloader struct {
 	stateCh        chan dataPack // [eth/63] Channel receiving inbound node state data
 
 	// Cancellation and termination
+	//
+	// 当前正在做 数据同步的对端 peer 的 nodeId
 	cancelPeer string         // Identifier of the peer currently being used as the master (cancel on drop)
 	cancelCh   chan struct{}  // Channel to cancel mid-flight syncs
 	cancelLock sync.RWMutex   // Lock to protect the cancel channel and peer in delivers
@@ -310,7 +316,7 @@ func (d *Downloader) Progress() ethereum.SyncProgress {
 
 // Synchronising returns whether the downloader is currently retrieving blocks.
 func (d *Downloader) Synchronising() bool {
-	return atomic.LoadInt32(&d.synchronising) > 0
+	return atomic.LoadInt32(&d.synchronising) > 0  // 是否正在 同步block 中
 }
 
 // RegisterPeer injects a new download peer into the set of block source to be
@@ -363,8 +369,19 @@ func (d *Downloader) UnregisterPeer(id string) error {
 
 // Synchronise tries to sync up our local block chain with a remote peer, both
 // adding various sanity checks as well as wrapping it with various log entries.
+//
+//
+// todo (downloader 的工作入口点)
+//
+//	 入参:
+//
+//		id: 	对端peer的 nodeId
+// 		head:	存储在当前节点本地的 对端peer 的最高块的 hash 快照
+//		td:		存储在当前节点本地的 对端peer 的最新难度值 td 快照
+//		mode: 	同步模式  0: full  1: fast   2: light
+//
 func (d *Downloader) Synchronise(id string, head common.Hash, td *big.Int, mode SyncMode) error {
-	err := d.synchronise(id, head, td, mode)
+	err := d.synchronise(id, head, td, mode)  // 启动 downloader 同步程序  todo 里面会用 downloader.synchronising == 1 在 当前本地 peer 和某个对端peer 做同步还未完成时, 来阻塞 当前本地 peer 和 当前 对端peer 的同步作业
 	switch err {
 	case nil:
 	case errBusy:
@@ -389,32 +406,54 @@ func (d *Downloader) Synchronise(id string, head common.Hash, td *big.Int, mode 
 // synchronise will select the peer and use it for synchronising. If an empty string is given
 // it will use the best peer possible and synchronize if its TD is higher than our own. If any of the
 // checks fail an error will be returned. This method is synchronous
+//
+// todo downloader 往某个对端peer 发起同步请求
+//
+//
+// `synchronise()` 将选择 某个对端peer 并将其用于同步.
+// 					如果给出一个空字符串，它将使用可能的 最佳 对端peer，(如果其TD高于我们的TD，则将进行同步).
+// 					如果任何检查失败，将返回错误.
+//
+//
+//	 入参:
+//
+//		id: 	对端peer的 nodeId
+// 		head:	存储在当前节点本地的 对端peer 的最高块的 hash 快照
+//		td:		存储在当前节点本地的 对端peer 的最新难度值 td 快照
+//		mode: 	同步模式  0: full  1: fast   2: light
+//
 func (d *Downloader) synchronise(id string, hash common.Hash, td *big.Int, mode SyncMode) error {
 	// Mock out the synchronisation if testing
-	if d.synchroniseMock != nil {
+	if d.synchroniseMock != nil {   // 测试 mock 用的
 		return d.synchroniseMock(id, hash)
 	}
 	// Make sure only one goroutine is ever allowed past this point at once
-	if !atomic.CompareAndSwapInt32(&d.synchronising, 0, 1) {
+	if !atomic.CompareAndSwapInt32(&d.synchronising, 0, 1) {   // 同步作业开始前, 变更标识位为 1
 		return errBusy
 	}
-	defer atomic.StoreInt32(&d.synchronising, 0)
+	defer atomic.StoreInt32(&d.synchronising, 0)  // todo 本次 当前本地peer 和 当前对端 peer 同步结束, 更改同步作业中 标识位
 
-	// Post a user notification of the sync (only once per session)
+	// Post a user notification of the sync (only once per session)   发布用户同步通知（每个会话一次）
 	if atomic.CompareAndSwapInt32(&d.notified, 0, 1) {
 		log.Info("Block synchronisation started")
 	}
+
+	// todo 下面是 本次 同步之前, 先将所有的 通道还有一些状态 全部清空 (重置)
+
 	// Reset the queue, peer set and wake channels to clean any internal leftover state
+	//
+	// 重置 queue ，downloader中的 peerSet 和 wake通道 以清除任何内部剩余状态
 	d.queue.Reset()
 	d.peers.Reset()
 
-	for _, ch := range []chan bool{d.bodyWakeCh, d.receiptWakeCh} {
+	for _, ch := range []chan bool{d.bodyWakeCh, d.receiptWakeCh} {  // 先 清空掉 【抓取 body 的信号通道 d.bodyWakeCh】 和 【抓取 receipt 的信号通道 d.receiptWakeCh】
 		select {
 		case <-ch:
 		default:
 		}
 	}
-	for _, ch := range []chan dataPack{d.headerCh, d.bodyCh, d.receiptCh} {
+
+	for _, ch := range []chan dataPack{d.headerCh, d.bodyCh, d.receiptCh} {  // 先不断尝试 清空掉 【接收 入站 header数据包 的通道 d.headerCh】 和 【接收 入站 body数据包 的通道 d.bodyCh】  和 【接收 入站 receipts数据包 的通道 d.receiptCh】
 		for empty := false; !empty; {
 			select {
 			case <-ch:
@@ -423,9 +462,11 @@ func (d *Downloader) synchronise(id string, hash common.Hash, td *big.Int, mode 
 			}
 		}
 	}
+
+	// 先不断尝试 清空 下载回来的 一批headers 的通道
 	for empty := false; !empty; {
 		select {
-		case <-d.headerProcCh:
+		case <-d.headerProcCh:  // 同步作业之前.  先不断尝试 清空 下载回来的 一批headers 的通道
 		default:
 			empty = true
 		}
@@ -441,18 +482,29 @@ func (d *Downloader) synchronise(id string, hash common.Hash, td *big.Int, mode 
 	// Set the requested sync mode, unless it's forbidden
 	d.mode = mode
 
-	// Retrieve the origin peer and initiate the downloading process
+	// Retrieve the origin peer and initiate the downloading process   检索原始对等方并启动下载过程
 	p := d.peers.Peer(id)
 	if p == nil {
 		return errUnknownPeer
 	}
-	return d.syncWithPeer(p, hash, td)
+	return d.syncWithPeer(p, hash, td)   // todo 从该对端peer上开始同步数据
 }
 
 // syncWithPeer starts a block synchronization based on the hash chain from the
 // specified peer and head hash.
-func (d *Downloader) syncWithPeer(p *peerConnection, hash common.Hash, td *big.Int) (err error) {
-	d.mux.Post(StartEvent{})
+//
+// `syncWithPeer()` 根据来自 指定对端 peer 和 header Hash 及 td 启动块同步
+//
+//
+//
+//	 入参:
+//
+//		p: 		本地peer和对端peer的 p2p 封装
+// 		head:	存储在当前节点本地的 对端peer 的最高块的 hash 快照
+//		td:		存储在当前节点本地的 对端peer 的最新难度值 td 快照
+//
+func (d *Downloader) syncWithPeer(p *peerConnection, hash common.Hash, td *big.Int) (err error) {  // todo 从该对端peer上开始同步数据
+	d.mux.Post(StartEvent{})   // 给所有 StartEvent 的订阅者, 发布一个 StartEvent
 	defer func() {
 		// reset on error
 		if err != nil {
@@ -467,47 +519,56 @@ func (d *Downloader) syncWithPeer(p *peerConnection, hash common.Hash, td *big.I
 
 	log.Debug("Synchronising with the network", "peer", p.id, "eth", p.version, "head", hash, "td", td, "mode", d.mode)
 	defer func(start time.Time) {
-		log.Debug("Synchronisation terminated", "elapsed", time.Since(start))
+		log.Debug("Synchronisation terminated", "elapsed", time.Since(start))  // 打印 同步开始 到 关闭 一共过去了多少时间
 	}(time.Now())
 
 	// Look up the sync boundaries: the common ancestor and the target block
-	//
-	// todo 查找同步边界：`公共祖先` 和 `目标块`
-	latest, err := d.fetchHeight(p)
+	// todo 查找同步边界：`公共祖先` 和 `目标块 pivot`
+
+
+	latest, err := d.fetchHeight(p)  // todo 发起 p2p 去对端 peer 拉取最新的 header
 	if err != nil {
 		return err
 	}
 	height := latest.Number.Uint64()
 
-	origin, err := d.findAncestor(p, height)
+	origin, err := d.findAncestor(p, height)  // todo 根据 height 和本地最高blockNumber, 查找 共同祖先的 blockNumber
 	if err != nil {
 		return err
 	}
 	d.syncStatsLock.Lock()
 	if d.syncStatsChainHeight <= origin || d.syncStatsChainOrigin > origin {
-		d.syncStatsChainOrigin = origin
+		d.syncStatsChainOrigin = origin  // 记录 本次同步的 开始 block number (从这个number 开始往后 同步)
 	}
 	d.syncStatsChainHeight = height
 	d.syncStatsLock.Unlock()
 
-	// Ensure our origin point is below any fast sync pivot point
+	// Ensure our origin point is below any fast sync pivot point    确保我们的 原点(开始同步的起点 <本地chain和对端peer的chain的公共祖先 origin>) 低于 任何 快速同步枢轴点 <pivot>
+
+
 	pivot := uint64(0)
-	if d.mode == FastSync {
+	if d.mode == FastSync {   // todo 如果是 fast 模式,  需要计算 快速同步枢轴点 pivot
+
+		// 如果 对端peer 的最高块的 blockNumber < 64，   那么我们从新调整 同步的起始点 <本地chain和对端peer的chain的公共祖先 origin> 为 0
 		if height <= uint64(fsMinFullBlocks) {
 			origin = 0
+
+		// 否则我们通过计算 pivot 来得出 新的 origin
 		} else {
-			pivot = height - uint64(fsMinFullBlocks)
+			pivot = height - uint64(fsMinFullBlocks)   // 对端peer 的最高块高 - 64 = pivot
+
+			// 结论: 如果 本地最高块高 和 对端peer 最高块高相差 < 64, 那么 origin 调整为  todo  对端peer的最高块 - 65    (精髓啊)
 			if pivot <= origin {
 				origin = pivot - 1
 			}
 		}
 	}
 
-	d.committed = 1
+	d.committed = 1  // committed: 承诺的
 	if d.mode == FastSync && pivot != 0 {
 		d.committed = 0
 	}
-	// Initiate the sync using a concurrent header and content retrieval algorithm
+	// Initiate the sync using a concurrent header and content retrieval algorithm   使用 并发 header 和 内容检索算法 启动同步
 	d.queue.Prepare(origin+1, d.mode)
 	if d.syncInitHook != nil {
 		d.syncInitHook(origin, height)
@@ -515,13 +576,12 @@ func (d *Downloader) syncWithPeer(p *peerConnection, hash common.Hash, td *big.I
 
 
 	/**
-	TODO 同步模块最重要的几部分
+	TODO 同步模块最重要的几部分  4 个函数
 
-	抓取 headers
-	抓取 bodies
-	抓取 receipts
-
-	将抓取到的 header 进行处理 <校验,刷盘> full fast light 都使用的函数 `processHeaders`
+	1、fetchHeaders:  	todo 从对端 peer, 拉取 headers 组成的`skeleton`， 填充 `skeleton` , 最终所有headers 都被拉回来. 影响: processHeaders()    (full, fast, light)
+	2、fetchBodies:		todo 从对端 peer, 拉取 body    (full, fast)
+	3、fetchReceipts:	todo 从对端 peer, 拉取 receipts   (fast)
+	4、processHeaders:	todo 处理从对端 peer 拉回来的 所有 headers, <校验,刷盘> , 通知下载对应的 body 和 receipts 信号, 影响: fetchBodies() 和 fetchReceipts()   (full, fast, light)
 	 */
 	fetchers := []func() error{
 		// headers 总是被拉取的 (根据 skeleton 骨架的方式去拉取) fast full light 都用到
@@ -543,16 +603,13 @@ func (d *Downloader) syncWithPeer(p *peerConnection, hash common.Hash, td *big.I
 	todo  processFastSyncContent 这个方法中就会最终调到这里
 	*/
 	if d.mode == FastSync {
-		// todo 如果是 fast 模式,处理 txs receipts states 的func
-		fetchers = append(fetchers, func() error { return d.processFastSyncContent(latest) })
+		fetchers = append(fetchers, func() error { return d.processFastSyncContent(latest) })   // todo 追加 处理 fast 模式,处理 txs, uncles, receipts, stateNode 的函数
 	} else if d.mode == FullSync {
-		// 否则只是处理 bodies 之类
-		// 逐个将拉取回来的 `fetchResult` 刷盘, 比较简单的实现
-		fetchers = append(fetchers, d.processFullSyncContent)
+		fetchers = append(fetchers, d.processFullSyncContent)  // todo 追加 处理 full 模式, 处理 tx, uncles 的函数
 	}
 
 	/** todo go, 上吧,皮卡丘~ */
-	return d.spawnSync(fetchers)
+	return d.spawnSync(fetchers)  // todo 这里启动 5 个 协程， 调用 上面 5个函数
 }
 
 // spawnSync runs d.process and all given fetcher functions to completion in
@@ -651,10 +708,8 @@ func (d *Downloader) Terminate() {
 // fetchHeight retrieves the head header of the remote peer to aid in estimating
 // the total time a pending synchronisation would take.
 //
-/**
-fetchHeight:
-拉取远程peer的头部(最高的)header，以帮助估计待处理的同步将花费的总时间
- */
+// fetchHeight():  拉取远程peer的 头部(最高的)header，以帮助估计待处理的同步将花费的总时间
+//
 func (d *Downloader) fetchHeight(p *peerConnection) (*types.Header, error) {
 	p.log.Debug("Retrieving remote chain height")
 
@@ -663,8 +718,7 @@ func (d *Downloader) fetchHeight(p *peerConnection) (*types.Header, error) {
 	// 请求播发的远程头(最高)块并等待响应
 	head, _ := p.peer.Head()
 
-	// todo 往对端 peer 发起拉取 block header 的请求 (根据hash)
-	go p.peer.RequestHeadersByHash(head, 1, 0, false)
+	go p.peer.RequestHeadersByHash(head, 1, 0, false)  // todo 往对端 peer 发起拉取 block header 的请求 (根据hash)
 
 	// 获取 downloader 允许的 请求存活时间
 	ttl := d.requestTTL()
@@ -720,8 +774,8 @@ func (d *Downloader) fetchHeight(p *peerConnection) (*types.Header, error) {
 // on the correct chain, checking the top N links should already get us a match.
 // In the rare scenario when we ended up on a long reorganisation (i.e. none of
 // the head links match), we do a binary search to find the common ancestor.
-func (d *Downloader) findAncestor(p *peerConnection, height uint64) (uint64, error) {
-	// Figure out the valid ancestor range to prevent rewrite attacks
+func (d *Downloader) findAncestor(p *peerConnection, height uint64) (uint64, error) {   // todo 根据 height 和本地最高blockNumber, 查找 共同祖先的 blockNumber
+	// Figure out the valid ancestor range to prevent rewrite attacks   找出 有效的祖先 范围以 防止 重写攻击
 	floor, ceil := int64(-1), d.lightchain.CurrentHeader().Number.Uint64()
 
 	if d.mode == FullSync {
@@ -892,7 +946,7 @@ func (d *Downloader) findAncestor(p *peerConnection, height uint64) (uint64, err
 // other peers are only accepted if they map cleanly to the skeleton. If no one
 // can fill in the skeleton - not even the origin peer - it's assumed invalid and
 // the origin is dropped.
-func (d *Downloader) fetchHeaders(p *peerConnection, from uint64, pivot uint64) error {
+func (d *Downloader) fetchHeaders(p *peerConnection, from uint64, pivot uint64) error {    // todo 从对端 peer, 下载 headers 组成的`skeleton`， 填充 `skeleton` (最终所有 headers 都被拉回来)
 	p.log.Debug("Directing header downloads", "origin", from)
 	defer p.log.Debug("Header download terminated")
 
@@ -915,9 +969,7 @@ func (d *Downloader) fetchHeaders(p *peerConnection, from uint64, pivot uint64) 
 
 	var ttl time.Duration
 
-	/**
-	封装 获取头的函数
-	 */
+	// todo 发起 获取 一批headers 的函数
 	getHeaders := func(from uint64) {
 		request = time.Now()
 
@@ -929,16 +981,22 @@ func (d *Downloader) fetchHeaders(p *peerConnection, from uint64, pivot uint64) 
 		if skeleton {
 			// 如果是用骨架同步的话 (一般,同步开始的时候先用 骨架同步方式, 同步回几个关键的 block 作为骨架点)
 			p.log.Trace("Fetching skeleton headers", "count", MaxHeaderFetch, "from", from)
+
+			// todo 骨架拉取
+			// 从  from+191 开始拉取一批 headers, 最多拉 128 个headers, 每间隔 191 个blockNumber 拉取一个header, 一直从拉到 对端peer 的链上最高块为止 ...
 			go p.peer.RequestHeadersByNumber(from+uint64(MaxHeaderFetch)-1, MaxSkeletonSize, MaxHeaderFetch-1, false)
 		} else {
 			// 使用 正常同步方式, 一般是骨架同步关键 block 之后
 			p.log.Trace("Fetching full headers", "count", MaxHeaderFetch, "from", from)
+
+			// todo 正常的,  非骨架的 拉取
+			// 从 from 为起始点. 开始拉一批 headers, 最多拉 192 个, 连续的(间隔为 0 个blockNumber),  一直从拉到 对端peer 的链上最高块为止 ...
 			go p.peer.RequestHeadersByNumber(from, MaxHeaderFetch, 0, false)
 		}
 	}
 	// Start pulling the header chain skeleton until all is done
-	// 开始拉取回 headeR chain 骨架，直到完成所有操作
-	getHeaders(from) // 先拉 骨架
+	// 开始拉取回 header chain 骨架，直到完成所有操作
+	getHeaders(from) // todo 先拉 header 组成的 骨架
 
 	for {
 		select {
@@ -952,7 +1010,7 @@ func (d *Downloader) fetchHeaders(p *peerConnection, from uint64, pivot uint64) 
 			// Make sure the active peer is giving us the skeleton headers
 			// 确保活动的 peer 正在给我们骨架点上的 headers
 			//
-			// 如果不是对应的对端peer发回来的消息包
+			// todo 如果不是对应的对端peer发回来的消息包
 			if packet.PeerId() != p.id {
 				log.Debug("Received skeleton from incorrect peer", "peer", packet.PeerId())
 				break
@@ -965,10 +1023,10 @@ func (d *Downloader) fetchHeaders(p *peerConnection, from uint64, pivot uint64) 
 
 			// If the skeleton's finished, pull any remaining head headers directly from the origin
 			//
-			// 如果骨架完成，直接从原点拉出任何剩余的header
+			// todo 如果骨架完成，直接从原点拉出任何剩余的header
 			if packet.Items() == 0 && skeleton {
 
-				// 现将骨架标识位置为: false
+				// todo 现将骨架标识位置为: false  (即: 后续不需要 以 骨架形式 拉取了 ...)
 				skeleton = false
 				// 从 起始点拉取剩余部分 headers
 				getHeaders(from)
@@ -977,7 +1035,7 @@ func (d *Downloader) fetchHeaders(p *peerConnection, from uint64, pivot uint64) 
 
 			// If no more headers are inbound, notify the content fetchers and return
 			//
-			// 如果没有更多的headers 入站，则通知所有内容提取器(fetchers)并返回
+			// todo 如果没有更多的headers 入站，则通知所有内容提取器(downloader)并返回
 			if packet.Items() == 0 {
 				// Don't abort header fetches while the pivot is downloading
 				//
@@ -995,7 +1053,7 @@ func (d *Downloader) fetchHeaders(p *peerConnection, from uint64, pivot uint64) 
 				// Pivot done (or not in fast sync) and no more headers, terminate the process
 				p.log.Debug("No more headers available")
 				select {
-				case d.headerProcCh <- nil:
+				case d.headerProcCh <- nil:   // todo  对端 peer 上已经没有 新的 header了, 预示着 headers 的同步已完成 ...
 					return nil
 				case <-d.cancelCh:
 					return errCancelHeaderFetch
@@ -1041,12 +1099,13 @@ func (d *Downloader) fetchHeaders(p *peerConnection, from uint64, pivot uint64) 
 			if len(headers) > 0 {
 				p.log.Trace("Scheduling new headers", "count", len(headers), "from", from)
 				select {
-				case d.headerProcCh <- headers:
+				case d.headerProcCh <- headers:   // 传递 从对端 peer 同步回来的 一批 headers
 				case <-d.cancelCh:
 					return errCancelHeaderFetch
 				}
 				from += uint64(len(headers))
 			}
+
 			getHeaders(from)
 
 		case <-timeout.C:
@@ -1062,14 +1121,14 @@ func (d *Downloader) fetchHeaders(p *peerConnection, from uint64, pivot uint64) 
 			d.dropPeer(p.id)  // 将该对端peer 从本地 ProtocolManager.peerSet 和 Downloader.peerSet 中移除   `ProtocolManager.removePeer()` 函数指针
 
 			// Finish the sync gracefully instead of dumping the gathered data though
-			for _, ch := range []chan bool{d.bodyWakeCh, d.receiptWakeCh} {
+			for _, ch := range []chan bool{d.bodyWakeCh, d.receiptWakeCh} { // 因为 移除了 非法的对端 peer, 那么从对端peer 上同步 body 和 receipts 的工作也就提前结束了 todo  往 两个通道中 发送  false 信号
 				select {
 				case ch <- false:
 				case <-d.cancelCh:
 				}
 			}
 			select {
-			case d.headerProcCh <- nil:
+			case d.headerProcCh <- nil:  //  因为 移除了 非法的对端 peer, todo  不需要 再从对端 peer 上 继续同步 新的 header了 ...
 			case <-d.cancelCh:
 			}
 			return errBadPeer
@@ -1087,14 +1146,15 @@ func (d *Downloader) fetchHeaders(p *peerConnection, from uint64, pivot uint64) 
 // The method returns the entire filled skeleton and also the number of headers
 // already forwarded for processing.
 //
-/**
-fillHeaderSkeleton:
-同时从所有可用 peer 拉取 header，并将它们映射到提供的 骨架header chain 上面
-
-骨架开头的任何部分结果（如果可能）都将立即转发到 headers 处理器，即使在 某个骨架点的header 停顿的情况下也可以保持其余的管道满载
-
-该方法返回整个已填充的骨架以及已被转发进行处理的 headers数目
- */
+// todo 填充 headers  骨架
+//
+// 	fillHeaderSkeleton:
+// 	同时从所有可用 peer 拉取 header，并将它们映射到提供的 骨架header chain 上面
+//
+// 	骨架开头的任何部分结果（如果可能）都将立即转发到 headers 处理器，即使在 某个骨架点的header 停顿的情况下也可以保持其余的管道满载
+//
+// 	该方法返回整个已填充的骨架以及已被转发进行处理的 headers数目
+//
 func (d *Downloader) fillHeaderSkeleton(from uint64, skeleton []*types.Header) ([]*types.Header, int, error) {
 	log.Debug("Filling up skeleton", "from", from)
 
@@ -1168,7 +1228,7 @@ func (d *Downloader) fillHeaderSkeleton(from uint64, skeleton []*types.Header) (
 // available peers, reserving a chunk of blocks for each, waiting for delivery
 // and also periodically checking for timeouts.
 func (d *Downloader) fetchBodies(from uint64) error {
-	log.Debug("Downloading block bodies", "origin", from)
+	log.Debug("Downloading block bodies", "origin", from)  // from 只在这里 打印用的 ...
 
 	var (
 		deliver = func(packet dataPack) (int, error) {
@@ -1289,10 +1349,10 @@ func (d *Downloader) fetchParts(errCancel error, deliveryCh chan dataPack, deliv
 			default:
 			}
 
-		case cont := <-wakeCh:
+		case cont := <-wakeCh:  // todo 读取出  downloader.bodyWakeCh  通道 或者 downloader.receiptWakeCh 通道中的 信号  false, 同步已完成, 没有新的 信号了
 			// The header fetcher sent a continuation flag, check if it's done
 			if !cont {
-				finished = true
+				finished = true   // todo 也就 预示着 本次 同步 当前类型数据包 完成了 ...
 			}
 			// Headers arrive, try to update the progress
 			select {
@@ -1457,22 +1517,15 @@ func (d *Downloader) processHeaders(origin uint64, pivot uint64, td *big.Int) er
 			return errCancelHeaderProcessing
 
 
-		/**
-		接收到 新的 已被下载回来的 headers
-		进行处理这些headers
-		 */
-		case headers := <-d.headerProcCh:
+		case headers := <-d.headerProcCh:   // 处理 从对端 peer 同步回来的 一批 headers
+
 			// Terminate header processing if we synced up
 			//
-			/**
-
-			todo 如果我们已经同步完了，则终止头处理
-			 */
+			// 如果我们已经同步完了，则终止头处理
 			if len(headers) == 0 {
 				// Notify everyone that headers are fully processed
 				//
-				// 通知所有人headers已完全处理, 需要去获取新的 block body 和 receipt了
-				for _, ch := range []chan bool{d.bodyWakeCh, d.receiptWakeCh} {
+				for _, ch := range []chan bool{d.bodyWakeCh, d.receiptWakeCh} {  // 对端 peer 没有新的 headers 同步过来了, 所以我们也不需要继续 同步  body  和 receipts 了
 					select {
 					case ch <- false:
 					case <-d.cancelCh:
@@ -1571,8 +1624,7 @@ func (d *Downloader) processHeaders(origin uint64, pivot uint64, td *big.Int) er
 					limit = len(headers)
 				}
 
-				// 每最大 2048个headers 为一组,拿去处理
-				chunk := headers[:limit]
+				chunk := headers[:limit]  // todo 每最大 2048 个headers 为一组,拿去处理
 
 				// In case of header only syncing, validate the chunk immediately
 				//
@@ -1665,7 +1717,7 @@ func (d *Downloader) processHeaders(origin uint64, pivot uint64, td *big.Int) er
 			// Signal the content downloaders of the availablility of new tasks
 			//
 			// 通知 继续下载新的内容的 tasks
-			for _, ch := range []chan bool{d.bodyWakeCh, d.receiptWakeCh} {
+			for _, ch := range []chan bool{d.bodyWakeCh, d.receiptWakeCh} {  // 对端还 继续发新的 header 过来, 所以我们需要针对这些 header 继续 同步  body 和 receipts
 				select {
 				case ch <- true:
 				default:
@@ -1942,6 +1994,10 @@ func (d *Downloader) commitPivotBlock(result *fetchResult) error {
 	return nil
 }
 
+// --------------- 下面这四个 重要的 传递 方法  ---------------
+//
+// 	在ProtocolManager.handleMsg() 中接收到数据时，会调用 Downloader 对象中几个「deliver」方法，将接收到的数据传递到 downloader 模块
+
 // DeliverHeaders injects a new batch of block headers received from a remote
 // node into the download schedule.
 func (d *Downloader) DeliverHeaders(id string, headers []*types.Header) (err error) {
@@ -1981,7 +2037,7 @@ func (d *Downloader) deliver(id string, destCh chan dataPack, packet dataPack, i
 	}
 	select {
 
-	// todo 将数据包 丢给 通道
+	// todo 将数据包 丢入 通道
 	case destCh <- packet:
 		return nil
 	case <-cancel:
@@ -1989,10 +2045,13 @@ func (d *Downloader) deliver(id string, destCh chan dataPack, packet dataPack, i
 	}
 }
 
+
+
+
 // qosTuner is the quality of service tuning loop that occasionally gathers the
 // peer latency statistics and updates the estimated request round trip time.
 //
-// qosTuner是服务质量调整循环，它偶尔会收集 对端peer 延迟统计信息并更新估计的请求往返时间。
+// qosTuner()   是服务质量调整循环，它偶尔会收集 对端peer 延迟统计信息并更新估计的请求往返时间
 //
 //
 // 知识点:

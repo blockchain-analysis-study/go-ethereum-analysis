@@ -128,10 +128,22 @@ type newBlockHashesData []struct {
 }
 
 // getBlockHeadersData represents a block header query.
+//
+// 抓取一批 header 的实例封装
+//
 type getBlockHeadersData struct {
+
+	// 拉取 一批 headers 的起点 blockNumber
 	Origin  hashOrNumber // Block from which to retrieve headers
+
+	// 最大一次拉多少个 header
 	Amount  uint64       // Maximum number of headers to retrieve
+
+	// 在连续的一批 header 中间隔的block 个数:  todo 如:  header1| skip |header2|...|skip|...|headerN
+	//
 	Skip    uint64       // Blocks to skip between consecutive headers
+
+	// 查询方向（false =上升到最新，true =下降到起源）
 	Reverse bool         // Query direction (false = rising towards latest, true = falling towards genesis)
 }
 

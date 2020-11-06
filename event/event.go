@@ -38,9 +38,19 @@ type TypeMuxEvent struct {
 // The zero value is ready to use.
 //
 // Deprecated: use Feed
+//
+//
+// TypeMux 封装 event 调度到已注册的接收者.
+// 			可以注册接收者以处理某些类型的事件. mux 停止后调用的任何操作都将返回ErrMuxClosed
+//
+// 零值可以使用了
+//
+// 不推荐使用了： 目前建议使用 Feed
+//
+//
 type TypeMux struct {
 	mutex   sync.RWMutex
-	subm    map[reflect.Type][]*TypeMuxSubscription
+	subm    map[reflect.Type][]*TypeMuxSubscription    // event类型 => 所有订阅了该 event 的实例 (这个里面又对了 TypeMux 做了封装)
 	stopped bool
 }
 
@@ -50,15 +60,13 @@ var ErrMuxClosed = errors.New("event: mux closed")
 // Subscribe creates a subscription for events of the given types. The
 // subscription's channel is closed when it is unsubscribed
 // or the mux is closed.
-
-/**
-订阅为给定类型的事件创建订阅。 订阅的通道在取消订阅时将被关闭
-或 mux 被关闭时。
- */
+//
+// Subscribe() 	为给 定类型的事件 创建 订阅实例
+// 				订阅实例 的通道在 取消订阅时 将被关闭 或 mux 被关闭时
+//
 func (mux *TypeMux) Subscribe(types ...interface{}) *TypeMuxSubscription {
 
-	/** 创建一个 订阅包实例 sub */
-	sub := newsub(mux)
+	sub := newsub(mux)  // todo 创建一个 订阅实例 sub
 
 	mux.mutex.Lock()
 	defer mux.mutex.Unlock()
@@ -104,21 +112,26 @@ func (mux *TypeMux) Subscribe(types ...interface{}) *TypeMuxSubscription {
 
 // Post sends an event to all receivers registered for the given type.
 // It returns ErrMuxClosed if the mux has been stopped.
+//
+//
+// Post()  	向所有为给定类型注册的接收者发送事件
+//			如果多路复用器已停止，则返回ErrMuxClosed
+//
 func (mux *TypeMux) Post(ev interface{}) error {
 	event := &TypeMuxEvent{
 		Time: time.Now(),
-		Data: ev,
+		Data: ev,  // 某种类型的event 引用
 	}
-	rtyp := reflect.TypeOf(ev)
+	rtyp := reflect.TypeOf(ev)  // 获取 event 的类型
 	mux.mutex.RLock()
-	if mux.stopped {
+	if mux.stopped {  // 当前 订阅者 已经关闭
 		mux.mutex.RUnlock()
 		return ErrMuxClosed
 	}
 	subs := mux.subm[rtyp]
 	mux.mutex.RUnlock()
 	for _, sub := range subs {
-		sub.deliver(event)
+		sub.deliver(event)   // 传递 event
 	}
 	return nil
 }
@@ -170,6 +183,8 @@ func posdelete(slice []*TypeMuxSubscription, pos int) []*TypeMuxSubscription {
 }
 
 // TypeMuxSubscription is a subscription established through TypeMux.
+//
+// TypeMuxSubscription是通过 TypeMux 建立的 订阅实例
 type TypeMuxSubscription struct {
 	mux     *TypeMux
 	created time.Time
@@ -238,7 +253,7 @@ func (s *TypeMuxSubscription) closewait() {
 
 func (s *TypeMuxSubscription) deliver(event *TypeMuxEvent) {
 	// Short circuit delivery if stale event
-	if s.created.After(event.Time) {
+	if s.created.After(event.Time) {  // 如果 订阅实例的 创建时间比 event 发出的时间晚, 那么该 订阅实例 将不接收到这 event
 		return
 	}
 	// Otherwise deliver the event

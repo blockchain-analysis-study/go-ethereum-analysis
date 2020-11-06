@@ -154,13 +154,18 @@ func (pm *ProtocolManager) syncer() {   // todo 处理同步逻辑 (关于 Fetch
 	defer pm.downloader.Terminate()
 
 	// Wait for different events to fire synchronisation operations
-	forceSync := time.NewTicker(forceSyncCycle)  // 10s 会去做一次 downloader 尝试同步
+	forceSync := time.NewTicker(forceSyncCycle)  // todo 10s 会去做一次 downloader 尝试同步
 	defer forceSync.Stop()
 
 	for {
+
+		// todo 我们可以看到 会存在 当前peer 和 多个 对端peer 的同步作业任务.  但是在 `pm.synchronise()` 中,
+		// todo 最终会用 downloader.synchronising == 1 在 当前本地 peer 和某个对端peer 做同步还未完成时, 来阻塞 当前本地 peer 和 当前 对端peer 的同步作业.
+		// todo 所以我们可以大胆的认为, downloader 的 同步作业 只能是一个时间中 当前本地 peer 和某个对端peer 做同步作业 ...
+
 		select {
 
-		// 只要有 新对端 peer 加入, 我们都启动 downloader 尝试下 同步
+		// todo 只要有 新对端 peer 加入, 我们都启动 downloader 尝试下 同步
 		case <-pm.newPeerCh:
 			// Make sure we have peers to select from, then sync
 			if pm.peers.Len() < minDesiredPeerCount {
@@ -180,25 +185,28 @@ func (pm *ProtocolManager) syncer() {   // todo 处理同步逻辑 (关于 Fetch
 }
 
 // synchronise tries to sync up our local block chain with a remote peer.
+//
+// 从 一个对端 peer 上同步一些 block 到 本地chain中   todo (downloader 的工作入口点)
+//
 func (pm *ProtocolManager) synchronise(peer *peer) {
 	// Short circuit if no peers are available
 	if peer == nil {
 		return
 	}
 	// Make sure the peer's TD is higher than our own
-	currentBlock := pm.blockchain.CurrentBlock()
-	td := pm.blockchain.GetTd(currentBlock.Hash(), currentBlock.NumberU64())
+	currentBlock := pm.blockchain.CurrentBlock()								// 本地 chain 的最高块高
+	td := pm.blockchain.GetTd(currentBlock.Hash(), currentBlock.NumberU64())	// 本地最新 难度值 td
 
-	pHead, pTd := peer.Head()
-	if pTd.Cmp(td) <= 0 {
+	pHead, pTd := peer.Head()	// 对端 peer 目前存在本地 的 td 和 最高块Hash
+	if pTd.Cmp(td) <= 0 {       // 如果本地 新的 block 和td 都超过该 对端peer, 那么不处理后续逻辑了
 		return
 	}
 	// Otherwise try to sync with the downloader
-	mode := downloader.FullSync
+	mode := downloader.FullSync  // downloader 默认是 full 模式
 	if atomic.LoadUint32(&pm.fastSync) == 1 {
 		// Fast sync was explicitly requested, and explicitly granted
 		mode = downloader.FastSync
-	} else if currentBlock.NumberU64() == 0 && pm.blockchain.CurrentFastBlock().NumberU64() > 0 {
+	} else if currentBlock.NumberU64() == 0 && pm.blockchain.CurrentFastBlock().NumberU64() > 0 {   // 上次做 fast 的最高块 (可能上次中断了, 导致 本地最高块 低于上次 fast的目标最高块)
 		// The database seems empty as the current block is the genesis. Yet the fast
 		// block is ahead, so fast sync was enabled for this node at a certain point.
 		// The only scenario where this can happen is if the user manually (or via a
@@ -210,20 +218,22 @@ func (pm *ProtocolManager) synchronise(peer *peer) {
 
 	if mode == downloader.FastSync {
 		// Make sure the peer's total difficulty we are synchronizing is higher.
-		if pm.blockchain.GetTdByHash(pm.blockchain.CurrentFastBlock().Hash()).Cmp(pTd) >= 0 {
+		if pm.blockchain.GetTdByHash(pm.blockchain.CurrentFastBlock().Hash()).Cmp(pTd) >= 0 {  // 在  fast 模式中,  本地的 td 大于 该对端 peer 的td, 则不做后续处理
 			return
 		}
 	}
 
 	// Run the sync cycle, and disable fast sync if we've went past the pivot block
-	if err := pm.downloader.Synchronise(peer.id, pHead, pTd, mode); err != nil {
+	//
+	// 启动 同步for 进程, 如果本地最高块 超过了同步时算的 pivot 块, 那么我们讲 todo 禁用 fast 模式,  后续都是 full 模式
+	if err := pm.downloader.Synchronise(peer.id, pHead, pTd, mode); err != nil {  // todo (downloader 的工作入口点)  full 或者 fast 模式
 		return
 	}
-	if atomic.LoadUint32(&pm.fastSync) == 1 {
+	if atomic.LoadUint32(&pm.fastSync) == 1 {  // fast 模式已完成, 关闭 fast, 启用 full
 		log.Info("Fast sync complete, auto disabling")
 		atomic.StoreUint32(&pm.fastSync, 0)
 	}
-	atomic.StoreUint32(&pm.acceptTxs, 1) // Mark initial sync done
+	atomic.StoreUint32(&pm.acceptTxs, 1) // Mark initial sync done  将初始同步标记为已完成
 	if head := pm.blockchain.CurrentBlock(); head.NumberU64() > 0 {
 		// We've completed a sync cycle, notify all peers of new state. This path is
 		// essential in star-topology networks where a gateway node needs to notify
@@ -231,6 +241,6 @@ func (pm *ProtocolManager) synchronise(peer *peer) {
 		// scenario will most often crop up in private and hackathon networks with
 		// degenerate connectivity, but it should be healthy for the mainnet too to
 		// more reliably update peers or the local TD state.
-		go pm.BroadcastBlock(head, false)
+		go pm.BroadcastBlock(head, false)   // false: 向其他 对端 peer 宣布   (最终造成影响: 只将 blockHash 和 blockNumber 发布给对端 peer)
 	}
 }

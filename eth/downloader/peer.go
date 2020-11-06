@@ -63,11 +63,11 @@ type peerConnection struct {
 	stateIdle   int32 // Current node data activity state of the peer (idle = 0, active = 1)
 
 
-	// 每秒可检索的标头数量
+	// 每秒可检索的 header 数量
 	headerThroughput  float64 // Number of headers measured to be retrievable per second
-	// 每秒可检索的块（实体）数
+	// 每秒可检索的 block 数
 	blockThroughput   float64 // Number of blocks (bodies) measured to be retrievable per second
-	// 每秒测量为可检索的收据数量
+	// 每秒测量为可检索的 receipt 数量
 	receiptThroughput float64 // Number of receipts measured to be retrievable per second
 	// 每秒测量为可检索的 state trie node 数据片数
 	stateThroughput   float64 // Number of node data pieces measured to be retrievable per second
@@ -84,13 +84,13 @@ type peerConnection struct {
 	// 开始获取最后一个 state trie node数据的时间
 	stateStarted   time.Time // Time instance when the last node data fetch was started
 
-	// 不需要请求的哈希集（以前没有） 什么 Hash 值? state trie Hash集
+	// 不需要请求的哈希集（以前没有）block Hash集
 	lacking map[common.Hash]struct{} // Set of hashes not to request (didn't have previously)
 
 	peer Peer  // 被封装的 peer 实例
 
 	// ETH协议版本号切换策略
-	version int        // Eth protocol version number to switch strategies
+	version int        // Eth protocol version number to switch strategies  62/63
 	log     log.Logger // Contextual logger to add extra infos to peer logs
 	lock    sync.RWMutex
 }
@@ -413,7 +413,7 @@ func (p *peerConnection) Lacks(hash common.Hash) bool {
 // peerSet represents the collection of active peer participating in the chain
 // download procedure.
 type peerSet struct {
-	peers        map[string]*peerConnection
+	peers        map[string]*peerConnection   // nodeId -> *peerConnection
 	newPeerFeed  event.Feed
 	peerDropFeed event.Feed
 	lock         sync.RWMutex
@@ -467,7 +467,7 @@ func (ps *peerSet) Register(p *peerConnection) error {
 		p.headerThroughput, p.blockThroughput, p.receiptThroughput, p.stateThroughput = 0, 0, 0, 0
 
 
-		/* 累加各个 peer 中记录的 同步各种数据的 吞吐量 */
+		// 累加各个 peer 中记录的 同步各种数据的 吞吐量
 		for _, peer := range ps.peers {
 			peer.lock.RLock()
 			p.headerThroughput += peer.headerThroughput
@@ -477,7 +477,7 @@ func (ps *peerSet) Register(p *peerConnection) error {
 			peer.lock.RUnlock()
 		}
 
-		/** 这里是将总的 吞吐量 除以 peer的个数, 得到个平均值 */
+		// 这里是将总的 吞吐量 除以 peer的个数, 得到个平均值
 		p.headerThroughput /= float64(len(ps.peers))
 		p.blockThroughput /= float64(len(ps.peers))
 		p.receiptThroughput /= float64(len(ps.peers))
@@ -485,7 +485,7 @@ func (ps *peerSet) Register(p *peerConnection) error {
 	}
 
 
-	ps.peers[p.id] = p
+	ps.peers[p.id] = p  // 将 对端peer 加入 downloader.peerSet 中
 	ps.lock.Unlock()
 
 	ps.newPeerFeed.Send(p)
