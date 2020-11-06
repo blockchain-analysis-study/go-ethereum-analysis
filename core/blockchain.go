@@ -858,7 +858,7 @@ func SetReceiptsData(config *params.ChainConfig, block *types.Block, receipts ty
 
 // InsertReceiptChain attempts to complete an already existing header chain with
 // transaction and receipt data.
-func (bc *BlockChain) InsertReceiptChain(blockChain types.Blocks, receiptChain []types.Receipts) (int, error) {
+func (bc *BlockChain) InsertReceiptChain(blockChain types.Blocks, receiptChain []types.Receipts) (int, error) { // todo 直接插入 block 和 receipts,  不执行 block
 	bc.wg.Add(1)
 	defer bc.wg.Done()
 
@@ -1145,9 +1145,9 @@ InsertChain函数：
 
 插入完成后，将触发所有累积的事件。
  */
-func (bc *BlockChain) InsertChain(chain types.Blocks) (int, error) {
+func (bc *BlockChain) InsertChain(chain types.Blocks) (int, error) {  // todo 这里 会去 执行 block
 	// 把 一堆 block 集合 写入链
-	n, events, logs, err := bc.insertChain(chain)
+	n, events, logs, err := bc.insertChain(chain)  // 给外边调用
 	// 广播 事件
 	bc.PostChainEvents(events, logs)
 	return n, err
@@ -1160,7 +1160,7 @@ func (bc *BlockChain) InsertChain(chain types.Blocks) (int, error) {
 insertChain函数：
 将执行实际的链插入和事件聚合。 此方法作为单独方法存在的唯一原因是使用延迟语句使锁定更清晰。
  */
-func (bc *BlockChain) insertChain(chain types.Blocks) (int, []interface{}, []*types.Log, error) {
+func (bc *BlockChain) insertChain(chain types.Blocks) (int, []interface{}, []*types.Log, error) {  // todo 这里 会去 执行 block
 	// Sanity check that we have something meaningful to import
 	// 完整性检查我们有一些有意义的东西要导入
 	if len(chain) == 0 {
@@ -1257,6 +1257,10 @@ func (bc *BlockChain) insertChain(chain types.Blocks) (int, []interface{}, []*ty
 			/** 初步校验 收到的块 */
 			err = bc.Validator().ValidateBody(block)
 		}
+
+
+
+		// todo 根据初步校验的  结果 err 来判断 ...
 		switch {
 		/** 如果是一个已知的块 */
 		case err == ErrKnownBlock:
@@ -1324,7 +1328,7 @@ func (bc *BlockChain) insertChain(chain types.Blocks) (int, []interface{}, []*ty
 			}
 			// Import all the pruned blocks to make the state available
 			bc.chainmu.Unlock()
-			_, evs, logs, err := bc.insertChain(winner)
+			_, evs, logs, err := bc.insertChain(winner) // 递归
 			bc.chainmu.Lock()
 			events, coalescedLogs = evs, logs
 
@@ -1332,6 +1336,7 @@ func (bc *BlockChain) insertChain(chain types.Blocks) (int, []interface{}, []*ty
 				return i, events, coalescedLogs, err
 			}
 
+		// 初步校验没 err
 		case err != nil:
 			bc.reportBlock(block, nil, err)
 			return i, events, coalescedLogs, err
@@ -1349,7 +1354,7 @@ func (bc *BlockChain) insertChain(chain types.Blocks) (int, []interface{}, []*ty
 			return i, events, coalescedLogs, err
 		}
 		// Process block using the parent state as reference point.
-		receipts, logs, usedGas, err := bc.processor.Process(block, state, bc.vmConfig)
+		receipts, logs, usedGas, err := bc.processor.Process(block, state, bc.vmConfig)  // todo 这里 会去 执行 block
 		if err != nil {
 			bc.reportBlock(block, receipts, err)
 			return i, events, coalescedLogs, err
