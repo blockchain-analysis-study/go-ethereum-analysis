@@ -226,7 +226,7 @@ func (t *rlpx) doProtoHandshake(our *protoHandshake) (their *protoHandshake, err
 		return nil, fmt.Errorf("write error: %v", err)
 	}
 	// If the protocol version supports Snappy encoding, upgrade immediately  如果协议版本支持Snappy编码，请立即升级
-	t.rw.snappy = their.Version >= snappyProtocolVersion
+	t.rw.snappy = their.Version >= snappyProtocolVersion  // 默认 当前p2p功能版本为第5版 (开启 snappy 压缩)
 
 	return their, nil
 }

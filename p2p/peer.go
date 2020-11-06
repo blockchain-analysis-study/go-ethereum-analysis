@@ -66,7 +66,7 @@ const (
 //
 // protoHandshake是协议握手的RLP结构
 type protoHandshake struct {
-	Version    uint64   // 当前p2p功能版本为第5版
+	Version    uint64   // 当前p2p功能版本为第5版 (开启 snappy 压缩)
 	Name       string   // 表示客户端软件身份，人类可读字符串, 比如: "Ethereum(++)/1.0.0"
 	Caps       []Cap    // 支持的子协议列表，Name 及其 Version    如: [[cap1, capVersion1], [cap2, capVersion2], ...]
 	ListenPort uint64	// 节点的收听端口 (位于当前连接路径的接口)，0表示没有收听

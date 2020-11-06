@@ -565,7 +565,7 @@ func (srv *Server) Start() (err error) {
 	dynPeers := srv.maxDialedConns()  // 计算 允许的最大连接数
 	dialer := newDialState(srv.StaticNodes, srv.BootstrapNodes, srv.ntab, dynPeers, srv.NetRestrict)  // 实例化 连接状态结构 (拨号状态结构)
 
-	// handshake
+	// handshake    默认: 当前p2p功能版本为第5版 (开启 snappy 压缩)
 	srv.ourHandshake = &protoHandshake{Version: baseProtocolVersion, Name: srv.Name, ID: discover.PubkeyID(&srv.PrivateKey.PublicKey)}
 	for _, p := range srv.Protocols {
 		srv.ourHandshake.Caps = append(srv.ourHandshake.Caps, p.cap())
