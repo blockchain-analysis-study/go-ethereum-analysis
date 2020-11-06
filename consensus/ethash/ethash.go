@@ -238,7 +238,7 @@ func (c *cache) generate(dir string, limit int, test bool) {
 
 		// We're about to mmap the file, ensure that the mapping is cleaned up when the
 		// cache becomes unused.
-		runtime.SetFinalizer(c, (*cache).finalizer)
+		runtime.SetFinalizer(c, (*cache).finalizer)  // 将 类型 *cache 的方法指针 finalizer() 传递进来
 
 		// Try to load the file from disk and memory map it
 		var err error

@@ -580,10 +580,14 @@ func (pm *ProtocolManager) handleMsg(p *peer) error {
 			uncles[i] = body.Uncles
 		}
 		// Filter out any explicitly requested bodies, deliver the rest to the downloader
+		//
+		// 过滤 body
 		filter := len(transactions) > 0 || len(uncles) > 0
 		if filter {
 			transactions, uncles = pm.fetcher.FilterBodies(p.id, transactions, uncles, time.Now())
 		}
+
+		// 如果 还有剩余的 body 需要过滤,  或者 之前不需要过滤 body 的话, 我们全部交给 downloader 解决
 		if len(transactions) > 0 || len(uncles) > 0 || !filter {
 			err := pm.downloader.DeliverBodies(p.id, transactions, uncles)
 			if err != nil {

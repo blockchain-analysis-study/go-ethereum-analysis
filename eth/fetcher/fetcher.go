@@ -331,6 +331,8 @@ func (f *Fetcher) FilterHeaders(peer string, headers []*types.Header, time time.
 
 // FilterBodies extracts all the block bodies that were explicitly requested by
 // the fetcher, returning those that should be handled differently.
+//
+// 和 FilterHeaders() 类似的处理方式
 func (f *Fetcher) FilterBodies(peer string, transactions [][]*types.Transaction, uncles [][]*types.Header, time time.Time) ([][]*types.Transaction, [][]*types.Header) {
 	log.Trace("Filtering bodies", "peer", peer, "txs", len(transactions), "uncles", len(uncles))
 
@@ -366,9 +368,10 @@ func (f *Fetcher) loop() {   // todo Fetcher 的守护进程. 一直处理 Fetch
 	completeTimer := time.NewTimer(0)		// ()
 
 	for {
+
 		// Clean up any expired block fetches
 		//
-		// 清理所有过期的 block 的 抓取
+		// 去掉下载超时的 block 抓取通知信息
 		for hash, announce := range f.fetching {
 			if time.Since(announce.time) > fetchTimeout {
 				f.forgetHash(hash)  // 删除该 blockHash 的 抓取通知 annonces
@@ -691,6 +694,8 @@ func (f *Fetcher) loop() {   // todo Fetcher 的守护进程. 一直处理 Fetch
 		case filter := <-f.bodyFilter:
 
 			// Block bodies arrived, extract any explicitly requested blocks, return the rest
+			//
+			// block  body 到达，提取任何显式请求的 block，返回 剩下的未经过滤的信息
 			var task *bodyFilterTask
 			select {
 			case task = <-filter:
@@ -700,19 +705,28 @@ func (f *Fetcher) loop() {   // todo Fetcher 的守护进程. 一直处理 Fetch
 			bodyFilterInMeter.Mark(int64(len(task.transactions)))
 
 			blocks := []*types.Block{}
+
+			// 对于每一组数据，查看其 tx Hash 和 uncle 哈希是否在 Fetcher.queued 中的 header 中
 			for i := 0; i < len(task.transactions) && i < len(task.uncles); i++ {
-				// Match up a body to any possible completion request
+				// Match up a body to any possible completion request     如果该区块仍未到达，请等待完成
 				matched := false
 
+				// 遍历所有 需要被 下载 body 的 block Hash
 				for hash, announce := range f.completing {
+
+					// 只处理 还没有需要被 插入到本地chain 中的
 					if f.queued[hash] == nil {
+
+						// 计算出 当前 抓取来的  body 中的 tx Root  和  uncles Root
 						txnHash := types.DeriveSha(types.Transactions(task.transactions[i]))
 						uncleHash := types.CalcUncleHash(task.uncles[i])
 
+						// 分别对比 之前抓取回来的  header 中的 tx Root  和 uncles Root
 						if txnHash == announce.header.TxHash && uncleHash == announce.header.UncleHash && announce.origin == task.peer {
 							// Mark the body matched, reassemble if still unknown
 							matched = true
 
+							// 将 header 和 这些 tx 和 uncles 封装成 一个 block
 							if f.getBlock(hash) == nil {
 								block := types.NewBlockWithHeader(announce.header).WithBody(task.transactions[i], task.uncles[i])
 								block.ReceivedAt = task.time
@@ -724,6 +738,8 @@ func (f *Fetcher) loop() {   // todo Fetcher 的守护进程. 一直处理 Fetch
 						}
 					}
 				}
+
+				// 去除掉  已经被过滤成功的 tx 和uncles， 将剩余的  未知的  tx 和  uncles 收集起来
 				if matched {
 					task.transactions = append(task.transactions[:i], task.transactions[i+1:]...)
 					task.uncles = append(task.uncles[:i], task.uncles[i+1:]...)
@@ -734,11 +750,16 @@ func (f *Fetcher) loop() {   // todo Fetcher 的守护进程. 一直处理 Fetch
 
 			bodyFilterOutMeter.Mark(int64(len(task.transactions)))
 			select {
+			// 将 未知的 tx 和 uncles 返回出去
 			case filter <- task:
 			case <-f.quit:
 				return
 			}
+
+
 			// Schedule the retrieved blocks for ordered import
+			//
+			// 将收集好 body 封装成的  block 准备做插入本地 chain
 			for _, block := range blocks {
 				if announce := f.completing[block.Hash()]; announce != nil {
 					f.enqueue(announce.origin, block)  // todo 先缓存其 block 用于 异步的 插入 本地 chain中
@@ -806,6 +827,9 @@ func (f *Fetcher) enqueue(peer string, block *types.Block) {   // todo 先缓存
 		return
 	}
 	// Discard any past or too distant blocks  丢弃 所有过去 或 距离太远 的 blocks
+	//
+	// 首先确保不会有太多来自同一节点的区块等待入库
+	// 然后确保这个区块 不会太旧 也 不会太新
 	if dist := int64(block.NumberU64()) - int64(f.chainHeight()); dist < -maxUncleDist || dist > maxQueueDist {
 		log.Debug("Discarded propagated block, too far away", "peer", peer, "number", block.Number(), "hash", hash, "distance", dist)
 		propBroadcastDropMeter.Mark(1)
