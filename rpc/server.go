@@ -267,14 +267,14 @@ func (s *Server) serveRequest(ctx context.Context, codec ServerCodec, singleShot
 //
 func (s *Server) ServeCodec(codec ServerCodec, options CodecOption) {  // 异步处理 客户端 发过来的 rpc 方法调用请求
 	defer codec.Close()
-	s.serveRequest(context.Background(), codec, false, options)  // 具体处理客户端发来的请求 (异步处理)
+	s.serveRequest(context.Background(), codec, false, options)  // 具体处理客户端发来的请求 (异步处理)  todo  WebSocket、IPC、以及 InProc 使用
 }
 
 // ServeSingleRequest reads and processes a single RPC request from the given codec. It will not
 // close the codec unless a non-recoverable error has occurred. Note, this method will return after
 // a single request has been processed!
 func (s *Server) ServeSingleRequest(ctx context.Context, codec ServerCodec, options CodecOption) {
-	s.serveRequest(ctx, codec, true, options)  // 具体处理客户端发来的请求   (同步处理)
+	s.serveRequest(ctx, codec, true, options)  // 具体处理客户端发来的请求   (同步处理)   todo 只有 HTTP 使用
 }
 
 // Stop will stop reading new requests, wait for stopPendingRequestTimeout to allow pending requests to finish,

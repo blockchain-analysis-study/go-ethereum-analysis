@@ -200,7 +200,7 @@ func (sn *SimNode) ServeRPC(conn net.Conn) error {
 	if err != nil {
 		return err
 	}
-	handler.ServeCodec(rpc.NewJSONCodec(conn), rpc.OptionMethodInvocation|rpc.OptionSubscriptions)
+	handler.ServeCodec(rpc.NewJSONCodec(conn), rpc.OptionMethodInvocation|rpc.OptionSubscriptions) // InProc 使用 异步处理模式
 	return nil
 }
 

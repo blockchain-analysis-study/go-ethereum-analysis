@@ -35,7 +35,7 @@ func (srv *Server) ServeListener(l net.Listener) error {
 			return err
 		}
 		log.Trace("Accepted connection", "addr", conn.RemoteAddr())
-		go srv.ServeCodec(NewJSONCodec(conn), OptionMethodInvocation|OptionSubscriptions)
+		go srv.ServeCodec(NewJSONCodec(conn), OptionMethodInvocation|OptionSubscriptions)  // IPC 使用 异步处理模式
 	}
 }
 

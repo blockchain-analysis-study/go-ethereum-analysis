@@ -194,6 +194,14 @@ func (t *httpReadWriteNopCloser) Close() error {
 // NewHTTPServer creates a new HTTP RPC server around an API provider.
 //
 // Deprecated: Server implements http.Handler
+//
+// 创建一个 HTTP Server  实例..
+//
+//  入参:
+//		cors:   (Cross-origin resource sharing，跨域资源共享) 对应命令行 `--rpccorsdomain` 的选项.
+//		vhosts: (virtual host) 对应命令行 `--rpcvhosts` 的选项，它用来指定可以正常访问 rpc 服务的「 virtual hostnames」.
+// 							(这个参数主要是为了阻止绕过同源策略（Same Origin Policy，简称 SOP）的攻击)
+//
 func NewHTTPServer(cors []string, vhosts []string, timeouts HTTPTimeouts, srv *Server) *http.Server {
 	// Wrap the CORS-handler within a host-handler
 	handler := newCorsHandler(srv, cors)
@@ -244,7 +252,7 @@ func (srv *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	defer codec.Close()
 
 	w.Header().Set("content-type", contentType)
-	srv.ServeSingleRequest(ctx, codec, OptionMethodInvocation)
+	srv.ServeSingleRequest(ctx, codec, OptionMethodInvocation)  // http 需要调用 (同步处理模式)
 }
 
 // validateRequest returns a non-zero response code and error message if the
