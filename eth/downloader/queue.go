@@ -79,67 +79,107 @@ type fetchResult struct {
 /**
 todo queue: 代表  需要获取  或  正在获取  的hashes
 
+todo queue 对象是 downloader 模块的一个内部对象，只有 Downloader 对象使用了它.
+
+todo queue 对象是 downlaoder 模块的一个辅助对象，它的主要目的，是记录所需下载区块的各种信息，以及将分开下载的各区块信息（header，body，receipt等）组成完整的区块.
+
 即: 正在被处理的block 相关的 部件集合/ 队列 等等杂七杂八的
+
+在下载正式发起之前，以及数据真正下载之前，Downloader 对象会调用 queue 的一些方法，对其进行初始化，或将需要下载的数据信息告诉 queue
+
+Downloader 对象会使用 queue 提供的一些信息来决定和判断数据的下载状态等信息
+
  */
 type queue struct {
 	// 同步模式决定要计划要提取的block的部件
 	mode SyncMode // Synchronisation mode to decide on the block parts to schedule for fetching
 
 	// Headers are "special", they download in batches, supported by a skeleton chain
-	/**
-	Headers是“特殊的”，它们是分批下载的，并由骨架链来决定
-	 */
+	//
+	// Headers是“特殊的”，它们是分批下载的，并由骨架链来决定
+	//
+	//
+	//  - - - - - - - -  - - - - -  抓取 headers 相关  - - - - - - - -  - - - -  - -
 
 	// 最后一个排队的header的Hash以验证顺序 (用来校验 chain 的顺序)
 	headerHead      common.Hash                    // [eth/62] Hash of the last queued header to verify order
-	// 待处理的 header 拉取task，将起始索引映射到 骨架的headers上
-	// 保存所有骨架点的 header
-	// 以每一个 骨架点作为task的起始
+
+	// 待处理的 header 拉取task，将 起始索引映射到 骨架的headers上， 保存所有骨架点的 header， 以每一个 骨架点作为task的起始
+	//
+	// (骨架点Number -> 骨架点Header)
+	//
+	//
+	// todo 而我们刚才提到过 skeleton 参数中的区块头是每一组区块中的最后一个区块，
+	// todo 因此 queue.headerTaskPool 实际上是一个每一组区块中第一个区块的高度到最后一个区块的 header 的映射
+	//
 	headerTaskPool  map[uint64]*types.Header       // [eth/62] Pending header retrieval tasks, mapping starting indexes to skeleton headers
-	// 为了拉取header填充骨架的骨架索引优先队列
+
+	// 为了拉取header填充骨架的骨架 的 headers 抓取 task 优先队列
 	headerTaskQueue *prque.Prque                   // [eth/62] Priority queue of the skeleton indexes to fetch the filling headers for
+
 	// 每个peer 的header batch的已知不可用的集合
+	//
+	// 记录着节点下载数据失败的信息，通过这个字段 queue.ReserveHeaders() 避免了让远程节点重复下载它曾经下载失败的数据.
 	headerPeerMiss  map[string]map[uint64]struct{} // [eth/62] Set of per-peer header batches known to be unavailable
+
+	// 正在进行中 的 抓取 header 的 req    (nodeId -> req)
 	headerPendPool  map[string]*fetchRequest       // [eth/62] Currently pending header retrieval operations
+
 	// 结果缓存累积完成的 header (这里的已完成指的是 同步拉取回来的headers,  不是指 已经处理完成的)
 	headerResults   []*types.Header                // [eth/62] Result cache accumulating the completed headers
+
 	// 已被处理的 header 数量
 	headerProced    int                            // [eth/62] Number of headers already processed from the results
-	// 结果缓存中第一个header的编号
-	// 即当时构建骨架时的 起始点
+
+	// 结果缓存中第一个header的编号, 即: 当时构建骨架时的 起始点
 	headerOffset    uint64                         // [eth/62] Number of the first header in the result cache
+
 	// headers下载全部完成时通知的chan (即: headers 全部被下载完了)
 	headerContCh    chan bool                      // [eth/62] Channel to notify when header download finishes
 
 	// All data retrievals below are based on an already assembles header chain
 	//
-	/**
-	以下所有数据拉取均基于已组装的 header chain
-	 */
+	//
+	// - - - - -- - -  -    以下所有数据拉取均基于已组装的 header chain  - - - - - - -  - - - - -  - - - -
+	//
+	//
 
-
+	//  - - - - - - - -  - -  抓取 bodies 相关的  - - - - - - - - -  - - - - -
+	//
 	// 待处理的 block（ body）拉取task，将 hashes 映射到 headers
 	blockTaskPool  map[common.Hash]*types.Header // [eth/62] Pending block (body) retrieval tasks, mapping hashes to headers
-	// headers的优先级队列，以获取对应的 blocks（bodies）
+
+	// 用来抓取 body 的 task 优先队列
 	blockTaskQueue *prque.Prque                  // [eth/62] Priority queue of the headers to fetch the blocks (bodies) for
-	// 当前待处理的 block（body）的拉取操作req实例
+
+	// 正在进行中的 抓取 block 的 req实例  (nodeId -> req)
 	blockPendPool  map[string]*fetchRequest      // [eth/62] Currently pending block (body) retrieval operations
+
 	// 一组已完成抓取的block（body）的hash (去重用)
 	blockDonePool  map[common.Hash]struct{}      // [eth/62] Set of the completed block (body) fetches
 
+	// - - - - - - - - - - - -  抓取 receipts 相关的 - - - - --- - - - - - - - -  -
+	//
 	// 等待receipt拉取的task，将Hash映射到对用的header
 	receiptTaskPool  map[common.Hash]*types.Header // [eth/63] Pending receipt retrieval tasks, mapping hashes to headers
-	// headers的优先级队列，以获取其receipts
+
+	// 用来抓取 receipts 的 task  优先队列
 	receiptTaskQueue *prque.Prque                  // [eth/63] Priority queue of the headers to fetch the receipts for
-	// 当前待处理的receipt拉取req
+
+	// 正在进行中 的 抓取 receipt 的 req   (nodeId -> req)
 	receiptPendPool  map[string]*fetchRequest      // [eth/63] Currently pending receipt retrieval operations
+
 	// 一组已完成抓取的 receipt的hash
 	receiptDonePool  map[common.Hash]struct{}      // [eth/63] Set of the completed receipt fetches
 
-	// 已经被下载但尚未被处理的 req (即: req回来了但是结果数据还未被及时处理)
+	// 已经被下载完成 但尚未被处理的 req (即: req回来了但是结果数据还未被及时处理)
+	//
+	// (header, body, receipt)等都被下载了的数据 ...
 	resultCache  []*fetchResult     // Downloaded but not yet delivered fetch results
+
 	// 区块链中第一个缓存的获取结果的偏移量
 	resultOffset uint64             // Offset of the first cached fetch result in the block chain
+
 	// block的近似大小（指数移动平均线）
 	resultSize   common.StorageSize // Approximate size of a block (exponential moving average)
 
@@ -171,6 +211,7 @@ func newQueue() *queue {
 }
 
 // Reset clears out the queue contents.
+//
 func (q *queue) Reset() {
 	q.lock.Lock()
 	defer q.lock.Unlock()
@@ -208,6 +249,11 @@ func (q *queue) Close() {
 	q.active.Broadcast()
 }
 
+
+
+
+//  ----- -- --- ---- ---  pending 系列方法, 用来告诉调用者还有多少条数据需要下载  ----- -- --- ---- ---
+
 // PendingHeaders retrieves the number of header requests pending for retrieval.
 func (q *queue) PendingHeaders() int {
 	q.lock.Lock()
@@ -231,6 +277,16 @@ func (q *queue) PendingReceipts() int {
 
 	return q.receiptTaskQueue.Size()
 }
+
+
+
+
+
+
+//
+// - - - - - - - - - -  InFlight 系列方法, 用来告诉调用者当前是否有数据 正在被下载. - -  - - - - - -  - - - -
+//
+
 
 // InFlightHeaders retrieves whether there are header fetch requests currently
 // in flight.
@@ -270,6 +326,15 @@ func (q *queue) Idle() bool {
 
 	return (queued + pending + cached) == 0
 }
+
+
+//
+// - - - - - - -  - - -  ShouldThrottle 系列方法 - - - - - - - -  - - - -
+//
+// 用来告诉 调用者 是否该限制（或称为暂停）一下某类数据的下载， 其目的是为了防止下载过程中本地内存占用过大.
+//
+// 在 Downloader.fetchParts() 中向 某对端 peer 发起 获取数据请求之前，会进行这种判断.
+//
 
 // ShouldThrottleBlocks checks if the download should be throttled (active block (body)
 // fetches exceed block cache).
@@ -324,10 +389,22 @@ func (q *queue) resultSlots(pendPool map[string]*fetchRequest, donePool map[comm
 // ScheduleSkeleton adds a batch of header retrieval tasks to the queue to fill
 // up an already retrieved header skeleton.
 //
-// 将一批  header 拉取的任务添加到队列中，以填充已拉取回来的的 header 骨架
+//
+// 用来在填充 skeleton 之前，使用 skeketon 的信息对 queue 对象进行初始化
+//
+//  入参:
+//
+//		from: 		要下载 block 的起始点
+//		skeleton:	所有 骨架点上的 headers   (再次强调一下这些 header 是  每一组的最后一个 blockHeader)
+//
+//
 func (q *queue) ScheduleSkeleton(from uint64, skeleton []*types.Header) {
 	q.lock.Lock()
 	defer q.lock.Unlock()
+
+	//
+	// - - - - - - -  对 queue 的 各个字段的初始化  - - - - - - - - -
+	//
 
 	// No skeleton retrieval can be in progress, fail hard if so (huge implementation bug)
 	// 无法进行骨架 拉取，否则将导致失败（巨大的实现 bug）
@@ -335,22 +412,38 @@ func (q *queue) ScheduleSkeleton(from uint64, skeleton []*types.Header) {
 		panic("skeleton assembly already in progress")
 	}
 	// Schedule all the header retrieval tasks for the skeleton assembly
+	//
 	// 为了骨架装配而去拉取回来的所有 header的拉取task
 	q.headerTaskPool = make(map[uint64]*types.Header)
+
 	// 为了拉取header填充骨架的骨架索引优先队列
+	//
 	q.headerTaskQueue = prque.New()
+
 	// 重置可用性以更正无效链
 	// headerPeerMiss: 每个peer 的header batch的已知不可用的集合
+	//
 	q.headerPeerMiss = make(map[string]map[uint64]struct{}) // Reset availability to correct invalid chains
+
 	// 结果缓存累积完成的 header
+	//
 	q.headerResults = make([]*types.Header, len(skeleton)*MaxHeaderFetch)
+
 	// 初始化已被处理的 header 数量
 	q.headerProced = 0
-	// 结果缓存中第一个header的编号
-	// 即当时构建骨架时的 起始点
+
+	// 结果缓存中第一个header的编号,   即:  当时构建骨架时的 起始点
 	q.headerOffset = from
+
+	// headers下载全部完成时通知的chan (即: headers 全部被下载完了)
 	q.headerContCh = make(chan bool, 1)
 
+	// skeleton中每一组区块的个数是 MaxHeaderFetch <192>，(从  from+191 开始拉取一批 headers, 最多拉 128 个headers, 每间隔 191 个blockNumber 拉取一个header)
+	//
+	// 因此循环中的 index 变量实际上是每一组区块中的第一个区块的高度（比如 10、20、30），
+	// todo 而我们刚才提到过 skeleton 参数中的区块头是每一组区块中的最后一个区块，
+	// todo 因此 queue.headerTaskPool 实际上是一个每一组区块中第一个区块的高度到最后一个区块的 header 的映射
+	//
 	for i, header := range skeleton {
 		index := from + uint64(i*MaxHeaderFetch)
 
@@ -362,37 +455,44 @@ func (q *queue) ScheduleSkeleton(from uint64, skeleton []*types.Header) {
 // RetrieveHeaders retrieves the header chain assemble based on the scheduled
 // skeleton.
 //
-/**
-RetrieveHeaders:
-根据计划的骨架拉取header进行组装
- */
+//
+//  在对 skeleton 进行填充 `downloader.fillHeaderSkeleton()` 完成后，
+// 	queue.RetrieveHeaders() 用来获取整个 skeleton 中的所有 header (全部的headers)
 func (q *queue) RetrieveHeaders() ([]*types.Header, int) {
 	q.lock.Lock()
 	defer q.lock.Unlock()
 
-	/**
-	返回:
-	结果缓存累积完成的 header
-	和 已被处理的 header 数量
-	*/
+	// 返回: 结果缓存累积完成的 header  和 已被处理的 header 数量
 	headers, proced := q.headerResults, q.headerProced
-	/**
-	重置q中的结果
-	 */
+
+	// 返回之后， 清空缓存
 	q.headerResults, q.headerProced = nil, 0
 
 	return headers, proced
 }
 
+
+
+
 // Schedule adds a set of headers for the download queue for scheduling, returning
 // the new headers encountered.
-func (q *queue) Schedule(headers []*types.Header, from uint64) []*types.Header {
+//
+// 用来准备对一些 body 和 receipt 数据的下载.
+//
+//
+//     todo  只在 Downloader.processHeaders() 中处理下载成功的 header 时，使用这些 header 调用 queue.Schedule() 方法，
+// 			以便 queue 对象可以开始对这些 header 对应的 body 和 receipt 开始下载调度.
+//
+func (q *queue) Schedule(headers []*types.Header, from uint64) []*types.Header {  // todo  抓取 headers 对应的 body 和 receipts
 	q.lock.Lock()
 	defer q.lock.Unlock()
 
 	// Insert all the headers prioritised by the contained block number
 	inserts := make([]*types.Header, 0, len(headers))
 	for _, header := range headers {
+
+		// 一些有效性判断
+
 		// Make sure chain order is honoured and preserved throughout
 		hash := header.Hash()
 		if header.Number == nil || header.Number.Uint64() != from {
@@ -413,6 +513,8 @@ func (q *queue) Schedule(headers []*types.Header, from uint64) []*types.Header {
 			continue
 		}
 		// Queue the header for content retrieval
+		//
+		// 将信息写入 body 和 receipt 队列
 		q.blockTaskPool[hash] = header
 		q.blockTaskQueue.Push(header, -float32(header.Number.Uint64()))
 
@@ -430,17 +532,20 @@ func (q *queue) Schedule(headers []*types.Header, from uint64) []*types.Header {
 // Results retrieves and permanently removes a batch of fetch results from
 // the cache. the result slice will be empty if the queue has been closed.
 //
-// Results
-// 从缓存中 拉取并永久删除一批提取结果。 如果队列已关闭，则结果数组将为空
+// 用来获取当前的 headers、bodies 和 receipts（只在 fast 模式下） 都已下载成功的 block（并将这些 block 从 queue 内部移除）
+//
+//  todo 那么当一个区块的数据 (header、body 和 receipt) 都下载完成时，Downloader 对象就要获取这些区块并将其写入数据库了.
+//  todo queue.Results() 就是用来返回所有目前已经下载完成的数据，它在 Downloader.processFullSyncContent 和 Downloader.processFastSyncContent 中被调用
+//
 func (q *queue) Results(block bool) []*fetchResult {
 	q.lock.Lock()
 	defer q.lock.Unlock()
 
 	// Count the number of items available for processing
 	//
-	// 计算可处理的项目数 (这个 func 的实现有问题?)
-	// 也只是个 估算的了
+	// countProcessableItems() 返回 queue.resultCache 中已经下载完成的数据的数量
 	nproc := q.countProcessableItems()
+
 	// 如果没有了需要处理的条目 且 queue 已经关闭
 	for nproc == 0 && !q.closed {
 
@@ -448,12 +553,18 @@ func (q *queue) Results(block bool) []*fetchResult {
 		if !block {
 			return nil
 		}
-		// 等待结束
+		// 首先获取已经完全下载完成的数据的数量，如果为 0，则根据  block参数 的指示来决定是否进行等待.
+		//
+		// 如果 block参数 为 true 就会等待 queue.active 这个信号（还记得我们前面我们几次提过 queue.active 消息，说它可能在 queue.Results 中被等待吗）
 		q.active.Wait()
+
 		// 再次 尝试获取 需要处理的条目
 		// (因为退出时,需要将没处理完的处理掉,那么可能这时候 缓存中需要被处理的items突然又有了)
 		nproc = q.countProcessableItems()
 	}
+
+	// todo 在有数据的情况下，会将这些数据拷贝到待返回的 results 中 .
+
 	// Since we have a batch limit, don't pull more into "dangling" memory
 	//
 	// 由于我们有批次限制，所以不要将更多信息放入“悬挂”的内存中
@@ -476,7 +587,7 @@ func (q *queue) Results(block bool) []*fetchResult {
 		}
 		// Delete the results from the cache and clear the tail.
 		//
-		// 从缓存中删除结果并清除尾部
+		// 将已经拷贝到 results 中的数据从 resultCache 中清除，同时修正 resultOffset 的值
 		copy(q.resultCache, q.resultCache[nproc:])
 		// todo 这个for 我是真的看不懂啊
 		for i := len(q.resultCache) - nproc; i < len(q.resultCache); i++ {
@@ -511,7 +622,8 @@ func (q *queue) Results(block bool) []*fetchResult {
 }
 
 // countProcessableItems counts the processable items.
-// countProcessableItems 计算可处理项目
+//
+// 返回 queue.resultCache 中已经下载完成的数据的数量
 func (q *queue) countProcessableItems() int {
 
 	// 遍历 缓存中的 已经被下载但尚未被处理的 req
@@ -531,20 +643,23 @@ func (q *queue) countProcessableItems() int {
 // ReserveHeaders reserves a set of headers for the given peer, skipping any
 // previously failed batches.
 //
-/**
-ReserveHeaders:
-保留给定 peer 的一组 headers，跳过任何先前失败的 batch
- */
+// 这个方法只有在填充 skeleton 时 (即: downloader.fillHeaderSkeleton()中) 才会被用到，
+// 		它的功能就是从 task 队列中选一个值最小的、且 指定对端 peer 没有失败过的 起始高度 height，构造一个 fetchRequest 结构并返回.
+//
 func (q *queue) ReserveHeaders(p *peerConnection, count int) *fetchRequest {
 	q.lock.Lock()
 	defer q.lock.Unlock()
 
 	// Short circuit if the peer's already downloading something (sanity check to
 	// not corrupt state)
-	if _, ok := q.headerPendPool[p.id]; ok {
+	if _, ok := q.headerPendPool[p.id]; ok {   // 对端 peer 正在做 header 下载动作, 则 不处理了
 		return nil
 	}
+
+
 	// Retrieve a batch of hashes, skipping previously failed ones
+	//
+	// 从 task queue 中选择本次请求的起始高度（跳过已经失败了的）
 	send, skip := uint64(0), []uint64{}
 	for send == 0 && !q.headerTaskQueue.Empty() {
 		from, _ := q.headerTaskQueue.Pop()
@@ -556,7 +671,10 @@ func (q *queue) ReserveHeaders(p *peerConnection, count int) *fetchRequest {
 		}
 		send = from.(uint64)
 	}
+
 	// Merge all the skipped batches back
+	//
+	// 将跳过的（失败的）任务重新写回 task queue
 	for _, from := range skip {
 		q.headerTaskQueue.Push(from, -float32(from))
 	}
@@ -564,6 +682,8 @@ func (q *queue) ReserveHeaders(p *peerConnection, count int) *fetchRequest {
 	if send == 0 {
 		return nil
 	}
+
+	// 新构造的 request 和 节点 id 写入 headerPendPool 中
 	request := &fetchRequest{
 		Peer: p,
 		From: send,
@@ -572,6 +692,17 @@ func (q *queue) ReserveHeaders(p *peerConnection, count int) *fetchRequest {
 	q.headerPendPool[p.id] = request
 	return request
 }
+
+
+//
+// - - - - - - -  - - - - -  reserve (预约) 系列方法 - - - - - - - - - -  - - - - -
+//
+// 通过构造一个 fetchRequest 结构并返回，向 调用者 提供 指定数量 的待下载的数据的信息（queue 内部会将这些数据标记为「正在下载」）.
+//
+// 调用者  使用返回的 fetchRequest 数据 向 对端peer  发起新的获取数据的 req
+//
+
+
 
 // ReserveBodies reserves a set of body fetches for the given peer, skipping any
 // previously failed downloads. Beside the next batch of needed fetches, it also
@@ -684,6 +815,16 @@ func (q *queue) reserveHeaders(p *peerConnection, count int, taskPool map[common
 	return request, progress, nil
 }
 
+
+
+
+
+//
+// - - - - - - - - - -  - Cancel 系列方法  - - - - - - - - - - -  --
+//
+// 与 reserve 相反，用来撤消对 fetchRequest 结构中的数据的下载（queue 内部会将 这些数据重新从「正在下载」的状态更改为「等待下载」）
+//
+
 // CancelHeaders aborts a fetch request, returning all pending skeleton indexes to the queue.
 func (q *queue) CancelHeaders(request *fetchRequest) {
 	q.cancel(request, q.headerTaskQueue, q.headerPendPool)
@@ -715,6 +856,13 @@ func (q *queue) cancel(request *fetchRequest, taskQueue *prque.Prque, pendPool m
 	delete(pendPool, request.Peer.id)
 }
 
+
+
+
+
+
+
+
 // Revoke cancels all pending requests belonging to a given peer. This method is
 // meant to be called during a peer drop to quickly reassign owned data fetches
 // to remaining nodes.
@@ -735,6 +883,18 @@ func (q *queue) Revoke(peerID string) {
 		delete(q.receiptPendPool, peerID)
 	}
 }
+
+
+
+
+
+//
+// - - - - - - - - - - - - -  Expire 系列方法 - - - - - - - -  - - - -
+//
+// 通过在 参数中指定一个时间段，expire 用来告诉  调用者  下载时间已经超过指定时间的   (对端peer的 nodeId -> 超时的数据条数) pair
+//
+
+
 
 // ExpireHeaders checks for in flight requests that exceeded a timeout allowance,
 // canceling them and returning the responsible peers for penalisation.
@@ -795,6 +955,21 @@ func (q *queue) expire(timeout time.Duration, pendPool map[string]*fetchRequest,
 	return expiries
 }
 
+
+
+
+
+
+//
+// - - - - - - - - -  - - -  Deliver 系列方法 - - - - - - - - - - - - -
+//
+// 当有数据下载成功时，调用者会使用 deliver 功能用来通知 queue 对象.
+//
+// 主要给 ProtocolManager 使用,  传递 从对端 peer 下载的  headers、bodies、 receipts 三者 给 downloader处理 ...
+//
+//
+
+
 // DeliverHeaders injects a header retrieval response into the header results
 // cache. This method either accepts all headers it received, or none of them
 // if they do not map correctly to the skeleton.
@@ -806,7 +981,19 @@ func (q *queue) expire(timeout time.Duration, pendPool map[string]*fetchRequest,
 // deliver	英[dɪˈlɪvə(r)]  传送; 交付
 //
 //
+// 只在 downloader.fillHeaderSkeleton() 中使用.
+//
+//
+//
 func (q *queue) DeliverHeaders(id string, headers []*types.Header, headerProcCh chan []*types.Header) (int, error) {
+
+
+	//
+	// 主要就是保存数据，以及通知 headerProcCh 有新的 header 可以处理了.
+	//
+	// 总体来说， queue.DeliverHeaders() 用来处理  [下载成功]  的 header 数据，
+	// 		它会对数据进行检验和保存，并发送 channel 消息给 Downloader.processHeaders() 和 Downloader.fetchParts() 的 wakeCh 参数.
+
 	q.lock.Lock()
 	defer q.lock.Unlock()
 
@@ -823,6 +1010,8 @@ func (q *queue) DeliverHeaders(id string, headers []*types.Header, headerProcCh 
 
 	accepted := len(headers) == MaxHeaderFetch
 	if accepted {
+
+		// 检查起始区块的高度 和 哈希
 		if headers[0].Number.Uint64() != request.From {
 			log.Trace("First header broke chain ordering", "peer", id, "number", headers[0].Number, "hash", headers[0].Hash(), request.From)
 			accepted = false
@@ -834,11 +1023,14 @@ func (q *queue) DeliverHeaders(id string, headers []*types.Header, headerProcCh 
 	if accepted {
 		for i, header := range headers[1:] {
 			hash := header.Hash()
+
+			// 检查高度的连接性
 			if want := request.From + 1 + uint64(i); header.Number.Uint64() != want {
 				log.Warn("Header broke chain ordering", "peer", id, "number", header.Number, "hash", hash, "expected", want)
 				accepted = false
 				break
 			}
+			// 检查哈希的连接性
 			if headers[i].Hash() != header.ParentHash {
 				log.Warn("Header broke chain ancestry", "peer", id, "number", header.Number, "hash", hash)
 				accepted = false
@@ -874,13 +1066,18 @@ func (q *queue) DeliverHeaders(id string, headers []*types.Header, headerProcCh 
 		copy(process, q.headerResults[q.headerProced:q.headerProced+ready])
 
 		select {
-		case headerProcCh <- process:   // 传递 一批 headers
+		case headerProcCh <- process:   // todo 在 queue.DeliverHeaders() 中传递 一批 headers， downloader.processHeaders() 中有用
 			log.Trace("Pre-scheduled new headers", "peer", id, "count", len(process), "from", process[0].Number)
 			q.headerProced += len(process)
 		default:
 		}
 	}
 	// Check for termination and return
+	//
+	// 如果 queue.headerTaskPool 为空，说明 skeleton 中所有组都被下载完了，因此发送消息给 queue.headerContCh.
+	//
+	// 这个 channel 在 Downloader.fillHeaderSkeleton 中是作为 wakeCh 传给 Downloader.fetchParts() 的，用来通知 header 数据已经下载完成了.
+	//
 	if len(q.headerTaskPool) == 0 {
 		q.headerContCh <- false
 	}
@@ -1002,6 +1199,9 @@ func (q *queue) deliver(id string, taskPool map[common.Hash]*types.Header, taskQ
 // fetch results.
 //
 //`Prepare()`  配置  结果缓存 以允许 接受 和缓存 入站 同步结果
+//
+// 				下载开始之前，告诉 queue 对象将要下载的一系列区块的起始高度 和 下载模式（fast 或 full 模式）
+//
 func (q *queue) Prepare(offset uint64, mode SyncMode) {
 	q.lock.Lock()
 	defer q.lock.Unlock()

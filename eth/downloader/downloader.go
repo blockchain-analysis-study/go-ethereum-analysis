@@ -1220,8 +1220,7 @@ func (d *Downloader) fetchHeaders(p *peerConnection, from uint64, pivot uint64) 
 func (d *Downloader) fillHeaderSkeleton(from uint64, skeleton []*types.Header) ([]*types.Header, int, error) {  // todo 填充 headers skeleton 骨架
 	log.Debug("Filling up skeleton", "from", from)
 
-	// 开始填充 骨架上剩余的被拉取回来的block 相关的header,body,receipt等等之类
-	d.queue.ScheduleSkeleton(from, skeleton)
+	d.queue.ScheduleSkeleton(from, skeleton)  // 开始填充 骨架上剩余的被拉取回来的block 相关的header,body,receipt等等之类
 
 	var (
 
@@ -1239,7 +1238,7 @@ func (d *Downloader) fillHeaderSkeleton(from uint64, skeleton []*types.Header) (
 		expire   = func() map[string]int { return d.queue.ExpireHeaders(d.requestTTL()) }
 
 		/**
-		喉咙? 油门?
+		判断 是否对某类型数据 下载做下限制 ...  如:  downloader.queue.ShouldThrottleBlocks() 和 downloader.queue.ShouldThrottleReceipts()
 		 */
 		throttle = func() bool { return false }
 
@@ -1355,13 +1354,22 @@ todo 这个大头函数,你读懂,我吃屎
 //  - inFlight:    task callback for the number of in-progress requests (wait for all active downloads to finish)
 //  - throttle:    task callback to check if the processing queue is full and activate throttling (bound memory use)
 //  - reserve:     task callback to reserve new download tasks to a particular peer (also signals partial completions)
+//				   用来获取可下载的数据 req 的回调Fn  (对应 Reserve 系列方法)
+//
 //  - fetchHook:   tester callback to notify of new tasks being initiated (allows testing the scheduling logic)
 //  - fetch:       network callback to actually send a particular download request to a physical remote peer
+//				   向远程节点发起数据请求 的回调Fn
+//
 //  - cancel:      task callback to abort an in-flight download request and allow rescheduling it (in case of lost peer)
 //  - capacity:    network callback to retrieve the estimated type-specific bandwidth capacity of a peer (traffic shaping)
+//				   返回 某次下载 可以 请求的数据条数 的回调Fn
+//
 //  - idle:        network callback to retrieve the currently (type specific) idle peers that can be assigned tasks
 //  - setIdle:     network callback to set a peer back to idle and update its estimated capacity (traffic shaping)
 //  - kind:        textual label of the type being downloaded to display in log mesages
+//
+//  todo fetchParts 中获取数据主要依赖于 capacity、reserve、fetch 和 deliver 这四个参数
+//
 func (d *Downloader) fetchParts(errCancel error, deliveryCh chan dataPack, deliver func(dataPack) (int, error), wakeCh chan bool,
 	expire func() map[string]int, pending func() int, inFlight func() bool, throttle func() bool, reserve func(*peerConnection, int) (*fetchRequest, bool, error),
 	fetchHook func([]*types.Header), fetch func(*peerConnection, *fetchRequest) error, cancel func(*fetchRequest), capacity func(*peerConnection) int,
@@ -1579,7 +1587,7 @@ func (d *Downloader) processHeaders(origin uint64, pivot uint64, td *big.Int) er
 			return errCancelHeaderProcessing
 
 
-		case headers := <-d.headerProcCh:   // 处理 从对端 peer 同步回来的 一批 headers
+		case headers := <-d.headerProcCh:   // todo 处理 从对端 peer 同步回来的 一批 headers
 
 			// Terminate header processing if we synced up
 			//
@@ -1762,7 +1770,8 @@ func (d *Downloader) processHeaders(origin uint64, pivot uint64, td *big.Int) er
 					// Otherwise insert the headers for content retrieval
 					//
 					// 否则插入headers以进行关联内容(bodies,receipts等等)的拉取
-					inserts := d.queue.Schedule(chunk, origin)
+					//
+					inserts := d.queue.Schedule(chunk, origin)  // todo 抓取 headers 对应的 body 和 receipts
 					if len(inserts) != len(chunk) {
 						log.Debug("Stale headers")
 						return errBadPeer
@@ -1784,7 +1793,8 @@ func (d *Downloader) processHeaders(origin uint64, pivot uint64, td *big.Int) er
 
 			// Signal the content downloaders of the availablility of new tasks
 			//
-			// 通知 继续下载新的内容的 tasks
+			// 在 queue 中准备好了 body 和 receipt 相关的数据队列，Downloader.processHeaders 就会通知 Downloader.fetchBodies 和 Downloader.fetchReceipts 可以对各自的数据进行下载了
+			//
 			for _, ch := range []chan bool{d.bodyWakeCh, d.receiptWakeCh} {  // 对端还 继续发新的 header 过来, 所以我们需要针对这些 header 继续 同步  body 和 receipts
 				select {
 				case ch <- true:
@@ -1800,7 +1810,7 @@ func (d *Downloader) processFullSyncContent() error {
 	// full 没有 fast那么复杂,就直接拿数据直接组个刷盘
 	// 没有什么根据pivot点操作
 	for {
-		results := d.queue.Results(true)
+		results := d.queue.Results(true)  // 在 processFullSyncContent() 中被调用， 返回所有目前已经下载完成的数据 (header、body 和 receipt)
 		if len(results) == 0 {
 			return nil
 		}
@@ -1896,7 +1906,9 @@ func (d *Downloader) processFastSyncContent(latest *types.Header) error {
 		//
 		//  等待有可用的完整的区块数据
 		//
-		results := d.queue.Results(oldPivot == nil) // Block if we're not monitoring pivot staleness  todo 如果我们不监视 pivot 陈旧，则阻止
+
+		// Block if we're not monitoring pivot staleness  todo 如果我们不监视 pivot 陈旧，则阻止
+		results := d.queue.Results(oldPivot == nil)    // 在 processFastSyncContent() 中被调用， 返回所有目前已经下载完成的数据 (header、body 和 receipt)
 		if len(results) == 0 {
 			// If pivot sync is done, stop
 			// 如果完成数据 枢纽同步，请停止
