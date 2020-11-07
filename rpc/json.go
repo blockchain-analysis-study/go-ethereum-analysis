@@ -75,6 +75,11 @@ type jsonNotification struct {
 
 // jsonCodec reads and writes JSON-RPC messages to the underlying connection. It
 // also has support for parsing arguments and serializing (result) objects.
+//
+// rpc消息的请求和响应，以及序列化和解析都是这个结构来实现的
+//
+// 实现了  ServerCodec 接口
+//
 type jsonCodec struct {
 	closer sync.Once                 // close closed channel once
 	closed chan interface{}          // closed on Close
@@ -122,7 +127,7 @@ func NewJSONCodec(rwc io.ReadWriteCloser) ServerCodec {
 }
 
 // isBatch returns true when the first non-whitespace characters is '['
-func isBatch(msg json.RawMessage) bool {
+func isBatch(msg json.RawMessage) bool {  // 判断 msg 是否为 batch调用 (批量调用)
 	for _, c := range msg {
 		// skip insignificant whitespace (http://www.ietf.org/rfc/rfc4627.txt)
 		if c == 0x20 || c == 0x09 || c == 0x0a || c == 0x0d {
@@ -140,14 +145,14 @@ func (c *jsonCodec) ReadRequestHeaders() ([]rpcRequest, bool, Error) {
 	c.decMu.Lock()
 	defer c.decMu.Unlock()
 
-	var incomingMsg json.RawMessage
+	var incomingMsg json.RawMessage   // 从 io 中 解码出 [入站Msg]
 	if err := c.decode(&incomingMsg); err != nil {
 		return nil, false, &invalidRequestError{err.Error()}
 	}
-	if isBatch(incomingMsg) {
-		return parseBatchRequest(incomingMsg)
+	if isBatch(incomingMsg) {  // 判断 msg 是否为 batch调用 (批量调用)
+		return parseBatchRequest(incomingMsg)  // 将 [入站Msg] 组装成 batch
 	}
-	return parseRequest(incomingMsg)
+	return parseRequest(incomingMsg) // 将 [入站Msg] 组装成 req
 }
 
 // checkReqId returns an error when the given reqId isn't valid for RPC method calls.
@@ -179,7 +184,22 @@ func parseRequest(incomingMsg json.RawMessage) ([]rpcRequest, bool, Error) {
 		return nil, false, &invalidMessageError{err.Error()}
 	}
 
+
+	// todo 注意:
+	//
+	//	todo 对于「订阅」和「退订」请求，它们的名字分别为「 eth_subscribe 」和「 eth_unsubscribe 」.
+	// 	todo 然而这两个方法根据不是通过 API 注册提供的服务，而是解析请求的方法名时，对这两个名字进行了特殊处理.
+	//
+
 	// subscribe are special, they will always use `subscribeMethod` as first param in the payload
+	//
+	//
+	// 首先判断请求的 API 名字是否有「 _subscribe 」后缀，
+	//
+	// 如果是，则代表这是一个「订阅」请求（所有的「订阅」请求方法名都为「 eth_subscribe 」，第一个参数为要订阅的 API 名字.
+	//
+	// 因此这里设置 rpcRequest.isPubSub 为 true，并解析第一个参数，作为要「订阅」的 API 的名字.
+	//
 	if strings.HasSuffix(in.Method, subscribeMethodSuffix) {
 		reqs := []rpcRequest{{id: &in.Id, isPubSub: true}}
 		if len(in.Payload) > 0 {
@@ -197,6 +217,10 @@ func parseRequest(incomingMsg json.RawMessage) ([]rpcRequest, bool, Error) {
 		return nil, false, &invalidRequestError{"Unable to parse subscription request"}
 	}
 
+	// 这段代码判断请求的 API 名字是否有「 _unsubscribe 」后缀，如果是，则代表这是一个「退订」请求
+	//
+	// （所有的「退订」请求方法名都为「 eth_unsubscribe 」，唯一的一个参数是 ID 信息.
+	//
 	if strings.HasSuffix(in.Method, unsubscribeMethodSuffix) {
 		return []rpcRequest{{id: &in.Id, isPubSub: true,
 			method: in.Method, params: in.Payload}}, false, nil
@@ -224,7 +248,7 @@ func parseBatchRequest(incomingMsg json.RawMessage) ([]rpcRequest, bool, Error) 
 	}
 
 	requests := make([]rpcRequest, len(in))
-	for i, r := range in {
+	for i, r := range in {   // todo 就这里 比 `parseRequest()` d多了个 for ???
 		if err := checkReqId(r.Id); err != nil {
 			return nil, false, &invalidMessageError{err.Error()}
 		}
@@ -232,6 +256,14 @@ func parseBatchRequest(incomingMsg json.RawMessage) ([]rpcRequest, bool, Error) 
 		id := &in[i].Id
 
 		// subscribe are special, they will always use `subscriptionMethod` as first param in the payload
+		//
+		//
+		// 首先判断请求的 API 名字是否有「 _subscribe 」后缀，
+		//
+		// 如果是，则代表这是一个「订阅」请求（所有的「订阅」请求方法名都为「 eth_subscribe 」，第一个参数为要订阅的 API 名字.
+		//
+		// 因此这里设置 rpcRequest.isPubSub 为 true，并解析第一个参数，作为要「订阅」的 API 的名字.
+		//
 		if strings.HasSuffix(r.Method, subscribeMethodSuffix) {
 			requests[i] = rpcRequest{id: id, isPubSub: true}
 			if len(r.Payload) > 0 {

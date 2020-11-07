@@ -53,8 +53,16 @@ type notifierKey struct{}
 type Notifier struct {
 	codec    ServerCodec
 	subMu    sync.RWMutex // guards active and inactive maps
-	active   map[ID]*Subscription
-	inactive map[ID]*Subscription
+
+	// 为什么下面的是数组?
+	//
+	// 因为 Client 和 Server 发起 WebSocket 或者 IPC 连接后,
+	// 这个 连接 会一直 存在, 在这个连接中 只有一个 Notifier 实例,
+	// 但是在该连接的生命周期中, 客户端是可以发起 多个 类型的 [订阅] 方法的调用的
+	// 每个 [订阅] 方法的调用都会对应一个  ID (毕竟是 长连接, 那么[订阅]方法在被调用后会一直存活着, 直到连接断开或者[退订])
+	//
+	active   map[ID]*Subscription	// 本次 正在处理被调用中的 [订阅] 方法  todo 在 activate() 中被添加,  n.active 会在 Notifier.Notify() 和 Notifier.unsubscribe() 中被使用
+	inactive map[ID]*Subscription   // 本次 准备被调用的 [订阅]  方法
 }
 
 // newNotifier creates a new notifier that can be used to send subscription
@@ -68,6 +76,8 @@ func newNotifier(codec ServerCodec) *Notifier {
 }
 
 // NotifierFromContext returns the Notifier value stored in ctx, if any.
+//
+// NotifierFromContext 是如何从 ctx 中取得 Notifier 的，因为 ctx 的 Notifier 是在 websocket 的 handler 的一开始被新创建的
 func NotifierFromContext(ctx context.Context) (*Notifier, bool) {
 	n, ok := ctx.Value(notifierKey{}).(*Notifier)
 	return n, ok
@@ -80,21 +90,21 @@ func NotifierFromContext(ctx context.Context) (*Notifier, bool) {
 func (n *Notifier) CreateSubscription() *Subscription {
 	s := &Subscription{ID: NewID(), err: make(chan error)}
 	n.subMu.Lock()
-	n.inactive[s.ID] = s
+	n.inactive[s.ID] = s  // 每次 [订阅] 方法, 被调用前, 创建本次 [订阅] 方法调用实例时, 追加
 	n.subMu.Unlock()
 	return s
 }
 
 // Notify sends a notification to the client with the given data as payload.
 // If an error occurs the RPC connection is closed and the error is returned.
-func (n *Notifier) Notify(id ID, data interface{}) error {
+func (n *Notifier) Notify(id ID, data interface{}) error {  // todo Notifier 对象给 各个 service api 的 [订阅] 方法中调用的...
 	n.subMu.RLock()
 	defer n.subMu.RUnlock()
 
-	sub, active := n.active[id]
+	sub, active := n.active[id]  // 找到, 返回, 用来做 Notify 给 客户端 ...
 	if active {
 		notification := n.codec.CreateNotification(string(id), sub.namespace, data)
-		if err := n.codec.Write(notification); err != nil {
+		if err := n.codec.Write(notification); err != nil {  // todo 将被订阅到的  结果数据, 推送回给 客户端 ...
 			n.codec.Close()
 			return err
 		}
@@ -112,7 +122,7 @@ func (n *Notifier) Closed() <-chan interface{} {
 func (n *Notifier) unsubscribe(id ID) error {
 	n.subMu.Lock()
 	defer n.subMu.Unlock()
-	if s, found := n.active[id]; found {
+	if s, found := n.active[id]; found {  // 找到, 并 删除
 		close(s.err)
 		delete(n.active, id)
 		return nil
@@ -129,7 +139,7 @@ func (n *Notifier) activate(id ID, namespace string) {
 	defer n.subMu.Unlock()
 	if sub, found := n.inactive[id]; found {
 		sub.namespace = namespace
-		n.active[id] = sub
+		n.active[id] = sub  //  每次 [订阅] 方法的调用, 都追加这个 .   todo 这里的 n.active 会在 Notifier.Notify() 和 Notifier.unsubscribe() 中被使用 ...
 		delete(n.inactive, id)
 	}
 }

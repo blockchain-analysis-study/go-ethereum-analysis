@@ -162,6 +162,8 @@ func Dial(rawurl string) (*Client, error) {
 //
 // The context is used to cancel or time out the initial connection establishment. It does
 // not affect subsequent interactions with the client.
+//
+// 这是可以作为 SDK 或者编译陈搞一个 Client  自行使用, 来连接 其他 远端 以太坊节点的 RPC Client
 func DialContext(ctx context.Context, rawurl string) (*Client, error) {
 	u, err := url.Parse(rawurl)
 	if err != nil {

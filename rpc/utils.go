@@ -84,12 +84,15 @@ func isSubscriptionType(t reflect.Type) bool {
 
 // isPubSub tests whether the given method has as as first argument a context.Context
 // and returns the pair (Subscription, error)
-func isPubSub(methodType reflect.Type) bool {
+//
+func isPubSub(methodType reflect.Type) bool {  // 判断 某个 API service 的方法是否为 [订阅方法]; 其中 API service 为 (NewPublicAdminAPI、NewPrivateAccountAPI 等等之类)
 	// numIn(0) is the receiver type
 	if methodType.NumIn() < 2 || methodType.NumOut() != 2 {
 		return false
 	}
 
+	// 如果某个方法的第一个 入参是 context 类型、第一个返回值的类型是 *Subscription、第二个返回值类型是 error，
+	// 那么 rpc 模块就会把这个方法当作一个订阅方法，并将这个方法的信息放到 service.subscriptions 字段中.
 	return isContextType(methodType.In(1)) &&
 		isSubscriptionType(methodType.Out(0)) &&
 		isErrorType(methodType.Out(1))
@@ -115,24 +118,27 @@ METHODS:
 	for m := 0; m < typ.NumMethod(); m++ {
 		method := typ.Method(m)
 		mtype := method.Type
-		mname := formatName(method.Name)
+		mname := formatName(method.Name)  // 先将 Fn 的首字母变为小写,  后续需要和 api service 的 Namespace 拼接成 `eth_getBlock` 的形式
 		if method.PkgPath != "" { // method must be exported
 			continue
 		}
 
-		var h callback
-		h.isSubscribe = isPubSub(mtype)
+		var h callback   // 对 rcvr 每一个 方法都封装成一个  callback;  其中 rcvr 为:  NewPublicAdminAPI、NewPrivateBlockChainAPI 等等的反射Value
+		h.isSubscribe = isPubSub(mtype)  // 判断 API service 的方法是否为 [订阅方法]
 		h.rcvr = rcvr
-		h.method = method
+		h.method = method	// NewPublicAdminAPI、NewPrivateBlockChainAPI 等等的 某个 Fn
 		h.errPos = -1
 
-		firstArg := 1
+		// firstArg 定义了第一个  非 context.Context 类型 的参数的索引，因为后面会填充 callback.argTypes 字段，
+		// 			而第一个参数如果是 context.Context 类型，则不会记录在这个字段里，而是记录在 callback.hasCtx 字段里
+		firstArg := 1  //
 		numIn := mtype.NumIn()
 		if numIn >= 2 && mtype.In(1) == contextType {
 			h.hasCtx = true
 			firstArg = 2
 		}
 
+		// 如果 该方法 为 [订阅方法], 我们将其 追加到 subscriptions 集合中
 		if h.isSubscribe {
 			h.argTypes = make([]reflect.Type, numIn-firstArg) // skip rcvr type
 			for i := firstArg; i < numIn; i++ {
@@ -184,7 +190,7 @@ METHODS:
 			if mtype.NumOut() == 2 && h.errPos == -1 { // method must one return value and 1 error
 				continue METHODS
 			}
-			callbacks[mname] = &h
+			callbacks[mname] = &h   // 一般对外的方法 追加到  callbacks 集合中
 		}
 	}
 

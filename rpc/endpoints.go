@@ -30,12 +30,13 @@ func StartHTTPEndpoint(endpoint string, apis []API, modules []string, cors []str
 		whitelist[module] = true
 	}
 	// Register all the APIs exposed by the services
-	handler := NewServer()
+	handler := NewServer()  // 实例化  HTTP 的 RPC Server
 	for _, api := range apis {
 
 		// 判断 api 是否 对外开放
-		if whitelist[api.Namespace] || (len(whitelist) == 0 && api.Public) {
-			if err := handler.RegisterName(api.Namespace, api.Service); err != nil {
+		if whitelist[api.Namespace] || (len(whitelist) == 0 && api.Public) { // 判断 api 是否 对外开放 (HTTP)
+
+			if err := handler.RegisterName(api.Namespace, api.Service); err != nil { // 逐个 将各种 API (Miner/Debug/BlockChain/Account 等等) 的 name 和 实例引用 注册到 HTTP Server 实例中
 				return nil, nil, err
 			}
 			log.Debug("HTTP registered", "namespace", api.Namespace)
@@ -62,10 +63,11 @@ func StartWSEndpoint(endpoint string, apis []API, modules []string, wsOrigins []
 		whitelist[module] = true
 	}
 	// Register all the APIs exposed by the services
-	handler := NewServer()
+	handler := NewServer()  // 实例化  WebSocket  的 RPC Server
 	for _, api := range apis {
-		if exposeAll || whitelist[api.Namespace] || (len(whitelist) == 0 && api.Public) {
-			if err := handler.RegisterName(api.Namespace, api.Service); err != nil {
+		if exposeAll || whitelist[api.Namespace] || (len(whitelist) == 0 && api.Public) { // 判断 api 是否 对外开放 (WebSocket)
+
+			if err := handler.RegisterName(api.Namespace, api.Service); err != nil { // 逐个 将各种 API (Miner/Debug/BlockChain/Account 等等) 的 name 和 实例引用 注册到  WebSocket Server 实例中
 				return nil, nil, err
 			}
 			log.Debug("WebSocket registered", "service", api.Service, "namespace", api.Namespace)
@@ -87,9 +89,9 @@ func StartWSEndpoint(endpoint string, apis []API, modules []string, wsOrigins []
 // StartIPCEndpoint starts an IPC endpoint.
 func StartIPCEndpoint(ipcEndpoint string, apis []API) (net.Listener, *Server, error) {
 	// Register all the APIs exposed by the services.
-	handler := NewServer()
+	handler := NewServer()  // 实例化  IPC 的 RPC Server
 	for _, api := range apis {
-		if err := handler.RegisterName(api.Namespace, api.Service); err != nil {
+		if err := handler.RegisterName(api.Namespace, api.Service); err != nil { // 逐个将各种 API (Miner/Debug/BlockChain/Account 等等) 的 name 和 实例引用 注册到  IPC Server 实例中
 			return nil, nil, err
 		}
 		log.Debug("IPC registered", "namespace", api.Namespace)

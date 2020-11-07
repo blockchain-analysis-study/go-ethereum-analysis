@@ -374,9 +374,9 @@ func (n *Node) startRPC(services map[reflect.Type]Service) error {  // 启动各
 // startInProc initializes an in-process RPC endpoint.
 func (n *Node) startInProc(apis []rpc.API) error {
 	// Register all the APIs exposed by the services
-	handler := rpc.NewServer()
+	handler := rpc.NewServer()  // 实例化  InProc 的 RPC Server
 	for _, api := range apis {
-		if err := handler.RegisterName(api.Namespace, api.Service); err != nil {
+		if err := handler.RegisterName(api.Namespace, api.Service); err != nil { // 将各种 API (Miner/Debug/BlockChain/Account 等等) 的 name 和 实例引用 注册到  InProc Server 实例中
 			return err
 		}
 		n.log.Debug("InProc registered", "service", api.Service, "namespace", api.Namespace)
@@ -428,7 +428,7 @@ func (n *Node) startHTTP(endpoint string, apis []rpc.API, modules []string, cors
 	if endpoint == "" {
 		return nil
 	}
-	listener, handler, err := rpc.StartHTTPEndpoint(endpoint, apis, modules, cors, vhosts, timeouts)
+	listener, handler, err := rpc.StartHTTPEndpoint(endpoint, apis, modules, cors, vhosts, timeouts) // 启动 http rpc Endpoint
 	if err != nil {
 		return err
 	}
