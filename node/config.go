@@ -118,7 +118,7 @@ type Config struct {
 	// HTTPModules is a list of API modules to expose via the HTTP RPC interface.
 	// If the module list is empty, all RPC API endpoints designated public will be
 	// exposed.
-	HTTPModules []string `toml:",omitempty"`
+	HTTPModules []string `toml:",omitempty"` // todo 配置 HTTP Server 中的 jsonrpc api 的 service 白名单 (如: eth、admin、debug 等等)
 
 	// HTTPTimeouts allows for customization of the timeout values used by the HTTP RPC
 	// interface.
@@ -141,7 +141,7 @@ type Config struct {
 	// WSModules is a list of API modules to expose via the websocket RPC interface.
 	// If the module list is empty, all RPC API endpoints designated public will be
 	// exposed.
-	WSModules []string `toml:",omitempty"`
+	WSModules []string `toml:",omitempty"`  // todo 配置 WebSocket Server 中的 jsonrpc api 的 service 白名单 (如: eth、admin、debug 等等)
 
 	// WSExposeAll exposes all API modules via the WebSocket RPC interface rather
 	// than just the public ones.

@@ -26,7 +26,7 @@ import (
 func StartHTTPEndpoint(endpoint string, apis []API, modules []string, cors []string, vhosts []string, timeouts HTTPTimeouts) (net.Listener, *Server, error) {
 	// Generate the whitelist based on the allowed modules
 	whitelist := make(map[string]bool)
-	for _, module := range modules {
+	for _, module := range modules { // todo HTTP Server 启动后, 根据配置文件中的 jsonrpc api 的 service 白名单信息生成一个 临时的白名单 map (如: eth、admin、debug 等等)
 		whitelist[module] = true
 	}
 	// Register all the APIs exposed by the services
@@ -63,7 +63,7 @@ func StartWSEndpoint(endpoint string, apis []API, modules []string, wsOrigins []
 
 	// Generate the whitelist based on the allowed modules
 	whitelist := make(map[string]bool)
-	for _, module := range modules {
+	for _, module := range modules {  // todo WebSocket Server 启动后, 根据配置文件中的 jsonrpc api 的 service 白名单信息生成一个 临时的白名单 map (如: eth、admin、debug 等等)
 		whitelist[module] = true
 	}
 	// Register all the APIs exposed by the services
