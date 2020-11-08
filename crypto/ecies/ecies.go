@@ -123,8 +123,10 @@ func MaxSharedKeyLength(pub *PublicKey) int {
 //
 // ECDH 密钥 协商方法，用于建立用于 加密的 秘密密钥
 //
-// S = P_x, 其中 (P_x, P_y) = r * PK_b
-func (prv *PrivateKey) GenerateShared(pub *PublicKey, skLen, macLen int) (sk []byte, err error) {
+// `(h *encHandshake) secrets()` 和  `(h *encHandshake) staticSharedSecret()` 都用到了
+//
+// S = P_x, 其中 (P_x, P_y) = r * PK_b =  (自己的 私钥 * 别人的公钥 )
+func (prv *PrivateKey) GenerateShared(pub *PublicKey, skLen, macLen int) (sk []byte, err error) {  // 计算 共享秘密的 关键
 	if prv.PublicKey.Curve != pub.Curve {
 		return nil, ErrInvalidCurve
 	}
@@ -132,11 +134,12 @@ func (prv *PrivateKey) GenerateShared(pub *PublicKey, skLen, macLen int) (sk []b
 		return nil, ErrSharedKeyTooBig
 	}
 
-	x, _ := pub.Curve.ScalarMult(pub.X, pub.Y, prv.D.Bytes())
+	x, _ := pub.Curve.ScalarMult(pub.X, pub.Y, prv.D.Bytes())  // 自己的 私钥 * 别人的公钥  = 曲线的 某一个点
 	if x == nil {
 		return nil, ErrSharedKeyIsPointAtInfinity
 	}
 
+	// 我们只要这个点的  x 值
 	sk = make([]byte, skLen+macLen)
 	skBytes := x.Bytes()
 	copy(sk[len(sk)-len(skBytes):], skBytes)

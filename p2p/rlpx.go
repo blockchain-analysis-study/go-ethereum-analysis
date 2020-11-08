@@ -326,17 +326,20 @@ type encHandshake struct {
 	// initNonce: 随机的  发送者 nonce
 	// respNonce:
 	initNonce, respNonce []byte            // nonce
-	randomPrivKey        *ecies.PrivateKey // ecdhe-random   生成随机的  临时私钥 (私钥是包含公钥的哦)
-	remoteRandomPub      *ecies.PublicKey  // ecdhe-random-pubk
+	randomPrivKey        *ecies.PrivateKey // ecdhe-random   		自己 生成 随机临时私钥 (私钥是包含公钥的哦)
+	remoteRandomPub      *ecies.PublicKey  // ecdhe-random-pubk  	对端 的 随机临时公钥
 }
 
 // secrets represents the connection secrets
 // which are negotiated during the encryption handshake.
+//
+// todo 将 对方公钥remote-pubk,  aes-secret, mac-secret, egress-mac, ingress-mac 作为当前连接的【协商秘密（connection secrets） 】用于 数据分帧.
+//
 type secrets struct {
-	RemoteID              discover.NodeID
-	AES, MAC              []byte
-	EgressMAC, IngressMAC hash.Hash
-	Token                 []byte
+	RemoteID              discover.NodeID   // 公钥remote-pubk  (NodeId = 公钥X坐标值 + 公钥Y坐标值)
+	AES, MAC              []byte			// 加密秘钥  和 认证秘钥
+	EgressMAC, IngressMAC hash.Hash			// 出口连接消息认证码  和 入口连接消息认证码
+	Token                 []byte  // 目前没用
 }
 
 // RLPx v4 handshake auth (defined in EIP-8).
@@ -372,8 +375,8 @@ type authRespV4 struct {
 // secrets() 是在 RLPx 握手完成后调用
 //
 // 从握手值 中提取 连接 的共享秘钥 (加密秘钥 SK_e  和 认证秘钥 SK_m)
-func (h *encHandshake) secrets(auth, authResp []byte) (secrets, error) {
-	ecdheSecret, err := h.randomPrivKey.GenerateShared(h.remoteRandomPub, sskLen, sskLen)
+func (h *encHandshake) secrets(auth, authResp []byte) (secrets, error) {  // 入参中包含的是  【发送方】 和 【接收方】有关 临时公钥的信息  (本地使用自己的 临时私钥 + 对端的 临时公钥 = 公共秘密)
+	ecdheSecret, err := h.randomPrivKey.GenerateShared(h.remoteRandomPub, sskLen, sskLen)  // S = P_x, 其中 (P_x, P_y) = r * PK_b =  (自己的 私钥 * 别人的公钥 )
 	if err != nil {
 		return secrets{}, err
 	}
@@ -381,34 +384,37 @@ func (h *encHandshake) secrets(auth, authResp []byte) (secrets, error) {
 	// 【加密消息 R|| iv || c || d 】 给Bob节点,其中:  c = AES(SK_e, iv, m),   而 d = MAC(keccak256(SK_m), iv || c)
 
 	// derive base secrets from ephemeral key agreement
-	sharedSecret := crypto.Keccak256(ecdheSecret, crypto.Keccak256(h.respNonce, h.initNonce))
-	aesSecret := crypto.Keccak256(ecdheSecret, sharedSecret)
+	sharedSecret := crypto.Keccak256(ecdheSecret, crypto.Keccak256(h.respNonce, h.initNonce))  	// todo 计算共享秘密
+	aesSecret := crypto.Keccak256(ecdheSecret, sharedSecret)									// todo 计算AES秘密  (加密秘钥 SK_e)
 	s := secrets{
 		RemoteID: h.remoteID,
 		AES:      aesSecret,		// 用于做加密
-		MAC:      crypto.Keccak256(ecdheSecret, aesSecret),  // 用于做 认证
+		MAC:      crypto.Keccak256(ecdheSecret, aesSecret),  									// todo 计算消息认证码秘密 (认证秘钥 SK_m)
 	}
 
 	// setup sha3 instances for the MACs
 	mac1 := sha3.NewKeccak256()
 	mac1.Write(xor(s.MAC, h.respNonce))
 	mac1.Write(auth)
+
 	mac2 := sha3.NewKeccak256()
 	mac2.Write(xor(s.MAC, h.initNonce))
 	mac2.Write(authResp)
+
 	if h.initiator {
-		s.EgressMAC, s.IngressMAC = mac1, mac2
+		s.EgressMAC, s.IngressMAC = mac1, mac2    	// 对发起方:  	计算出口连接消息认证码  和 计算入口连接消息认证码
 	} else {
-		s.EgressMAC, s.IngressMAC = mac2, mac1
+		s.EgressMAC, s.IngressMAC = mac2, mac1		// 对接收方:	计算出口连接消息认证码  和 计算入口连接消息认证码
 	}
 
+	// 将 对方公钥remote-pubk,  aes-secret, mac-secret, egress-mac, ingress-mac 作为当前连接的【协商秘密（connection secrets） 】用于 数据分帧.
 	return s, nil
 }
 
 // staticSharedSecret returns the static shared secret, the result
 // of key agreement between the local and remote static node key.
-func (h *encHandshake) staticSharedSecret(prv *ecdsa.PrivateKey) ([]byte, error) {
-	return ecies.ImportECDSA(prv).GenerateShared(h.remotePub, sskLen, sskLen)
+func (h *encHandshake) staticSharedSecret(prv *ecdsa.PrivateKey) ([]byte, error) { // 【发送方】和【接收方】的 共享秘密 的精髓就是: todo A私钥 + B公钥 = B私钥 + A公钥 = 共享秘密
+	return ecies.ImportECDSA(prv).GenerateShared(h.remotePub, sskLen, sskLen)		// S = P_x, 其中 (P_x, P_y) = r * PK_b =  (自己的 私钥 * 别人的公钥 )
 }
 
 // initiatorEncHandshake negotiates a session token on conn.
@@ -433,7 +439,7 @@ func initiatorEncHandshake(conn io.ReadWriter, prv *ecdsa.PrivateKey, remoteID d
 	//
 	//		发起者的加密握手流程如下：
 	//
-	//			　　1.生成一个随机数init-nonce
+	//			　　1.生成一个随机数init-nonce (这个其实是 用来生成 随机临时 密钥对中的私钥的 随机seed)
 	//
 	//			　　2.通过ecies生成随机秘钥对 ，随机私钥ephemeral-privk 与随机公钥ephemeral-pubk
 	//
@@ -517,12 +523,12 @@ func (h *encHandshake) makeAuthMsg(prv *ecdsa.PrivateKey) (*authMsgV4, error) {
 	// Sign known message: static-shared-secret ^ nonce
 	//
 	//  S = P_x, 其中 (P_x, P_y) = r * PK_b
-	token, err := h.staticSharedSecret(prv)  // 里面有,  使用 当前 node 的 私钥 对 远端节点的公钥 做加密  (token 是加密后的值)
+	token, err := h.staticSharedSecret(prv)  // 【发送方生成 authMsg 时用】 里面有,  使用 当前 node 的 私钥 对 远端节点的公钥 做加密  (token 是加密后的值)
 	if err != nil {
 		return nil, err
 	}
-	signed := xor(token, h.initNonce)		// 使用   token ^ 随机生成的nonce
-	signature, err := crypto.Sign(signed, h.randomPrivKey.ExportECDSA())	// 再使用 临时私钥 做 签名
+	signed := xor(token, h.initNonce)		// 使用   token ^ 随机生成的nonce  算出 Hash值
+	signature, err := crypto.Sign(signed, h.randomPrivKey.ExportECDSA())	// 用自己的 临时私钥 和 Hash 算出 签名. todo (和 handleAuthMsg() 中解出 我们这里的公钥相呼应)
 	if err != nil {
 		return nil, err
 	}
@@ -641,19 +647,19 @@ func (h *encHandshake) handleAuthMsg(msg *authMsgV4, prv *ecdsa.PrivateKey) erro
 	// Generate random keypair for ECDH.
 	// If a private key is already set, use it instead of generating one (for testing).
 	if h.randomPrivKey == nil {
-		h.randomPrivKey, err = ecies.GenerateKey(rand.Reader, crypto.S256(), nil)
+		h.randomPrivKey, err = ecies.GenerateKey(rand.Reader, crypto.S256(), nil)  // 测试代码
 		if err != nil {
 			return err
 		}
 	}
 
 	// Check the signature.
-	token, err := h.staticSharedSecret(prv)
+	token, err := h.staticSharedSecret(prv) // 【接收方 处理 authMsg 时用】 里面有,  使用 当前 node 的 私钥 对 远端节点的公钥 做加密  (token 是加密后的值)
 	if err != nil {
 		return err
 	}
-	signedMsg := xor(token, h.initNonce)
-	remoteRandomPub, err := secp256k1.RecoverPubkey(signedMsg, msg.Signature[:])
+	signedMsg := xor(token, h.initNonce)  // 使用   token ^ 随机生成的nonce  算出 Hash值
+	remoteRandomPub, err := secp256k1.RecoverPubkey(signedMsg, msg.Signature[:])  // 使用 Hash 和 签名 解出 发送方的 临时随机PubKey  todo (和 makeAuthMsg() 中 使用他们自己的临时私钥算出签名 相呼应)
 	if err != nil {
 		return err
 	}
@@ -672,7 +678,7 @@ func (h *encHandshake) makeAuthResp() (msg *authRespV4, err error) {
 
 	msg = new(authRespV4)
 	copy(msg.Nonce[:], h.respNonce)
-	copy(msg.RandomPubkey[:], exportPubkey(&h.randomPrivKey.PublicKey))
+	copy(msg.RandomPubkey[:], exportPubkey(&h.randomPrivKey.PublicKey))   // 接收方自己生成的 随机nonce  和 临时公钥 相应回给 发送方 (发送方不需要推我们这边的 临时公钥了)
 	msg.Version = 4
 	return msg, nil
 }
