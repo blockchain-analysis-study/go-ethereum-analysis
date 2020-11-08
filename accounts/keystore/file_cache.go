@@ -28,6 +28,14 @@ import (
 	"github.com/go-ethereum-analysis/log"
 )
 
+// 与account_cache.go类似，file_cache.go 中实现了对keystore目录下 【所有文件】 的信息的缓存.
+//
+// todo accountCache 就是通过fileCache来获取文件变动的信息，进而得到账号变动信息的.
+
+// fileCache在每次扫描keystore目录时，会与当前内存中保存的文件信息进行对比，找出新建、删除、修改的文件.
+//
+// accountCache利用这些信息更新内存中的账号信息.
+
 // fileCache is a cache of files seen during scan of keystore.
 type fileCache struct {
 	all     mapset.Set // Set of all files from the keystore folder

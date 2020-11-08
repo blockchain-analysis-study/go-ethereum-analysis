@@ -206,16 +206,17 @@ func NewSignerAPI(chainID int64, ksLocation string, noUSB bool, ui SignerUI, abi
 	if len(ksLocation) > 0 {
 		backends = append(backends, keystore.NewKeyStore(ksLocation, n, p))
 	}
-	if !noUSB {
+	if !noUSB {  // todo 如果是 USB 硬件钱包
+
 		// Start a USB hub for Ledger hardware wallets
-		if ledgerhub, err := usbwallet.NewLedgerHub(); err != nil {
+		if ledgerhub, err := usbwallet.NewLedgerHub(); err != nil {  // ledger 硬件钱包
 			log.Warn(fmt.Sprintf("Failed to start Ledger hub, disabling: %v", err))
 		} else {
 			backends = append(backends, ledgerhub)
 			log.Debug("Ledger support enabled")
 		}
 		// Start a USB hub for Trezor hardware wallets
-		if trezorhub, err := usbwallet.NewTrezorHub(); err != nil {
+		if trezorhub, err := usbwallet.NewTrezorHub(); err != nil {  // trezor 硬件钱包
 			log.Warn(fmt.Sprintf("Failed to start Trezor hub, disabling: %v", err))
 		} else {
 			backends = append(backends, trezorhub)

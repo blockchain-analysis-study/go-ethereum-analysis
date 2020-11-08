@@ -25,6 +25,10 @@ import (
 	"github.com/rjeczalik/notify"
 )
 
+// watcher用来监控keystore目录下的文件，如果文件发生变化，则立即调用account_cache.go中的代码重新扫描账户信息.
+//
+// 但watcher只在某些系统下有效，这是文件的build注释：// +build darwin,!ios freebsd linux,!arm64 netbsd solaris
+//
 type watcher struct {
 	ac       *accountCache
 	starting bool

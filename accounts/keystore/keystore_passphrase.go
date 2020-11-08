@@ -45,6 +45,8 @@ import (
 	"golang.org/x/crypto/scrypt"
 )
 
+// keyStorePassphrase结构体是对keyStore接口（在key.go文件中）的一种实现方式，它会要求调用者提供一个密码，从而使用 【AES加密算法】 加密私钥后，将加密数据写入文件中.
+
 const (
 	keyHeaderKDF = "scrypt"
 
@@ -80,7 +82,7 @@ func (ks keyStorePassphrase) GetKey(addr common.Address, filename, auth string) 
 	if err != nil {
 		return nil, err
 	}
-	key, err := DecryptKey(keyjson, auth)
+	key, err := DecryptKey(keyjson, auth) // auth: 密码
 	if err != nil {
 		return nil, err
 	}

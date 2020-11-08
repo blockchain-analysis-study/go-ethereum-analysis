@@ -851,11 +851,24 @@ func makeDatabaseHandles() int {
 
 // MakeAddress converts an account specified directly as a hex encoded string or
 // a key index in the key store to an internal account representation.
+//
+//	 入参:
+//
+//		ks:   		keystore 实例
+//		account:	可以是 common.Address 的string， 也可以是 keystore中Addr 的索引(即第几个)
+//
+//
 func MakeAddress(ks *keystore.KeyStore, account string) (accounts.Account, error) {
+
+	// 如果 account 是 common.Address 的string类型, 则 直接转
+	//
 	// If the specified account is a valid address, return it
 	if common.IsHexAddress(account) {
 		return accounts.Account{Address: common.HexToAddress(account)}, nil
 	}
+
+	// 如果 account 是 keystore 的addr 索引, 那么从 keystore 中抓到这个 addr
+	//
 	// Otherwise try to interpret the account as a keystore index
 	index, err := strconv.Atoi(account)
 	if err != nil || index < 0 {
@@ -901,7 +914,7 @@ func MakePasswordList(ctx *cli.Context) []string {
 	if path == "" {
 		return nil
 	}
-	text, err := ioutil.ReadFile(path)
+	text, err := ioutil.ReadFile(path) // 加载 命令行指定的 password 文件, 用来解锁 keystore
 	if err != nil {
 		Fatalf("Failed to read password file: %v", err)
 	}

@@ -23,6 +23,11 @@ import (
 	"strings"
 )
 
+// 这个文件中的代码定义了代表  以太坊钱包路径的URL结构体及相关函数.
+//
+// todo 与 hd.go 中不同的是，URL 结构体中保存了钱包的类型（scheme）和 钱包路径的字符串形式 的表示;
+// todo 而hd.go中定义了 HD钱包路径的类型（非字符串类型）的解析 及 字符串转换 等方法.
+
 // URL represents the canonical identification URL of a wallet or account.
 //
 // It is a simplified version of url.URL, with the important limitations (which

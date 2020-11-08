@@ -33,6 +33,10 @@ import (
 	"github.com/karalabe/hid"
 )
 
+// wallet结构体实现了Wallet接口，是硬件钱包的具体实现.
+//
+// 但它内部其实主要调用硬件钱包的driver实现相关功能.
+
 // Maximum time between wallet health checks to detect USB unplugs.
 const heartbeatCycle = time.Second
 
@@ -135,7 +139,10 @@ func (w *wallet) Status() (string, error) {
 
 // Open implements accounts.Wallet, attempting to open a USB connection to the
 // hardware wallet.
-func (w *wallet) Open(passphrase string) error {
+//
+// 尝试打开与硬件钱包的USB连接
+//
+func (w *wallet) Open(passphrase string) error {   // 尝试打开与硬件钱包的USB连接
 	w.stateLock.Lock() // State lock is enough since there's no connection yet at this point
 	defer w.stateLock.Unlock()
 
@@ -168,7 +175,7 @@ func (w *wallet) Open(passphrase string) error {
 	go w.selfDerive()
 
 	// Notify anyone listening for wallet events that a new device is accessible
-	go w.hub.updateFeed.Send(accounts.WalletEvent{Wallet: w, Kind: accounts.WalletOpened})
+	go w.hub.updateFeed.Send(accounts.WalletEvent{Wallet: w, Kind: accounts.WalletOpened})   // 每 打开一个硬件钱包, 都会发起 新钱包event
 
 	return nil
 }
@@ -508,7 +515,7 @@ func (w *wallet) SignHash(account accounts.Account, hash []byte) ([]byte, error)
 // Note, if the version of the Ethereum application running on the Ledger wallet is
 // too old to sign EIP-155 transactions, but such is requested nonetheless, an error
 // will be returned opposed to silently signing in Homestead mode.
-func (w *wallet) SignTx(account accounts.Account, tx *types.Transaction, chainID *big.Int) (*types.Transaction, error) {
+func (w *wallet) SignTx(account accounts.Account, tx *types.Transaction, chainID *big.Int) (*types.Transaction, error) {  // 使用 硬件钱包对 tx 做签名
 	w.stateLock.RLock() // Comms have own mutex, this is for the state fields
 	defer w.stateLock.RUnlock()
 
@@ -537,7 +544,7 @@ func (w *wallet) SignTx(account accounts.Account, tx *types.Transaction, chainID
 		w.hub.commsLock.Unlock()
 	}()
 	// Sign the transaction and verify the sender to avoid hardware fault surprises
-	sender, signed, err := w.driver.SignTx(path, tx, chainID)
+	sender, signed, err := w.driver.SignTx(path, tx, chainID)  // 调用硬件 钱包 做 tx 签名相关
 	if err != nil {
 		return nil, err
 	}

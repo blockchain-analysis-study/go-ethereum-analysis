@@ -39,6 +39,13 @@ const (
 	version = 3
 )
 
+
+// 定义了Key结构体及其json格式的marshal/unmarshal方式.
+//
+// 另外这个文件中还定义了通过keyStore接口将Key写入文件中的函数.
+//
+// keyStore接口中定义了Key被写入文件的具体细节，在 keystore_passphrase.go 和 keystore_plain.go 中都有实现.
+//
 type Key struct {
 	Id uuid.UUID // Version 4 "random" for unique id not derived from key data
 	// to simplify lookups we also store the address

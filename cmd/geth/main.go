@@ -295,13 +295,14 @@ func startNode(ctx *cli.Context, stack *node.Node) {
 	// Unlock any account specifically requested
 	//
 	// 根据本地 keystore 文件, 解锁 一些账户信息
-	ks := stack.AccountManager().Backends(keystore.KeyStoreType)[0].(*keystore.KeyStore)
+	ks := stack.AccountManager().Backends(keystore.KeyStoreType)[0].(*keystore.KeyStore)  // 加载 第一个 keystore (backends 里面可能是多个 keystore 或者 trezor 或 ledger 钱包实例)
 
-	passwords := utils.MakePasswordList(ctx)
-	unlocks := strings.Split(ctx.GlobalString(utils.UnlockedAccountFlag.Name), ",")
+	passwords := utils.MakePasswordList(ctx) // 获取 password 文件中的信息.
+	unlocks := strings.Split(ctx.GlobalString(utils.UnlockedAccountFlag.Name), ",") // 获取 命令行 指定需要解锁的 账户Addr （一或多个）
+	// 一般来说, 节点启动时 不指定, 那么就不会有 钱包账户被解锁 ...
 	for i, account := range unlocks {
 		if trimmed := strings.TrimSpace(account); trimmed != "" {
-			unlockAccount(ctx, ks, trimmed, i, passwords)
+			unlockAccount(ctx, ks, trimmed, i, passwords)  // 可以看出, 要求命令行 制定需要解锁的 addr1,addr2, ..., addrN 的 顺序需要和 passwords 集合中一样
 		}
 	}
 
@@ -310,13 +311,15 @@ func startNode(ctx *cli.Context, stack *node.Node) {
 	//
 	// 监听 钱包事件
 	events := make(chan accounts.WalletEvent, 16)
-	stack.AccountManager().Subscribe(events)
+	stack.AccountManager().Subscribe(events)  // 监听 新钱包 解锁 event
 
+
+	//  启动 异步协程  (处理 硬件钱包连接的 ...)
 	go func() {
 		// Create a chain state reader for self-derivation
 		//
-		// 创建一个  链状状态读取器  以进行自我推导
-		rpcClient, err := stack.Attach()
+		// 创建一个  链状状态读取器  以进行自我推导    (主要处理 硬件钱包 连接的 ...)
+		rpcClient, err := stack.Attach()  // 因为 这里是一个 InProc 的 rpc连接
 		if err != nil {
 			utils.Fatalf("Failed to attach to self: %v", err)
 		}
@@ -325,7 +328,7 @@ func startNode(ctx *cli.Context, stack *node.Node) {
 
 		// Open any wallets already attached
 		for _, wallet := range stack.AccountManager().Wallets() {
-			if err := wallet.Open(""); err != nil {
+			if err := wallet.Open(""); err != nil {  //
 				log.Warn("Failed to open wallet", "url", wallet.URL(), "err", err)
 			}
 		}

@@ -40,6 +40,10 @@ import (
 	"github.com/go-ethereum-analysis/event"
 )
 
+// 定义了KeyStore结构体及其方法.
+//
+
+
 var (
 	ErrLocked  = accounts.NewAuthNeededError("password or unlock")
 	ErrNoMatch = errors.New("no key for given address or file")
@@ -55,11 +59,20 @@ const KeyStoreScheme = "keystore"
 // Maximum time between wallet refreshes (if filesystem notifications don't work).
 const walletRefreshCycle = 3 * time.Second
 
+// todo KeyStore结构体实现了Backend接口，是keystore类型的钱包的后端实现.
+//
+// 同时它也实现了keystore类型钱包的大多数功能.
+//
+// 由函数 NewKeyStore() 或 NewPlaintextKeyStore() 创建，根据不同的keyStore，它可以代表【加密】或 【非加密】 的keystore类型的钱包.
+//
 // KeyStore manages a key storage directory on disk.
 type KeyStore struct {
 	storage  keyStore                     // Storage backend, might be cleartext or encrypted
 	cache    *accountCache                // In-memory account cache over the filesystem storage
 	changes  chan struct{}                // Channel receiving change notifications from the cache
+
+	// 当前 keystore 实例中, 缓存起来的 所有被解锁过的 account和privateKey
+	//
 	unlocked map[common.Address]*unlocked // Currently unlocked account (decrypted private keys)
 
 	wallets     []accounts.Wallet       // Wallet wrappers around the individual key files
@@ -71,8 +84,8 @@ type KeyStore struct {
 }
 
 type unlocked struct {
-	*Key
-	abort chan struct{}
+	*Key  // 这里有 addr  和 privateKey
+	abort chan struct{}  // 监听 账户在 内存中是否过期而被锁定信号的 通道
 }
 
 // NewKeyStore creates a keystore for the given directory.
@@ -273,14 +286,21 @@ func (ks *KeyStore) SignTx(a accounts.Account, tx *types.Transaction, chainID *b
 	ks.mu.RLock()
 	defer ks.mu.RUnlock()
 
-	unlockedKey, found := ks.unlocked[a.Address]
+	// 为什么要从缓存取 ?? todo 因为本地被解锁的账户都在缓存中... tx只能由 被解锁账户来做签名的 ...
+	unlockedKey, found := ks.unlocked[a.Address]  // 从 keystore 的全局 被解锁账户 缓存中取出对应的  privateKey 相关信息
 	if !found {
 		return nil, ErrLocked
 	}
-	// Depending on the presence of the chain ID, sign with EIP155 or homestead
-	if chainID != nil {
-		return types.SignTx(tx, types.NewEIP155Signer(chainID), unlockedKey.PrivateKey)
+
+	// todo Signer 主要时用来 对 tx 做 Hash算法的  和 根据 签名的值 求 r s v 的
+	//
+	//			privateKey 才是对 tx 做签名 ...
+
+	// Depending on the presence of the chain ID, sign with EIP155 or homestead   根据链ID的存在，使用EIP155或 家园 签名
+	if chainID != nil { // 签名必须采用  EIP155 或者 家园 版本 的相关信息 <Signer>
+		return types.SignTx(tx, types.NewEIP155Signer(chainID), unlockedKey.PrivateKey)  // EIP155 主要时 放置 【重放攻击】 的
 	}
+	// todo HomesteadSigner 继承了  FrontierSigner
 	return types.SignTx(tx, types.HomesteadSigner{}, unlockedKey.PrivateKey)
 }
 
@@ -313,8 +333,8 @@ func (ks *KeyStore) SignTxWithPassphrase(a accounts.Account, passphrase string, 
 }
 
 // Unlock unlocks the given account indefinitely.
-func (ks *KeyStore) Unlock(a accounts.Account, passphrase string) error {
-	return ks.TimedUnlock(a, passphrase, 0)
+func (ks *KeyStore) Unlock(a accounts.Account, passphrase string) error { // 根据 pass 对 account 做解锁
+	return ks.TimedUnlock(a, passphrase, 0)    // 传入0秒过期, 也就是 永久不会过期 ...
 }
 
 // Lock removes the private key with the given address from memory.
@@ -322,7 +342,7 @@ func (ks *KeyStore) Lock(addr common.Address) error {
 	ks.mu.Lock()
 	if unl, found := ks.unlocked[addr]; found {
 		ks.mu.Unlock()
-		ks.expire(addr, unl, time.Duration(0)*time.Nanosecond)
+		ks.expire(addr, unl, time.Duration(0)*time.Nanosecond)  // 设置 超时 清除 内存中的 被解锁钱包的 privateKey  (这里表示 永不过期)
 	} else {
 		ks.mu.Unlock()
 	}
@@ -336,6 +356,12 @@ func (ks *KeyStore) Lock(addr common.Address) error {
 // If the account address is already unlocked for a duration, TimedUnlock extends or
 // shortens the active unlock timeout. If the address was previously unlocked
 // indefinitely the timeout is not altered.
+//
+//  todo 入参:
+//		a:			需要解锁的  keystore中的 account
+//		passphrase: 密码
+//
+//
 func (ks *KeyStore) TimedUnlock(a accounts.Account, passphrase string, timeout time.Duration) error {
 	a, key, err := ks.getDecryptedKey(a, passphrase)
 	if err != nil {
@@ -344,12 +370,13 @@ func (ks *KeyStore) TimedUnlock(a accounts.Account, passphrase string, timeout t
 
 	ks.mu.Lock()
 	defer ks.mu.Unlock()
-	u, found := ks.unlocked[a.Address]
+
+	u, found := ks.unlocked[a.Address]  // 一般来说是 第一次解锁是找不到 被解锁账户信息的 缓存的 ...
 	if found {
 		if u.abort == nil {
 			// The address was unlocked indefinitely, so unlocking
 			// it with a timeout would be confusing.
-			zeroKey(key.PrivateKey)
+			zeroKey(key.PrivateKey)    // 删除私钥
 			return nil
 		}
 		// Terminate the expire goroutine and replace it below.
@@ -357,11 +384,11 @@ func (ks *KeyStore) TimedUnlock(a accounts.Account, passphrase string, timeout t
 	}
 	if timeout > 0 {
 		u = &unlocked{Key: key, abort: make(chan struct{})}
-		go ks.expire(a.Address, u, timeout)
+		go ks.expire(a.Address, u, timeout)  // 设置 超时 清除 内存中的 被解锁钱包的 privateKey   (这里表示在 timeout 秒后过期)
 	} else {
-		u = &unlocked{Key: key}
+		u = &unlocked{Key: key}  // 新建一个 被解锁账户 信息   todo (注意: 这里 abort 通道是个 nil)
 	}
-	ks.unlocked[a.Address] = u
+	ks.unlocked[a.Address] = u   // 将解锁账户信息 加到缓存中 ...
 	return nil
 }
 
@@ -379,25 +406,26 @@ func (ks *KeyStore) getDecryptedKey(a accounts.Account, auth string) (accounts.A
 	if err != nil {
 		return a, nil, err
 	}
-	key, err := ks.storage.GetKey(a.Address, a.URL.Path, auth)
+	key, err := ks.storage.GetKey(a.Address, a.URL.Path, auth)  // auth: 密码  a.URL.Path：a账户被存放的 keystore 的地址.
 	return a, key, err
 }
 
-func (ks *KeyStore) expire(addr common.Address, u *unlocked, timeout time.Duration) {
+func (ks *KeyStore) expire(addr common.Address, u *unlocked, timeout time.Duration) { // 设置 超时 清除 内存中的 被解锁钱包的 privateKey
 	t := time.NewTimer(timeout)
 	defer t.Stop()
 	select {
-	case <-u.abort:
+	case <-u.abort:   	// 接收到 abort 信号 直接退出, 不做任何事.
 		// just quit
-	case <-t.C:
+
+	case <-t.C:			// 到期 清除内存中的 解锁钱包账户信息
 		ks.mu.Lock()
 		// only drop if it's still the same key instance that dropLater
 		// was launched with. we can check that using pointer equality
 		// because the map stores a new pointer every time the key is
 		// unlocked.
 		if ks.unlocked[addr] == u {
-			zeroKey(u.PrivateKey)
-			delete(ks.unlocked, addr)
+			zeroKey(u.PrivateKey)   	// 删除 私钥
+			delete(ks.unlocked, addr)	// 删除缓存
 		}
 		ks.mu.Unlock()
 	}

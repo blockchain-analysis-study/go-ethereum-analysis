@@ -33,6 +33,16 @@ import (
 	"github.com/go-ethereum-analysis/log"
 )
 
+// accountCache 的功能是在内存中缓存keystore钱包目录下 【所有账号】信息.
+//
+// 无论keystore目录中的文件无何变动（新建、删除、修改），accountCache 都可以在扫描目录时将变动更新到内存中.
+//
+// accountCache 依赖 fileCache
+//
+// fileCache在每次扫描keystore目录时，会与当前内存中保存的文件信息进行对比，找出新建、删除、修改的文件.
+//
+// accountCache利用这些信息更新内存中的账号信息.
+
 // Minimum amount of time between cache reloads. This limit applies if the platform does
 // not support change notifications. It also applies if the keystore directory does not
 // exist yet, the code will attempt to create a watcher at most this often.

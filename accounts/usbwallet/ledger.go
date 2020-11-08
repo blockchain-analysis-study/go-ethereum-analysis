@@ -36,6 +36,8 @@ import (
 	"github.com/go-ethereum-analysis/rlp"
 )
 
+// ledgerDriver结构体是driver接口的实现，它实现了与ledger类型的硬件钱包通信协议和代码.
+
 // ledgerOpcode is an enumeration encoding the supported Ledger opcodes.
 type ledgerOpcode byte
 
@@ -423,7 +425,7 @@ func (w *ledgerDriver) ledgerExchange(opcode ledgerOpcode, p1 ledgerParam1, p2 l
 		}
 		// Send over to the device
 		w.log.Trace("Data chunk sent to the Ledger", "chunk", hexutil.Bytes(chunk))
-		if _, err := w.device.Write(chunk); err != nil {
+		if _, err := w.device.Write(chunk); err != nil { // 将数据 刷入 ledger 硬件钱包
 			return nil, err
 		}
 	}
@@ -432,7 +434,7 @@ func (w *ledgerDriver) ledgerExchange(opcode ledgerOpcode, p1 ledgerParam1, p2 l
 	chunk = chunk[:64] // Yeah, we surely have enough space
 	for {
 		// Read the next chunk from the Ledger wallet
-		if _, err := io.ReadFull(w.device, chunk); err != nil {
+		if _, err := io.ReadFull(w.device, chunk); err != nil { // 将数据 读出 ledger 硬件钱包
 			return nil, err
 		}
 		w.log.Trace("Data chunk received from the Ledger", "chunk", hexutil.Bytes(chunk))

@@ -52,6 +52,39 @@ type txdata struct {
 	Payload      []byte          `json:"input"    gencodec:"required"`
 
 	// Signature values
+	//
+	// 签名的值
+	//
+	//
+	// v：QUANTITY-ECDSA恢复ID
+	// r：DATA，32字节-ECDSA签名r
+	// s：DATA，32字节-ECDSA签名s
+	//
+	//  TODO (这里我们会想到 discover.NodeId 的 64 byte， 是公钥的 X + Y)
+	//
+	// todo r,s,v 是交易签名后的值，它们可以被用来生成签名者的公钥.
+	//
+	// 		R，S 是ECDSA椭圆加密算法的输出值，  TODO (这里我们会想到 discover.NodeId 的 64 byte， 是公钥的 X + Y)
+	// 		V 是用于恢复结果的ID
+	//
+	// 	todo 比特币RSV的作用描述也适用于以太坊，为了避免【重放攻击】，以太坊在EIP 155中做了更多的调整
+	//
+	// len(r + s + v ) == 65
+	//
+	// 对于 非EIP155 的 r s v 的值是下面的规则:
+	//
+	// sig[0, 32) 	=> 	r
+	// sig[32, 65) =>	s
+	// sig[64] + 27 == v
+	//
+	// 而 EIP155 的 r s v 的值是下面的 规则:
+	//
+	// sig[0, 32) 	=> 	r
+	// sig[32, 65) =>	s
+	// sig[64] + 35 + chainId * 2  => v (这样纸, 在不同的 chain 上的tx不可以互相重放 ...)
+	//
+	// todo EIP 155：重放攻击保护——防止了在一个以太坊链上的交易被重复广播到另外一条链.
+	//
 	V *big.Int `json:"v" gencodec:"required"`
 	R *big.Int `json:"r" gencodec:"required"`
 	S *big.Int `json:"s" gencodec:"required"`
@@ -239,12 +272,35 @@ func (tx *Transaction) AsMessage(s Signer) (Message, error) {
 // WithSignature returns a new transaction with the given signature.
 // This signature needs to be formatted as described in the yellow paper (v+27).
 func (tx *Transaction) WithSignature(signer Signer, sig []byte) (*Transaction, error) {
+
+
+	// 只有 EIP155Signer 和 FrontierSigner  (HomesteadSigner 的 `SignatureValues()` 其实里面就是调用了一次 FrontierSigner 的 `SignatureValues()`)
+	//
+	// 区别:
+	//		EIP155 其实也是先用了一次 : HomesteadSigner{}.SignatureValues(tx, sig), 然后 做了 V = big.NewInt(int64(sig[64] + 35)) 和 V.Add(V, s.chainIdMul)
+	//
+	// 具体来说是, 如下:
+	//
+	// 对于 非EIP155 的 r s v 的值是下面的规则:
+	//
+	// sig[0, 32) 	=> 	r
+	// sig[32, 65) =>	s
+	// sig[64] + 27 == v
+	//
+	// 而 EIP155 的 r s v 的值是下面的 规则:
+	//
+	// sig[0, 32) 	=> 	r
+	// sig[32, 65) =>	s
+	// sig[64] + 35 + chainId * 2  => v (这样纸, 在不同的 chain 上的tx不可以互相重放 ...)
+	//
+	// todo EIP 155：重放攻击保护——防止了在一个以太坊链上的交易被重复广播到另外一条链.
+
 	r, s, v, err := signer.SignatureValues(tx, sig)
 	if err != nil {
 		return nil, err
 	}
 	cpy := &Transaction{data: tx.data}
-	cpy.data.R, cpy.data.S, cpy.data.V = r, s, v
+	cpy.data.R, cpy.data.S, cpy.data.V = r, s, v  // 填充 tx  的 R S V   <R S V 三者合起来就是 签名值>
 	return cpy, nil
 }
 

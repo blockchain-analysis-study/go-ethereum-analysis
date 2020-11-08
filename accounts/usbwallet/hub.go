@@ -28,6 +28,7 @@ import (
 	"github.com/karalabe/hid"
 )
 
+
 // LedgerScheme is the protocol scheme prefixing account and wallet URLs.
 const LedgerScheme = "ledger"
 
@@ -42,6 +43,13 @@ const refreshCycle = time.Second
 // trashing.
 const refreshThrottling = 500 * time.Millisecond
 
+// todo Hub结构体实现了Backend接口，是usbwallet类型的钱包的后端实现.
+//
+// Hub结构体代表了这种类型的后端钱包，它主要由函数 NewLedgerHub() 或 NewTrezorHub() 创建，根据不同的driver，它可以代表不同的硬件钱包.
+//
+// 这也是  makeDriver 字段想要表达的意思.
+// 在ledger.go和trezor.go中，有各自的driver实现，它们使用不同的协议，todo 通过 device.Write() 和 io.ReadAll() 对设备进行读写以实现通信
+//
 // Hub is a accounts.Backend that can find and handle generic USB hardware wallets.
 type Hub struct {
 	scheme     string                  // Protocol scheme prefixing account and wallet URLs.

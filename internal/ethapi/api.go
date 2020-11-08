@@ -299,7 +299,7 @@ func (s *PrivateAccountAPI) NewAccount(password string) (common.Address, error) 
 }
 
 // fetchKeystore retrives the encrypted keystore from the account manager.
-func fetchKeystore(am *accounts.Manager) *keystore.KeyStore {
+func fetchKeystore(am *accounts.Manager) *keystore.KeyStore {   // 返回 第一个  keystore
 	return am.Backends(keystore.KeyStoreType)[0].(*keystore.KeyStore)
 }
 
@@ -317,17 +317,23 @@ func (s *PrivateAccountAPI) ImportRawKey(privkey string, password string) (commo
 // UnlockAccount will unlock the account associated with the given address with
 // the given password for duration seconds. If duration is nil it will use a
 // default of 300 seconds. It returns an indication if the account was unlocked.
-func (s *PrivateAccountAPI) UnlockAccount(addr common.Address, password string, duration *uint64) (bool, error) {
+//
+// UnlockAccount() 将在持续秒数的时间内使用给定密码解锁与给定地址关联的帐户.
+// 					如果duration为nil，则默认使用300秒.
+// 					如果帐户已解锁，它将返回一个指示.
+//
+func (s *PrivateAccountAPI) UnlockAccount(addr common.Address, password string, duration *uint64) (bool, error) {  // 命令行 解锁一个钱包 ...
 	const max = uint64(time.Duration(math.MaxInt64) / time.Second)
 	var d time.Duration
 	if duration == nil {
-		d = 300 * time.Second
+		d = 300 * time.Second   // todo 默认 每个钱包 解锁 300秒
 	} else if *duration > max {
 		return false, errors.New("unlock duration too large")
 	} else {
 		d = time.Duration(*duration) * time.Second
 	}
-	err := fetchKeystore(s.am).TimedUnlock(accounts.Account{Address: addr}, password, d)
+	// `fetchKeystore()` 返回 第一个  keystore
+	err := fetchKeystore(s.am).TimedUnlock(accounts.Account{Address: addr}, password, d)   // 命令行 解锁一个钱包 ...
 	return err == nil, err
 }
 
@@ -1148,7 +1154,7 @@ func (args *SendTxArgs) setDefaults(ctx context.Context, b Backend) error {
 		if err != nil {
 			return err
 		}
-		args.Nonce = (*hexutil.Uint64)(&nonce)
+		args.Nonce = (*hexutil.Uint64)(&nonce)  // 使用 该账户 在 tx_pool 中的 statedb 快照中的 nonce 值
 	}
 	if args.Data != nil && args.Input != nil && !bytes.Equal(*args.Data, *args.Input) {
 		return errors.New(`Both "data" and "input" are set and not equal. Please use "input" to pass transaction call data.`)
@@ -1176,9 +1182,9 @@ func (args *SendTxArgs) toTransaction() *types.Transaction {
 		input = *args.Input
 	}
 	if args.To == nil {
-		return types.NewContractCreation(uint64(*args.Nonce), (*big.Int)(args.Value), uint64(*args.Gas), (*big.Int)(args.GasPrice), input)
+		return types.NewContractCreation(uint64(*args.Nonce), (*big.Int)(args.Value), uint64(*args.Gas), (*big.Int)(args.GasPrice), input) // 创建一个 合约部署 tx
 	}
-	return types.NewTransaction(uint64(*args.Nonce), *args.To, (*big.Int)(args.Value), uint64(*args.Gas), (*big.Int)(args.GasPrice), input)
+	return types.NewTransaction(uint64(*args.Nonce), *args.To, (*big.Int)(args.Value), uint64(*args.Gas), (*big.Int)(args.GasPrice), input) // 创建一个 普通交易 (转账交易 || 合约调用交易)
 }
 
 // submitTransaction is a helper function that submits tx to txPool and logs a message.
@@ -1216,11 +1222,15 @@ func submitTransaction(ctx context.Context, b Backend, tx *types.Transaction) (c
 
 // SendTransaction creates a transaction for the given argument, sign it and submit it to the
 // transaction pool.
+//
+//
+// SendTransaction() 当前 node 为给定参数创建一个 tx，对 该tx 进行签名并将其提交到 tx_pool
+//
 /**
 这个就是 web3 调用 eth.SendTransaction() 过来的tx入口
 这种tx是前端直接发过来的交易 (后台签名)
  */
-func (s *PublicTransactionPoolAPI) SendTransaction(ctx context.Context, args SendTxArgs) (common.Hash, error) {
+func (s *PublicTransactionPoolAPI) SendTransaction(ctx context.Context, args SendTxArgs) (common.Hash, error) { // 发起一笔 由节点本地 签名的交易 (客户端没签名的, 需要当前节点签名 ...)
 
 	// Look up the wallet containing the requested signer
 	// 构造查找 交易发起账户的钱包入参：account
@@ -1250,16 +1260,14 @@ func (s *PublicTransactionPoolAPI) SendTransaction(ctx context.Context, args Sen
 		return common.Hash{}, err
 	}
 	// Assemble the transaction and sign with the wallet
-	// 组装 tx
-	tx := args.toTransaction()
+	tx := args.toTransaction() // 根据入参,  新建一个 tx 实例 (还未签名的)
 
 	var chainID *big.Int
 	if config := s.b.ChainConfig(); config.IsEIP155(s.b.CurrentBlock().Number()) {
-		chainID = config.ChainID
+		chainID = config.ChainID  // 取出 当前 chainId
 	}
 
-	// 根据 account 及wallet 相关来对 tx 进行签名
-	signed, err := wallet.SignTx(account, tx, chainID)
+	signed, err := wallet.SignTx(account, tx, chainID)  // 根据 account 及wallet 相关来对 tx 进行签名  (sign的值最终交给 R S V 三者)
 	if err != nil {
 		return common.Hash{}, err
 	}
@@ -1269,11 +1277,16 @@ func (s *PublicTransactionPoolAPI) SendTransaction(ctx context.Context, args Sen
 
 // SendRawTransaction will add the signed transaction to the transaction pool.
 // The sender is responsible for signing the transaction and using the correct nonce.
+//
+//
+// SendRawTransaction() 将  已签名的交易  添加到交易池中
+//					 	发送者负责签署交易  并使用正确的随机数
+//
 /**
 这个就是 web3 调用 eth.SendRawTransaction() 过来的tx入口
 这种tx是由前端自签名之后发过来的 tx
  */
-func (s *PublicTransactionPoolAPI) SendRawTransaction(ctx context.Context, encodedTx hexutil.Bytes) (common.Hash, error) {
+func (s *PublicTransactionPoolAPI) SendRawTransaction(ctx context.Context, encodedTx hexutil.Bytes) (common.Hash, error) { // 发起一笔 由 已经签名的交易 ( 客户端签名好的 ...)
 	tx := new(types.Transaction)
 	if err := rlp.DecodeBytes(encodedTx, tx); err != nil {
 		return common.Hash{}, err
@@ -1315,7 +1328,12 @@ type SignTransactionResult struct {
 // SignTransaction will sign the given transaction with the from account.
 // The node needs to have the private key of the account corresponding with
 // the given from address and it needs to be unlocked.
-func (s *PublicTransactionPoolAPI) SignTransaction(ctx context.Context, args SendTxArgs) (*SignTransactionResult, error) {
+//
+//
+// SignTransaction()  将使用from帐户签署给定的交易
+//					 节点需要具有  与给定的发件人地址 对应的帐户私钥，并且需要将其解锁
+//
+func (s *PublicTransactionPoolAPI) SignTransaction(ctx context.Context, args SendTxArgs) (*SignTransactionResult, error) {  // 发送 指定需要有某个 账户 签名的 交易 (由 本节点中的 某个被指定账户来签名 ...)
 	if args.Gas == nil {
 		return nil, fmt.Errorf("gas not specified")
 	}

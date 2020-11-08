@@ -24,6 +24,8 @@ import (
 	"github.com/go-ethereum-analysis/core/types"
 )
 
+// keystoreWallet是keystore类型的钱包的实现，但其功能基本都是调用 KeyStore对象 实现的.
+//
 // keystoreWallet implements the accounts.Wallet interface for the original
 // keystore.
 type keystoreWallet struct {
@@ -98,7 +100,7 @@ func (w *keystoreWallet) SignHash(account accounts.Account, hash []byte) ([]byte
 // with the given account. If the wallet does not wrap this particular account,
 // an error is returned to avoid account leakage (even though in theory we may
 // be able to sign via our shared keystore backend).
-func (w *keystoreWallet) SignTx(account accounts.Account, tx *types.Transaction, chainID *big.Int) (*types.Transaction, error) {
+func (w *keystoreWallet) SignTx(account accounts.Account, tx *types.Transaction, chainID *big.Int) (*types.Transaction, error) { // 使用 keystore 钱包对 tx 做签名
 	// Make sure the requested account is contained within
 	if account.Address != w.account.Address {
 		return nil, accounts.ErrUnknownAccount
@@ -107,7 +109,7 @@ func (w *keystoreWallet) SignTx(account accounts.Account, tx *types.Transaction,
 		return nil, accounts.ErrUnknownAccount
 	}
 	// Account seems valid, request the keystore to sign
-	return w.keystore.SignTx(account, tx, chainID)
+	return w.keystore.SignTx(account, tx, chainID) // 使用 keystore 的 account 账户 对 tx 做签名 ...
 }
 
 // SignHashWithPassphrase implements accounts.Wallet, attempting to sign the

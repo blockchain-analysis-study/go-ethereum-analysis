@@ -24,6 +24,10 @@ import (
 	"strings"
 )
 
+// todo  HD 钱包：分层确定性（Hierarchical Deterministic）钱包
+//
+// 定义了HD类型的钱包的路径解析等函数。这个文件中的注释还解析了HD路径一些知识，值得一看。（但我认为它关于哪个BIP提案提出的哪个规范说得不对，比如注释中提到BIP-32定义了路径规范 ： 【m / purpose' / coin_type' / account' / change / address_index】 ，这应该是错误的，我们前面提到过，purpose是在BIP-43中提出的，而整个路径规范是在BIP-44中提出的）
+
 // DefaultRootDerivationPath is the root path to which custom derivation endpoints
 // are appended. As such, the first account will be at m/44'/60'/0'/0, the second
 // at m/44'/60'/0'/1, etc.

@@ -24,6 +24,11 @@ import (
 	"github.com/go-ethereum-analysis/event"
 )
 
+// 是accounts模块对外导出的主要的结构和方法之一.
+//
+// todo 其它模块（比如 cmd/geth 中）通过这个结构体提供的方法对【钱包】进行管理
+//
+//
 // Manager is an overarching account manager that can communicate with various
 // backends for signing transactions.
 type Manager struct {
@@ -63,7 +68,7 @@ func NewManager(backends ...Backend) *Manager {
 	}
 	for _, backend := range backends {
 		kind := reflect.TypeOf(backend)
-		am.backends[kind] = append(am.backends[kind], backend)
+		am.backends[kind] = append(am.backends[kind], backend)  // backends 里面可能是多个 keystore 或者 trezor 或 ledger 钱包实例
 	}
 	go am.update()
 

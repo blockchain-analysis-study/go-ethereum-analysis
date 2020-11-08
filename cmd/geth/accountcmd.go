@@ -210,17 +210,19 @@ func unlockAccount(ctx *cli.Context, ks *keystore.KeyStore, address string, i in
 	if err != nil {
 		utils.Fatalf("Could not list accounts: %v", err)
 	}
+
+	// 经过三次的 尝试 对 account 做 解锁
 	for trials := 0; trials < 3; trials++ {
 		prompt := fmt.Sprintf("Unlocking account %s | Attempt %d/%d", address, trials+1, 3)
-		password := getPassPhrase(prompt, false, i, passwords)
-		err = ks.Unlock(account, password)
+		password := getPassPhrase(prompt, false, i, passwords)  // i 其实 用来指定返回 keystore 中 第 i 个 password
+		err = ks.Unlock(account, password)			// 根据 密码 解锁账户
 		if err == nil {
 			log.Info("Unlocked account", "address", account.Address.Hex())
 			return account, password
 		}
 		if err, ok := err.(*keystore.AmbiguousAddrError); ok {
 			log.Info("Unlocked account", "address", account.Address.Hex())
-			return ambiguousAddrRecovery(ks, err, password), password
+			return ambiguousAddrRecovery(ks, err, password), password   // 模糊的 账户解锁 ...
 		}
 		if err != keystore.ErrDecrypt {
 			// No need to prompt again if the error is not decryption-related.
@@ -263,7 +265,7 @@ func getPassPhrase(prompt string, confirmation bool, i int, passwords []string) 
 	return password
 }
 
-func ambiguousAddrRecovery(ks *keystore.KeyStore, err *keystore.AmbiguousAddrError, auth string) accounts.Account {
+func ambiguousAddrRecovery(ks *keystore.KeyStore, err *keystore.AmbiguousAddrError, auth string) accounts.Account {  // 模糊的 账户恢复 ...
 	fmt.Printf("Multiple key files exist for address %x:\n", err.Addr)
 	for _, a := range err.Matches {
 		fmt.Println("  ", a.URL)

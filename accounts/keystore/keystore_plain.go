@@ -25,6 +25,12 @@ import (
 	"github.com/go-ethereum-analysis/common"
 )
 
+// keyStorePlain与keyStorePassphrase类似，也是对keyStore接口的实现.
+//
+// 不同的是，keyStorePlain直接将 【密码明文】 存储在文件中.
+//
+// todo 目前这种方式已被标记弃用且整个以太坊项目中都没有调用这个文件里的函数的地方，确实谁也不想将自己的私钥明文存在本地磁盘上.
+
 type keyStorePlain struct {
 	keysDirPath string
 }

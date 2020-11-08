@@ -36,6 +36,8 @@ import (
 	"github.com/golang/protobuf/proto"
 )
 
+// 与ledgerDriver类似，trezorDriver结构体也是driver接口的实现，它实现了与trezor类型的硬件钱包的通信协议和代码.
+
 // ErrTrezorPINNeeded is returned if opening the trezor requires a PIN code. In
 // this case, the calling application should display a pinpad and send back the
 // encoded passphrase.
@@ -266,7 +268,7 @@ func (w *trezorDriver) trezorExchange(req proto.Message, results ...proto.Messag
 		}
 		// Send over to the device
 		w.log.Trace("Data chunk sent to the Trezor", "chunk", hexutil.Bytes(chunk))
-		if _, err := w.device.Write(chunk); err != nil {
+		if _, err := w.device.Write(chunk); err != nil {  // 将数据 刷入 trezor 硬件钱包
 			return 0, err
 		}
 	}
@@ -277,7 +279,7 @@ func (w *trezorDriver) trezorExchange(req proto.Message, results ...proto.Messag
 	)
 	for {
 		// Read the next chunk from the Trezor wallet
-		if _, err := io.ReadFull(w.device, chunk); err != nil {
+		if _, err := io.ReadFull(w.device, chunk); err != nil { // 将数据 读出 trezor 硬件钱包
 			return 0, err
 		}
 		w.log.Trace("Data chunk received from the Trezor", "chunk", hexutil.Bytes(chunk))

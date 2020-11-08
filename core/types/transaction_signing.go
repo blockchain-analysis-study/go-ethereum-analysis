@@ -54,7 +54,10 @@ func MakeSigner(config *params.ChainConfig, blockNumber *big.Int) Signer {
 
 // SignTx signs the transaction using the given signer and private key
 func SignTx(tx *Transaction, s Signer, prv *ecdsa.PrivateKey) (*Transaction, error) {
-	h := s.Hash(tx)
+
+	// todo HomesteadSigner 继承了  FrontierSigner
+
+	h := s.Hash(tx)  // 只有 EIP155Signer 和 FrontierSigner
 	sig, err := crypto.Sign(h[:], prv)
 	if err != nil {
 		return nil, err
@@ -113,7 +116,7 @@ func NewEIP155Signer(chainId *big.Int) EIP155Signer {
 	}
 	return EIP155Signer{
 		chainId:    chainId,
-		chainIdMul: new(big.Int).Mul(chainId, big.NewInt(2)),
+		chainIdMul: new(big.Int).Mul(chainId, big.NewInt(2)),  // chainID * 2 ?
 	}
 }
 
@@ -128,7 +131,7 @@ func (s EIP155Signer) Sender(tx *Transaction) (common.Address, error) {
 	if !tx.Protected() {
 		return HomesteadSigner{}.Sender(tx)
 	}
-	if tx.ChainId().Cmp(s.chainId) != 0 {
+	if tx.ChainId().Cmp(s.chainId) != 0 {  // 不同 chain 上的tx 不兼容 ...
 		return common.Address{}, ErrInvalidChainId
 	}
 	V := new(big.Int).Sub(tx.data.V, s.chainIdMul)
@@ -143,9 +146,14 @@ func (s EIP155Signer) SignatureValues(tx *Transaction, sig []byte) (R, S, V *big
 	if err != nil {
 		return nil, nil, nil, err
 	}
+
+	// todo EIP155 一般要求 chainId != 0
+	//
+	// EIP155 的 V 是自己算的
+	//
 	if s.chainId.Sign() != 0 {
-		V = big.NewInt(int64(sig[64] + 35))
-		V.Add(V, s.chainIdMul)
+		V = big.NewInt(int64(sig[64] + 35))  // sig[64] + 35
+		V.Add(V, s.chainIdMul)  			 // V + chainId * 2
 	}
 	return R, S, V, nil
 }
@@ -160,7 +168,7 @@ func (s EIP155Signer) Hash(tx *Transaction) common.Hash {
 		tx.data.Recipient,
 		tx.data.Amount,
 		tx.data.Payload,
-		s.chainId, uint(0), uint(0),
+		s.chainId, uint(0), uint(0),  // EIP155 把 chainId 也放进来 做 tx Hash了
 	})
 }
 
@@ -196,9 +204,11 @@ func (fs FrontierSigner) SignatureValues(tx *Transaction, sig []byte) (r, s, v *
 	if len(sig) != 65 {
 		panic(fmt.Sprintf("wrong size for signature: got %d, want 65", len(sig)))
 	}
-	r = new(big.Int).SetBytes(sig[:32])
-	s = new(big.Int).SetBytes(sig[32:64])
-	v = new(big.Int).SetBytes([]byte{sig[64] + 27})
+
+	// len(r + s + v ) == 65
+	r = new(big.Int).SetBytes(sig[:32])   					// [0, 32) 	=> 	r
+	s = new(big.Int).SetBytes(sig[32:64])					// [32, 65) =>	s
+	v = new(big.Int).SetBytes([]byte{sig[64] + 27})			// sig[64] + 27 == v
 	return r, s, v, nil
 }
 
@@ -212,6 +222,7 @@ func (fs FrontierSigner) Hash(tx *Transaction) common.Hash {
 		tx.data.Recipient,
 		tx.data.Amount,
 		tx.data.Payload,
+		// 非 EIP155 是没有使用 chainId 算  tx Hash 的
 	})
 }
 

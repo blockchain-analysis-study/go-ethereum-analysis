@@ -437,21 +437,22 @@ func makeAccountManager(conf *Config) (*accounts.Manager, string, error) {
 		keystore.NewKeyStore(keydir, scryptN, scryptP),
 	}
 
-	// 硬件钱包的相关配置项
-	if !conf.NoUSB {
+
+	if !conf.NoUSB { // 如果是 硬件钱包的相关配置项
+
 		// Start a USB hub for Ledger hardware wallets
-		if ledgerhub, err := usbwallet.NewLedgerHub(); err != nil {
+		if ledgerhub, err := usbwallet.NewLedgerHub(); err != nil {  // 创建 ledger 硬件钱包
 			log.Warn(fmt.Sprintf("Failed to start Ledger hub, disabling: %v", err))
 		} else {
 			backends = append(backends, ledgerhub)
 		}
 		// Start a USB hub for Trezor hardware wallets
-		if trezorhub, err := usbwallet.NewTrezorHub(); err != nil {
+		if trezorhub, err := usbwallet.NewTrezorHub(); err != nil {   // 创建 trezor 硬件钱包
 			log.Warn(fmt.Sprintf("Failed to start Trezor hub, disabling: %v", err))
 		} else {
 			backends = append(backends, trezorhub)
 		}
 	}
 	// 根据 keystore 创建一个 AccountManager
-	return accounts.NewManager(backends...), ephemeral, nil
+	return accounts.NewManager(backends...), ephemeral, nil  // backends 里面可能是多个 keystore 或者 trezor 或 ledger 钱包实例
 }

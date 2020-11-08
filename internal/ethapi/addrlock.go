@@ -22,9 +22,9 @@ import (
 	"github.com/go-ethereum-analysis/common"
 )
 
-/**
-这是一个 用户对应的锁池子
- */
+// todo 一个不错的设计
+//
+//		钱包账户 锁
 type AddrLocker struct {
 	mu    sync.Mutex
 	locks map[common.Address]*sync.Mutex
