@@ -50,7 +50,7 @@ var (
 	ErrSharedKeyTooBig            = fmt.Errorf("ecies: shared key params are too big")
 )
 
-// todo ECIES (Elliptic Curve Integrated Encryption Scheme) 是在RLPx握手中使用的 非对称加密方法
+// todo ECIES (椭圆曲线综合加密方案 | 集成加密方案，Elliptic Curve Integrated Encryption Scheme) 是在RLPx握手中使用的 非对称加密方法
 
 // PublicKey is a representation of an elliptic curve public key.
 type PublicKey struct {
