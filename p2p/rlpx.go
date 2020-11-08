@@ -325,7 +325,7 @@ type encHandshake struct {
 
 	// initNonce: 随机的  发送者 nonce
 	// respNonce:
-	initNonce, respNonce []byte            // nonce
+	initNonce, respNonce []byte            // nonce    todo (这两 【发送方】 和 【接收方】 双方都持有 这两个 nonce, 并且表明的 init 和 resp 是一致的 ...)
 	randomPrivKey        *ecies.PrivateKey // ecdhe-random   		自己 生成 随机临时私钥 (私钥是包含公钥的哦)
 	remoteRandomPub      *ecies.PublicKey  // ecdhe-random-pubk  	对端 的 随机临时公钥
 }
@@ -384,7 +384,7 @@ func (h *encHandshake) secrets(auth, authResp []byte) (secrets, error) {  // 入
 	// 【加密消息 R|| iv || c || d 】 给Bob节点,其中:  c = AES(SK_e, iv, m),   而 d = MAC(keccak256(SK_m), iv || c)
 
 	// derive base secrets from ephemeral key agreement
-	sharedSecret := crypto.Keccak256(ecdheSecret, crypto.Keccak256(h.respNonce, h.initNonce))  	// todo 计算共享秘密
+	sharedSecret := crypto.Keccak256(ecdheSecret, crypto.Keccak256(h.respNonce, h.initNonce))  	// todo 计算共享秘密  (使用上 双方的 nonce)
 	aesSecret := crypto.Keccak256(ecdheSecret, sharedSecret)									// todo 计算AES秘密  (加密秘钥 SK_e)
 	s := secrets{
 		RemoteID: h.remoteID,
@@ -439,17 +439,17 @@ func initiatorEncHandshake(conn io.ReadWriter, prv *ecdsa.PrivateKey, remoteID d
 	//
 	//		发起者的加密握手流程如下：
 	//
-	//			　　1.生成一个随机数init-nonce (这个其实是 用来生成 随机临时 密钥对中的私钥的 随机seed)
+	//			　　1.生成一个随机数 init-nonce todo (nonce 就是为了 签名相关的)
 	//
-	//			　　2.通过ecies生成随机秘钥对 ，随机私钥ephemeral-privk 与随机公钥ephemeral-pubk
+	//			　　2.通过 `ecies` 生成随机秘钥对 ，随机私钥ephemeral-privk 与随机公钥ephemeral-pubk  todo (并没有使用 nonce 生成 临时密钥对哦)
 	//
 	//			　　3.用自己的私钥privk和对方的公钥remote_pubk 生成静态共享秘密static-shared-secrets
 	//
-	//			　　4.将生成的共享秘密static-shared-secrets与随机数init-nonce进行异或运算，得到一个哈希值
+	//			　　4.将生成的共享秘密 static-shared-secrets 与 随机数 init-nonce 进行异或运算，得到一个哈希值
 	//
 	//			　　5.使用自己的随机私钥ephemeral-privk 对该哈希值进行ECDSA签名计算，得到签名sig
 	//
-	//			　　6.将签名sig、自己的公钥pubk 、初始nonce 作为认证信息authMsg
+	//			　　6.将签名sig、自己的 node 公钥pubk 、初始nonce 作为 认证信息authMsg
 	//
 	//			　　7.对authMsg进行编码，然后再用对方的公钥remote_pubk进行ecies加密，得到认证数据包authPacket,将数据包通过发送给对方节点
 	//
@@ -457,7 +457,7 @@ func initiatorEncHandshake(conn io.ReadWriter, prv *ecdsa.PrivateKey, remoteID d
 	//
 	//			　　9.收到对方响应之后，读取数据，使用自己的私钥privk 进行解密，再进行解码，得到认证响应authRespMsg
 	//
-	//			　　10.读取响应nonce, 和对方的随机公钥remote-ephemeral-pubk
+	//			　　10.读取响应nonce, 和 对方的随机公钥remote-ephemeral-pubk
 
 	h := &encHandshake{initiator: true, remoteID: remoteID}
 	authMsg, err := h.makeAuthMsg(prv)  //  创建 rlpx 传输协议 发送方 发起握手的  msg
