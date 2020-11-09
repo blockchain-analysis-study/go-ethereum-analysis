@@ -201,7 +201,7 @@ func (n valueNode) fstring(ind string) string {
 // 		buf:   	node的原始数据
 //		cachegen:	trie的node被变更第几次计数
 func mustDecodeNode(hash, buf []byte, cachegen uint16) node {
-	n, err := decodeNode(hash, buf, cachegen)   // todo 这里会做. 将 node.key 从 compact 编码转回 hex 编码
+	n, err := decodeNode(hash, buf, cachegen)   // todo 这里会做. 将 node.key 从 compact 编码转回 hex 编码  (也是 db.node 转化成  tire.node)
 	if err != nil {
 		panic(fmt.Sprintf("node %x: %v", hash, err))
 	}

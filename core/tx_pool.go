@@ -298,7 +298,7 @@ type TxPool struct {
 	beats   map[common.Address]time.Time // Last heartbeat from each known account
 	// 存放当前txpool中 所有 tx
 	all     *txLookup                    // All transactions to allow lookups
-	// 所有的tx 都在 price中被排序
+	// 所有的tx 都在 price 中被排序  todo (依照 gas 价格排序用)
 	// 这个吊毛里面也有一个all 和当前all是同一个引用 查看：NewTxPool()
 	priced  *txPricedList                // All transactions sorted by price
 

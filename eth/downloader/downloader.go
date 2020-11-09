@@ -584,7 +584,7 @@ func (d *Downloader) syncWithPeer(p *peerConnection, hash common.Hash, td *big.I
 	1、fetchHeaders:  	todo 从对端 peer, 拉取 headers 组成的`skeleton`， 填充 `skeleton` , 最终所有headers 都被拉回来. 影响: processHeaders()    (full, fast, light)
 	2、fetchBodies:		todo 从对端 peer, 拉取 body    (full, fast)
 	3、fetchReceipts:	todo 从对端 peer, 拉取 receipts   (fast)
-	4、processHeaders:	todo 处理从对端 peer 拉回来的 所有 headers, <校验,刷盘> , 通知下载对应的 body 和 receipts 信号, 影响: fetchBodies() 和 fetchReceipts()   (full, fast, light)
+	4、processHeaders:	todo 处理从对端 peer 拉回来的 所有 headers, <校验,刷盘> , 【通知】下载对应的 body 和 receipts 信号, 影响: fetchBodies() 和 fetchReceipts()   (full, fast, light)
 	 */
 	fetchers := []func() error{
 		// headers 总是被拉取的 (根据 skeleton 骨架的方式去拉取) fast full light 都用到
@@ -607,9 +607,9 @@ func (d *Downloader) syncWithPeer(p *peerConnection, hash common.Hash, td *big.I
 	*/
 	if d.mode == FastSync {
 		// latest: 去对端 peer 拉取最新的 header
-		fetchers = append(fetchers, func() error { return d.processFastSyncContent(latest) })   // todo 追加 处理 fast 模式,处理 txs, uncles, receipts, stateNode 的函数
+		fetchers = append(fetchers, func() error { return d.processFastSyncContent(latest) })   // todo 追加 处理 fast 模式,处理 txs, uncles, receipts, stateNode 的函数 (插入本地db)
 	} else if d.mode == FullSync {
-		fetchers = append(fetchers, d.processFullSyncContent)  // todo 追加 处理 full 模式, 处理 tx, uncles 的函数
+		fetchers = append(fetchers, d.processFullSyncContent)  // todo 追加 处理 full 模式, 处理 下载回来的 block (执行 并插入本地db) 的函数
 	}
 
 	/** todo go, 上吧,皮卡丘~ */
@@ -1810,20 +1810,20 @@ func (d *Downloader) processFullSyncContent() error {
 	// full 没有 fast那么复杂,就直接拿数据直接组个刷盘
 	// 没有什么根据pivot点操作
 	for {
-		results := d.queue.Results(true)  // 在 processFullSyncContent() 中被调用， 返回所有目前已经下载完成的数据 (header、body 和 receipt)
+		results := d.queue.Results(true)  // 在 processFullSyncContent() 中被调用， todo 返回所有目前已经下载完成的数据 (header、body 和 receipt)
 		if len(results) == 0 {
 			return nil
 		}
 		if d.chainInsertHook != nil {
 			d.chainInsertHook(results)
 		}
-		if err := d.importBlockResults(results); err != nil {  // todo 这里 会去 执行 block
+		if err := d.importBlockResults(results); err != nil {  // todo 这里 会去 执行 block，并插入本地 db
 			return err
 		}
 	}
 }
 
-func (d *Downloader) importBlockResults(results []*fetchResult) error {  // todo 这里 会去 执行 block
+func (d *Downloader) importBlockResults(results []*fetchResult) error {  // todo 这里 会去 执行 block，并插入本地 db
 	// Check for any early termination requests
 	if len(results) == 0 {
 		return nil

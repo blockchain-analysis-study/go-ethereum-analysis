@@ -368,17 +368,17 @@ func (db *Database) insert(hash common.Hash, blob []byte, node node) {
 	}
 	// Create the cached entry for this node
 	entry := &cachedNode{
-		node:      simplifyNode(node),    // 简单的转换一些 node 格式   (statedb node  => db node)
+		node:      simplifyNode(node),    // todo 简单的转换一些 node 格式   (statedb node  => db node)
 		size:      uint16(len(blob)),
 		flushPrev: db.newest,
 	}
-	for _, child := range entry.childs() {
+	for _, child := range entry.childs() { // todo  这里处理 reference  引用计数
 		if c := db.nodes[child]; c != nil {
 			c.parents++
 		}
 	}
-	// todo 放入cache中    (此时的 hash  为 node.key 做了 compact 编码之后的 node计算出的hash)
-	db.nodes[hash] = entry
+
+	db.nodes[hash] = entry  // todo 放入cache中    (此时的 hash  为 node.key 做了 compact 编码之后的 node计算出的hash)   [只有 db.insert() 加入node缓存]
 
 	// Update the flush-list endpoints
 	if db.oldest == (common.Hash{}) {
@@ -423,7 +423,7 @@ func (db *Database) node(hash common.Hash, cachegen uint16) node {
 	if err != nil || enc == nil {
 		return nil
 	}
-	return mustDecodeNode(hash[:], enc, cachegen)   // todo 这里会做. 将 node.key 从 compact 编码转回 hex 编码
+	return mustDecodeNode(hash[:], enc, cachegen)   // todo 这里会做. 将 node.key 从 compact 编码转回 hex 编码   (也是 db.node 转化成  tire.node)
 }
 
 // Node retrieves an encoded cached trie node from memory. If it cannot be found

@@ -25,14 +25,18 @@ import (
 )
 
 // todo 编码器，用于将给定的数据编码为rlp
+//
+//
+// todo RLP 编码完成后的 内容为:      [list总前缀, 第一个元素前缀, 第一个元素[]byte, 第二个元素前缀, 第二个元素[]byte, ...]
+
 var (
 	// Common encoded values.
 	// These are useful when implementing EncodeRLP.
 
 	// 常见的编码值。
 	// 这些在实施EncodeRLP时非常有用。
-	EmptyString = []byte{0x80} //128，定义了序列化时候的空字符串，空的时候对应的是编码128
-	EmptyList   = []byte{0xC0} //192，定义了序列化时候的空集合，空的时候对应的编码192
+	EmptyString = []byte{0x80} // 128，定义了序列化时候的空字符串，空的时候对应的是编码128
+	EmptyList   = []byte{0xC0} // 192，定义了序列化时候的空集合，空的时候对应的编码192
 )
 
 // Encoder is implemented by types that require custom
