@@ -67,7 +67,7 @@ func NewSecure(root common.Hash, db *Database, cachelimit uint16) (*SecureTrie, 
 
 // Get returns the value for key stored in the trie.
 // The value bytes must not be modified by the caller.
-func (t *SecureTrie) Get(key []byte) []byte {
+func (t *SecureTrie) Get(key []byte) []byte { // 只有测试中用到
 	res, err := t.TryGet(key)
 	if err != nil {
 		log.Error(fmt.Sprintf("Unhandled trie error: %v", err))
@@ -79,9 +79,7 @@ func (t *SecureTrie) Get(key []byte) []byte {
 // The value bytes must not be modified by the caller.
 // If a node was not found in the database, a MissingNodeError is returned.
 func (t *SecureTrie) TryGet(key []byte) ([]byte, error) {
-
-	// 先将 key  算完 sha3 Hash 作为需要查询的 key
-	return t.trie.TryGet(t.hashKey(key))
+	return t.trie.TryGet(t.hashKey(key))  // 先将 key  算完 sha3 Hash 作为需要查询的 key     (t *SecureTrie) TryGet(key []byte) 中
 }
 
 // Update associates key with value in the trie. Subsequent calls to
@@ -105,7 +103,7 @@ func (t *SecureTrie) Update(key, value []byte) {
 //
 // If a node was not found in the database, a MissingNodeError is returned.
 func (t *SecureTrie) TryUpdate(key, value []byte) error {
-	hk := t.hashKey(key)     // 先做 sha3  key
+	hk := t.hashKey(key)     // 先做 sha3  key   (t *SecureTrie) TryUpdate() 中
 	err := t.trie.TryUpdate(hk, value)
 	if err != nil {
 		return err
@@ -124,7 +122,7 @@ func (t *SecureTrie) Delete(key []byte) {
 // TryDelete removes any existing value for key from the trie.
 // If a node was not found in the database, a MissingNodeError is returned.
 func (t *SecureTrie) TryDelete(key []byte) error {
-	hk := t.hashKey(key)							// 先做  sha3(key)
+	hk := t.hashKey(key)							// 先做  sha3(key)     (t *SecureTrie) TryDelete() 中
 	delete(t.getSecKeyCache(), string(hk))			// 将 近期做 update 的 key 从 缓存移除
 	return t.trie.TryDelete(hk)						//
 }
@@ -198,7 +196,7 @@ func (t *SecureTrie) NodeIterator(start []byte) NodeIterator {
 // hashKey returns the hash of key as an ephemeral buffer.
 // The caller must not hold onto the return value because it will become
 // invalid on the next call to hashKey or secKey.
-func (t *SecureTrie) hashKey(key []byte) []byte {
+func (t *SecureTrie) hashKey(key []byte) []byte {  // todo 对key做sha3编码
 
 	// 从  sync.Pool 中 获取  `key` 对应的 Hash
 	h := newHasher(0, 0, nil)

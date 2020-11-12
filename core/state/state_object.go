@@ -222,7 +222,7 @@ func (self *stateObject) GetState(db Database, key common.Hash) common.Hash {
 	// Load from DB in case it is missing.
 	//
 	// 当缓存 没有时, 尝试从 trie 上拿
-	enc, err := self.getTrie(db).TryGet(key[:])
+	enc, err := self.getTrie(db).TryGet(key[:])  // GetState() 时, 这里的 key  是 32 byte
 	if err != nil {
 		self.setError(err)
 		return common.Hash{}

@@ -124,13 +124,13 @@ func New(root common.Hash, db Database) (*StateDB, error) {
 	// todo State中的 trie是 cachedTrie
 	// todo Storage中的 trie是 SecureTrie
 	//
-	// todo 而 cachingTrie 其实是封装了 SecureTrie
+	// todo 而 cachedTrie 其实是封装了 SecureTrie  <每个StateDB Trie 最终还是一个 SecureTrie>
 	tr, err := db.OpenTrie(root)
 	if err != nil {
 		return nil, err
 	}
 	return &StateDB{
-		db:                db,
+		db:                db,  // 外面入参的 全局的 cachingDB 实例
 		trie:              tr,
 		stateObjects:      make(map[common.Address]*stateObject),
 		stateObjectsDirty: make(map[common.Address]struct{}),
@@ -406,7 +406,7 @@ func (self *StateDB) updateStateObject(stateObject *stateObject) {
 	if err != nil {
 		panic(fmt.Errorf("can't encode object at %x: %v", addr[:], err))
 	}
-	self.setError(self.trie.TryUpdate(addr[:], data))
+	self.setError(self.trie.TryUpdate(addr[:], data))  // TryUpdate() 里面会对 addr 先做 sha3 编码
 }
 
 // deleteStateObject removes the given object from the state trie.
@@ -432,7 +432,7 @@ func (self *StateDB) getStateObject(addr common.Address) (stateObject *stateObje
 	}
 
 	// Load the object from the database.
-	enc, err := self.trie.TryGet(addr[:])
+	enc, err := self.trie.TryGet(addr[:])  // getStateObject(addr) 时, 这里的 key 是 addr 是 20 byte
 	if len(enc) == 0 {
 		self.setError(err)
 		return nil

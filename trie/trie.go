@@ -668,7 +668,7 @@ func (t *Trie) Root() []byte { return t.Hash().Bytes() }
 // Hash returns the root hash of the trie. It does not write to the
 // database and can be used even if the trie doesn't have one.
 func (t *Trie) Hash() common.Hash {
-	hash, cached, _ := t.hashRoot(nil, nil)
+	hash, cached, _ := t.hashRoot(nil, nil)   // 求 trie 的 root Hash
 	t.root = cached
 	return common.BytesToHash(hash.(hashNode))
 }
@@ -704,15 +704,15 @@ func (t *Trie) Commit(onleaf LeafCallback) (root common.Hash, err error) {
 // 再对这个node作RLP+哈希计算，得到它的哈希值，亦即hashNode。
 // 注意到hash()和hashChildren()返回两个node类型对象，第一个@hash是入参n经过折叠的hashNode哈希值，
 // 第二个@cached是没有经过折叠的n，并且n的hashNode还被赋值了。
-func (t *Trie) hashRoot(db *Database, onleaf LeafCallback) (node, node, error) {
+func (t *Trie) hashRoot(db *Database, onleaf LeafCallback) (node, node, error) {   // todo 该方法只有  Trie.Hash() 和 Trie.Commit() 会调用.  计算 各个 node 的 Hash
 	if t.root == nil {
 		return hashNode(emptyRoot.Bytes()), nil, nil
 	}
-	h := newHasher(t.cachegen, t.cachelimit, onleaf)  // 每次 算 root 的时候 都重新将 trie 的 cachegen 和 cachelimit 赋值给  hasher. 用来决定 是否将对应的  node从 内存中 清除掉
+	h := newHasher(t.cachegen, t.cachelimit, onleaf)  // 每次 算 root 的时候 都重新将 trie 的 cachegen 和 cachelimit 赋值给  hasher.  todo 用来决定 是否将对应的  node从 内存中 清除掉   (下面的 h.hash() 中会使用改到 这两个参数)
 	defer returnHasherToPool(h)
 
 	// 这里才是真正 折叠node   (将 node.key 从 hex 编码 转成 compact 编码)
 	// node: 节点折叠后的 hashNode
 	// node: 将 key 转成byte的shortNode/fullNode
-	return h.hash(t.root, db, true)   // 为每个节点生成一个 未编码的hash
+	return h.hash(t.root, db, true)   // 为每个节点生成一个 未编码的hash  todo 这里才是 算 node Hash
 }

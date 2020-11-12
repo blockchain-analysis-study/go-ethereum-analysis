@@ -80,20 +80,20 @@ type Trie interface {
  */
 func NewDatabase(db ethdb.Database) Database {
 	/** 封装了 10 W 字节的 lru缓存 */
-	csc, _ := lru.New(codeSizeCacheSize)
-	return &cachingDB{
+	csc, _ := lru.New(codeSizeCacheSize)  // 10W 大小的 lru 缓存, 用来存储 codeHash 和code 的
+	return &cachingDB{  // todo 这个 cachingDB 最终会被各个StateDB 引用着 ...
 		db:            trie.NewDatabase(db),
 		// 存放 code 的缓存
 		codeSizeCache: csc,
 	}
 }
 
-// cachingDB 中 也有 SecureTrie 数组  和  LRU 缓存
+// cachingDB 中 也有 SecureTrie 数组  和  LRU 缓存(存放codeHash和code的)
 type cachingDB struct {
 	db            *trie.Database
 	mu            sync.Mutex
-	pastTries     []*trie.SecureTrie
-	codeSizeCache *lru.Cache
+	pastTries     []*trie.SecureTrie  // 这里装的是 各个 版本的 StateDB Trie <StateDB 的Trie是 cachedTire 但是最终也是一颗 SecureTrie>
+	codeSizeCache *lru.Cache // LRU 缓存(存放codeHash和code的)
 }
 
 // OpenTrie opens the main account trie.
@@ -101,9 +101,9 @@ func (db *cachingDB) OpenTrie(root common.Hash) (Trie, error) {
 	db.mu.Lock()
 	defer db.mu.Unlock()
 
-	for i := len(db.pastTries) - 1; i >= 0; i-- {
+	for i := len(db.pastTries) - 1; i >= 0; i-- {   // 优先 从全局的 SecureTrie 缓存中 获取 被 上一个block 中 被commit 的 StateDB Trie
 		if db.pastTries[i].Hash() == root {
-			return cachedTrie{db.pastTries[i].Copy(), db}, nil
+			return cachedTrie{db.pastTries[i].Copy(), db}, nil // 封装成 cachedTrie
 		}
 	}
 	tr, err := trie.NewSecure(root, db.db, MaxTrieCacheGen)  // cachelimit = 120
@@ -113,7 +113,7 @@ func (db *cachingDB) OpenTrie(root common.Hash) (Trie, error) {
 	return cachedTrie{tr, db}, nil
 }
 
-func (db *cachingDB) pushTrie(t *trie.SecureTrie) {
+func (db *cachingDB) pushTrie(t *trie.SecureTrie) { // 将 某个 SecureTrie 放到全局的 cachingDB 的 SecureTrie 缓存数组中.  <其实 能调到这里的 SecureTrie 都是 StateDB Trie 而不是 StateObject Trie>
 	db.mu.Lock()
 	defer db.mu.Unlock()
 
@@ -126,7 +126,7 @@ func (db *cachingDB) pushTrie(t *trie.SecureTrie) {
 }
 
 // OpenStorageTrie opens the storage trie of an account.
-func (db *cachingDB) OpenStorageTrie(addrHash, root common.Hash) (Trie, error) {
+func (db *cachingDB) OpenStorageTrie(addrHash, root common.Hash) (Trie, error) {  // 打开 StateObject Trie
 	return trie.NewSecure(root, db.db, 0)
 }
 
@@ -170,13 +170,13 @@ func (db *cachingDB) TrieDB() *trie.Database {
 // cacheTrie 是 SecureTrie的封装,
 //			我们可以知道 其实最终底层操作的都是 SecureTrie
 type cachedTrie struct {
-	*trie.SecureTrie	// cachingTire 最终使用 SecureTrie
-	db *cachingDB  		// cachingDB 中 也有 SecureTrie 数组  和  LRU 缓存
+	*trie.SecureTrie	// cachingTire 最终使用 SecureTrie  (cachedTrie继承了SecureTrie)
+	db *cachingDB  		// cachingDB 中 也有 SecureTrie 数组  和 LRU 缓存(存放codeHash和code的)
 }
 
 // StateDB 调用
 func (m cachedTrie) Commit(onleaf trie.LeafCallback) (common.Hash, error) {
-	root, err := m.SecureTrie.Commit(onleaf)
+	root, err := m.SecureTrie.Commit(onleaf)  // 但是从这里我们知道其实 最终 StateDB 也是一颗SecureTrie的哦
 	if err == nil {
 		m.db.pushTrie(m.SecureTrie)
 	}
