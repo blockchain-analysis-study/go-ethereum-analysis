@@ -368,13 +368,13 @@ func hashimoto(hash []byte, nonce uint64, size uint64, lookup func(index uint32)
 	for i, val := range mix {
 		binary.LittleEndian.PutUint32(digest[i*4:], val)
 	}
-	return digest, crypto.Keccak256(append(seed, digest...))
+	return digest, crypto.Keccak256(append(seed, digest...))  // todo 使用 digest  计算 挖矿结果值 result
 }
 
 // hashimotoLight aggregates data from the full dataset (using only a small
 // in-memory cache) in order to produce our final value for a particular header
 // hash and nonce.
-func hashimotoLight(size uint64, cache []uint32, hash []byte, nonce uint64) ([]byte, []byte) {
+func hashimotoLight(size uint64, cache []uint32, hash []byte, nonce uint64) ([]byte, []byte) {  // todo 校验区块, 根据 header 中的  nonce 计算出 digest 和 result
 	keccak512 := makeHasher(sha3.NewKeccak512())
 
 	lookup := func(index uint32) []uint32 {
@@ -386,18 +386,18 @@ func hashimotoLight(size uint64, cache []uint32, hash []byte, nonce uint64) ([]b
 		}
 		return data
 	}
-	return hashimoto(hash, nonce, size, lookup)
+	return hashimoto(hash, nonce, size, lookup)   // todo 校验区块, 根据 header 中的  nonce 计算出 digest 和 result
 }
 
 // hashimotoFull aggregates data from the full dataset (using the full in-memory
 // dataset) in order to produce our final value for a particular header hash and
 // nonce.
-func hashimotoFull(dataset []uint32, hash []byte, nonce uint64) ([]byte, []byte) {
+func hashimotoFull(dataset []uint32, hash []byte, nonce uint64) ([]byte, []byte) {  // todo 挖矿,  计算 结果值
 	lookup := func(index uint32) []uint32 {
 		offset := index * hashWords
 		return dataset[offset : offset+hashWords]
 	}
-	return hashimoto(hash, nonce, uint64(len(dataset))*4, lookup)
+	return hashimoto(hash, nonce, uint64(len(dataset))*4, lookup) // todo 挖矿,  计算 结果值
 }
 
 const maxEpoch = 2048

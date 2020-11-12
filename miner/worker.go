@@ -1297,7 +1297,7 @@ func (w *worker) commitNewWork(interrupt *int32, noempty bool) {
 		/**
 		根据上一个块 计算出 当前快的 gas 最高限制  gasLimit
 		 */
-		GasLimit:   core.CalcGasLimit(parent),
+		GasLimit:   core.CalcGasLimit(parent),  // todo 计算当前区块的 gasLimit
 		// 将命令行设置到 miner/worker中的 extra 字段设置到 header 中
 		Extra:      w.extra,
 
@@ -1314,9 +1314,9 @@ func (w *worker) commitNewWork(interrupt *int32, noempty bool) {
 		header.Coinbase = w.coinbase
 	}
 
-	// 执行 共识中重要的三个方法之一 Prepare
+	// 执行 共识中重要的三个方法之一 Prepare        (Prepare、Finalise、Seal)
 	// 主要是对 header中的难度字段的计算
-	if err := w.engine.Prepare(w.chain, header); err != nil {
+	if err := w.engine.Prepare(w.chain, header); err != nil {  // todo 主要计算当前 block 的难度
 		log.Error("Failed to prepare header for mining", "err", err)
 		return
 	}

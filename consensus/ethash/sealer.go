@@ -78,7 +78,7 @@ func (ethash *Ethash) Seal(chain consensus.ChainReader, block *types.Block, stop
 		ethash.workCh <- block
 	}
 	var pend sync.WaitGroup
-	for i := 0; i < threads; i++ {
+	for i := 0; i < threads; i++ {  // todo  启用 节点启动时 设置 (或者 默认的)  挖矿计算 线程数  去并发计算 nonce
 		pend.Add(1)
 		go func(id int, nonce uint64) {
 			defer pend.Done()
@@ -112,7 +112,7 @@ func (ethash *Ethash) mine(block *types.Block, id int, seed uint64, abort chan s
 	var (
 		header  = block.Header()
 		hash    = header.HashNoNonce().Bytes()
-		target  = new(big.Int).Div(two256, header.Difficulty)
+		target  = new(big.Int).Div(two256, header.Difficulty) //  2^256  / Difficulty      =》 2^256 除于 难度值  ==  挖矿目标值
 		number  = header.Number.Uint64()
 		dataset = ethash.dataset(number, false)
 	)
@@ -140,10 +140,13 @@ search:
 				attempts = 0
 			}
 			// Compute the PoW value of this nonce
-			digest, result := hashimotoFull(dataset.dataset, hash, nonce)     // todo  DAG 图  算 挖矿的 nonce
-			if new(big.Int).SetBytes(result).Cmp(target) <= 0 {
+			digest, result := hashimotoFull(dataset.dataset, hash, nonce)     // todo  DAG 图  算 挖矿的 nonce     (  digest 和 nonce 是用来计算出 挖矿结果值 result 的)
+
+			if new(big.Int).SetBytes(result).Cmp(target) <= 0 {	// todo 计算得到的 result 值 < 挖矿目标值 target ， 则挖矿成功
 				// Correct nonce found, create a new header with it
 				header = types.CopyHeader(header)
+
+				// todo 将 计算出 result 的 nonce 和 digest 记录到 header 中
 				header.Nonce = types.EncodeNonce(nonce)
 				header.MixDigest = common.BytesToHash(digest)
 

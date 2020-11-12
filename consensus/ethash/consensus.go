@@ -239,7 +239,7 @@ func (ethash *Ethash) verifyHeader(chain consensus.ChainReader, header, parent *
 		return errZeroBlockTime
 	}
 	// Verify the block's difficulty based in it's timestamp and parent's difficulty
-	expected := ethash.CalcDifficulty(chain, header.Time.Uint64(), parent)
+	expected := ethash.CalcDifficulty(chain, header.Time.Uint64(), parent)  // todo 校验 block 时, 也是会自己算一下当前 block 的难度值的
 
 	if expected.Cmp(header.Difficulty) != 0 {
 		return fmt.Errorf("invalid difficulty: have %v, want %v", header.Difficulty, expected)
@@ -291,7 +291,7 @@ func (ethash *Ethash) verifyHeader(chain consensus.ChainReader, header, parent *
 CalcDifficulty 函数：
 是难度调整算法。 它返回了一个新块在给定父块的时间和难度时创建时应该具有的难度。
  */
-func (ethash *Ethash) CalcDifficulty(chain consensus.ChainReader, time uint64, parent *types.Header) *big.Int {
+func (ethash *Ethash) CalcDifficulty(chain consensus.ChainReader, time uint64, parent *types.Header) *big.Int {   // todo  计算当前 block 的难度
 	return CalcDifficulty(chain.Config(), time, parent)
 }
 
@@ -300,7 +300,9 @@ func (ethash *Ethash) CalcDifficulty(chain consensus.ChainReader, time uint64, p
 // given the parent block's time and difficulty.
 /**
 CalcDifficulty 函数：
-是难度调整算法。 它返回了一个新块在给定父块的时间和难度时创建时应该具有的难度。
+是难度调整算法
+
+它返回了一个新块在给定父块的时间  和  难度时创建时应该具有的难度
 
 在最早发布的发展计划中，以太坊有四个里程碑阶段；这四个阶段分别是：
 Frontier（前沿），Homestead（家园），Metropolis（大都会），Serenity（宁静）。
@@ -308,11 +310,35 @@ Frontier（前沿），Homestead（家园），Metropolis（大都会），Seren
 Metropolis又被分成了两个阶段：Byzantium和Constantinople （君士坦丁堡）
 
  */
-func CalcDifficulty(config *params.ChainConfig, time uint64, parent *types.Header) *big.Int {
+func CalcDifficulty(config *params.ChainConfig, time uint64, parent *types.Header) *big.Int {   // todo  计算 block 的难度
 	next := new(big.Int).Add(parent.Number, big1)
 
+
+
 	/**
-	根据 当前出块时间 和 上一个块的难度 计算 当前块的难度
+
+	todo 计算难度   计算 Difficulty
+
+	计算一个区块的难度时，需要以下输入：
+
+		parent_timestamp：上一个区块产生的时间
+		parent_diff：上一个区块的难度
+		block_timestamp：当前区块产生的时间
+		block_number：当前区块的序号
+
+
+	难度block_diff的计算公式为：
+
+		block_diff = parent_diff + [难度调整] + [难度炸弹]:
+
+		[难度调整] = parent_diff // 2048 * MAX(1 - (block_timestamp - parent_timestamp) // 10, -99))
+		[难度炸弹] = INT(2**((block_number // 100000) - 2))
+	 */
+
+
+
+	/**
+	根据 【当前出块时间 】和 【上一个块的难度】 计算 当前块的难度
 	 */
 	switch {
 	// 是否拜占庭分叉
@@ -488,7 +514,7 @@ func (ethash *Ethash) VerifySeal(chain consensus.ChainReader, header *types.Head
 // verifySeal checks whether a block satisfies the PoW difficulty requirements,
 // either using the usual ethash cache for it, or alternatively using a full DAG
 // to make remote mining fast.
-func (ethash *Ethash) verifySeal(chain consensus.ChainReader, header *types.Header, fulldag bool) error {
+func (ethash *Ethash) verifySeal(chain consensus.ChainReader, header *types.Header, fulldag bool) error {  // todo 校验 block   校验区块
 	// If we're running a fake PoW, accept any seal as valid
 	if ethash.config.PowMode == ModeFake || ethash.config.PowMode == ModeFullFake {
 		time.Sleep(ethash.fakeDelay)
@@ -534,18 +560,18 @@ func (ethash *Ethash) verifySeal(chain consensus.ChainReader, header *types.Head
 		if ethash.config.PowMode == ModeTest {
 			size = 32 * 1024
 		}
-		digest, result = hashimotoLight(size, cache.cache, header.HashNoNonce().Bytes(), header.Nonce.Uint64())
+		digest, result = hashimotoLight(size, cache.cache, header.HashNoNonce().Bytes(), header.Nonce.Uint64())   // todo 校验区块, 根据 header 中的  nonce 计算出 digest 和 result
 
 		// Caches are unmapped in a finalizer. Ensure that the cache stays alive
 		// until after the call to hashimotoLight so it's not unmapped while being used.
 		runtime.KeepAlive(cache)
 	}
 	// Verify the calculated values against the ones provided in the header
-	if !bytes.Equal(header.MixDigest[:], digest) {
+	if !bytes.Equal(header.MixDigest[:], digest) {  // todo 校验 digest 是否和 header 中的 digest 一致
 		return errInvalidMixDigest
 	}
 	target := new(big.Int).Div(two256, header.Difficulty)
-	if new(big.Int).SetBytes(result).Cmp(target) > 0 {
+	if new(big.Int).SetBytes(result).Cmp(target) > 0 { // todo 校验 result 是否小于该 block 的挖矿目标值 target
 		return errInvalidPoW
 	}
 	return nil
@@ -566,7 +592,7 @@ func (ethash *Ethash) Prepare(chain consensus.ChainReader, header *types.Header)
 	/**
 	 难度的计算
 	 */
-	header.Difficulty = ethash.CalcDifficulty(chain, header.Time.Uint64(), parent)
+	header.Difficulty = ethash.CalcDifficulty(chain, header.Time.Uint64(), parent)   // todo 主要计算当前 block 的难度
 	return nil
 }
 
@@ -574,7 +600,7 @@ func (ethash *Ethash) Prepare(chain consensus.ChainReader, header *types.Header)
 // setting the final state and assembling the block.
 func (ethash *Ethash) Finalize(chain consensus.ChainReader, header *types.Header, state *state.StateDB, txs []*types.Transaction, uncles []*types.Header, receipts []*types.Receipt) (*types.Block, error) {
 	// Accumulate any block and uncle rewards and commit the final state root
-	accumulateRewards(chain.Config(), state, header, uncles)
+	accumulateRewards(chain.Config(), state, header, uncles)   // todo 计算 block 的奖励 (及 叔叔 块的奖励)
 	header.Root = state.IntermediateRoot(chain.Config().IsEIP158(header.Number))
 
 	// Header seems complete, assemble into a block and return
@@ -590,7 +616,7 @@ var (
 // AccumulateRewards credits the coinbase of the given block with the mining
 // reward. The total reward consists of the static block reward and rewards for
 // included uncles. The coinbase of each uncle block is also rewarded.
-func accumulateRewards(config *params.ChainConfig, state *state.StateDB, header *types.Header, uncles []*types.Header) {
+func accumulateRewards(config *params.ChainConfig, state *state.StateDB, header *types.Header, uncles []*types.Header) {  // todo 计算 block 的奖励 (及 叔叔 块的奖励)
 	// Select the correct block reward based on chain progression
 	blockReward := FrontierBlockReward
 	if config.IsByzantium(header.Number) {

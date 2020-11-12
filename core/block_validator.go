@@ -111,7 +111,7 @@ CalcGasLimit 函数：
 根据parent计算出当前区块的 gas 允许限制。
 这是矿工策略，而不是共识协议。
  */
-func CalcGasLimit(parent *types.Block) uint64 {
+func CalcGasLimit(parent *types.Block) uint64 {  // todo 计算当前区块的 gasLimit
 	// contrib = (parentGasUsed * 3 / 2) / 1024
 	contrib := (parent.GasUsed() + parent.GasUsed()/2) / params.GasLimitBoundDivisor
 
