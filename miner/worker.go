@@ -322,6 +322,7 @@ func newWorker(config *params.ChainConfig, engine consensus.Engine, eth Backend,
 	// Subscribe NewTxsEvent for tx pool
 	// 从tx pool 订阅NewTxsEvent
 	worker.txsSub = eth.TxPool().SubscribeNewTxsEvent(worker.txsCh)
+
 	// Subscribe events for blockchain
 	// 从 chain 上 订阅 chainHeadEvent 和 chainSideEvent
 	worker.chainHeadSub = eth.BlockChain().SubscribeChainHeadEvent(worker.chainHeadCh)
@@ -340,16 +341,16 @@ func newWorker(config *params.ChainConfig, engine consensus.Engine, eth Backend,
 	 */
 
 	/** 处理 newWorkLoop 封装的 newWorkReq 及 chainSide (叔叔块事件) 及 tx 事件 */
-	go worker.mainLoop()
+	go worker.mainLoop()	// todo 步骤 2   接收 newWorkerReq， 监听 tx 和 chainSide <uncles> 事件 启动 执行tx 和 commit() <打包区>
 
 	/** 最开始的 协程，监听 start 信号，写入 newWorkerReq  */
-	go worker.newWorkLoop(recommit)
+	go worker.newWorkLoop(recommit)   // todo 步骤 1    定时发起 或 被 chainHeader事件 触发 启动 newWorkerReq
 
 	/** 接收 seal 完成打包之后的 block */
-	go worker.resultLoop()
+	go worker.resultLoop()  // todo 步骤 4     将打包好的 block 刷入本地磁盘  并     发布 新block 事件
 
 	/** 接收 w.commit 过来的 task 实例； w.commit 可能在 mainLoop 被调用 */
-	go worker.taskLoop()
+	go worker.taskLoop()  // todo 步骤 3    接收 commit() 发来的 seal task， 将block 转交给 共识 打包
 
 	// Submit first work to initialize pending state.
 	// 提交第一份工作以初始化待处理 state 。
@@ -489,7 +490,7 @@ func (w *worker) newWorkLoop(recommit time.Duration) {
 	}
 	// recalcRecommit recalculates the resubmitting interval upon feedback.
 	/**
-	recalcRecommit 函数 根据反馈重新计算重新提交的时间间隔。
+	recalcRecommit 函数 根据反馈重新计算重新提交的时间间隔
 	 */
 	recalcRecommit := func(target float64, inc bool) {
 		/**
@@ -877,14 +878,14 @@ func (w *worker) resultLoop() {
 			}
 			// Commit block and state to database.
 			/** 打包节点直接 写链 */
-			stat, err := w.chain.WriteBlockWithState(block, result.receipts, result.state)
+			stat, err := w.chain.WriteBlockWithState(block, result.receipts, result.state)  // todo 将打包好的 block 刷入自己的磁盘
 			if err != nil {
 				log.Error("Failed writing block to chain", "err", err)
 				continue
 			}
 			// Broadcast the block and announce chain insertion event
 			// 广播块并 通知 链插入事件
-			w.mux.Post(core.NewMinedBlockEvent{Block: block})
+			w.mux.Post(core.NewMinedBlockEvent{Block: block})   // todo 发布 新block 事件
 			var (
 				// 一个事件 切片
 				events []interface{}
@@ -1115,7 +1116,7 @@ func (w *worker) commitTransactions(txs *types.TransactionsByPriceAndNonce, coin
 					ratio = 0.1
 				}
 
-				// 发送一个 调整信号
+				// todo 发送一个 调整 计算出块间隔 信号
 				w.resubmitAdjustCh <- &intervalAdjust{
 					ratio: ratio,
 					inc:   true,
@@ -1205,7 +1206,7 @@ func (w *worker) commitTransactions(txs *types.TransactionsByPriceAndNonce, coin
 			// Strange error, discard the transaction and get the next in line (note, the
 			// nonce-too-high clause will prevent us from executing in vain).
 			/**
-			todo 奇怪的错误，丢弃 Tx 并获得下一个 Tx（注意，nonce-too-high子句将阻止我们徒劳地执行）。
+			todo 奇怪的错误，丢弃 Tx 并获得下一个 Tx（注意，nonce-too-high 子句将阻止我们徒劳地执行）。
 			 */
 			log.Debug("Transaction failed, account skipped", "hash", tx.Hash(), "err", err)
 			txs.Shift()
@@ -1234,7 +1235,7 @@ func (w *worker) commitTransactions(txs *types.TransactionsByPriceAndNonce, coin
 			cpy[i] = new(types.Log)
 			*cpy[i] = *l
 		}
-		go w.mux.Post(core.PendingLogsEvent{Logs: cpy})
+		go w.mux.Post(core.PendingLogsEvent{Logs: cpy})  // 某个 jsonrpc api 那边有用的 ... 用来给客户端 过滤 logs
 	}
 	// Notify resubmit loop to decrease resubmitting interval if current interval is larger
 	// than the user-specified one.

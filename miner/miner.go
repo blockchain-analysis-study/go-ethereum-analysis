@@ -96,7 +96,7 @@ update跟踪 downloader 的事件。 请注意，这是一种单击类型的更�
 这可以防止一个主要的安全漏洞，外部各方可以使用块来阻止你并且只要DOS继续就停止你的挖掘操作。
  */
 func (self *Miner) update() {
-	// 订阅 downloader 过来的 三种事件类型
+	// 订阅 downloader 过来的 三种事件类型：同步开始、同步结束、同步失败
 	events := self.mux.Subscribe(downloader.StartEvent{}, downloader.DoneEvent{}, downloader.FailedEvent{})
 	defer events.Unsubscribe()
 
@@ -131,7 +131,7 @@ func (self *Miner) update() {
 					self.Stop()
 					// 将 是否在 区块同步完之后开启 挖矿的标识位 改成 1
 					atomic.StoreInt32(&self.shouldStart, 1)
-					log.Info("Mining aborted due to sync")
+					log.Info("Mining aborted due to sync")  // downloader 同步的时候需要暂停掉 挖矿
 				}
 
 			// 如果是 Done 或者 Failed 信号的事件

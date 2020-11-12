@@ -82,7 +82,7 @@ func (ethash *Ethash) Seal(chain consensus.ChainReader, block *types.Block, stop
 		pend.Add(1)
 		go func(id int, nonce uint64) {
 			defer pend.Done()
-			ethash.mine(block, id, nonce, abort, ethash.resultCh)
+			ethash.mine(block, id, nonce, abort, ethash.resultCh)  // todo 这里才是 算 挖矿的 nonce 的核心逻辑  (内存饥饿 DAG 算法)
 		}(i, uint64(ethash.rand.Int63()))
 	}
 	// Wait until sealing is terminated or a nonce is found
@@ -140,7 +140,7 @@ search:
 				attempts = 0
 			}
 			// Compute the PoW value of this nonce
-			digest, result := hashimotoFull(dataset.dataset, hash, nonce)
+			digest, result := hashimotoFull(dataset.dataset, hash, nonce)     // todo  DAG 图  算 挖矿的 nonce
 			if new(big.Int).SetBytes(result).Cmp(target) <= 0 {
 				// Correct nonce found, create a new header with it
 				header = types.CopyHeader(header)
