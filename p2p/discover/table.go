@@ -95,8 +95,12 @@ type transport interface {
 // bucket contains nodes, ordered by their last activity. the entry
 // that was most recently active is the first element in entries.
 type bucket struct {
-	entries      []*Node // live entries, sorted by time of last contact
-	replacements []*Node // recently seen nodes to be used if revalidation fails
+
+	// k-bucket 的真实队列  (最多放 16 个)
+	entries      []*Node // live entries, sorted by time of last contact      		实时条目，按上次联系时间排序
+
+	// k-bucket 的备选队列 (在entries 满时, 没有直接丢掉 node， 而是先加到这里)  最多放 10 个
+	replacements []*Node // recently seen nodes to be used if revalidation fails    如果重新验证失败，则使用最近使用的节点
 	ips          netutil.DistinctNetSet
 }
 
@@ -247,7 +251,7 @@ func (tab *Table) Resolve(targetID NodeID) *Node {
 		return cl.entries[0]
 	}
 	// Otherwise, do a network lookup.
-	result := tab.Lookup(targetID)  // 做 k-bucket 的刷桶
+	result := tab.Lookup(targetID)  // 做 k-bucket 的刷桶    (tab *Table) Resolve(targetID NodeID)   只有   (t *dialTask) Do() 连接对端peer时 会调到这里来 ...
 	for _, n := range result {
 		if n.ID == targetID {   // 返回 目标节点
 			return n
@@ -262,13 +266,13 @@ func (tab *Table) Resolve(targetID NodeID) *Node {
 // The given target does not need to be an actual node
 // identifier.
 func (tab *Table) Lookup(targetID NodeID) []*Node {
-	return tab.lookup(targetID, true)   // 最终是调用 真正刷桶的动作
+	return tab.lookup(targetID, true)   // 最终是调用 真正刷桶的动作    (tab *Table) Lookup(targetID NodeID)
 }
 
 // 真正激发刷桶动作的函数
 func (tab *Table) lookup(targetID NodeID, refreshIfEmpty bool) []*Node {
 	var (
-		target         = crypto.Keccak256Hash(targetID[:])
+		target         = crypto.Keccak256Hash(targetID[:])  // 对 nodeId 算 hash
 		asked          = make(map[NodeID]bool)
 		seen           = make(map[NodeID]bool)
 		reply          = make(chan []*Node, alpha)
@@ -282,7 +286,7 @@ func (tab *Table) lookup(targetID NodeID, refreshIfEmpty bool) []*Node {
 	for {
 		tab.mutex.Lock()
 		// generate initial result set
-		result = tab.closest(target, bucketSize)
+		result = tab.closest(target, bucketSize)   // 先根据 target 找出 16 个 和target比较近的 结果
 		tab.mutex.Unlock()
 		if len(result.entries) > 0 || !refreshIfEmpty {
 			break
@@ -295,6 +299,8 @@ func (tab *Table) lookup(targetID NodeID, refreshIfEmpty bool) []*Node {
 		refreshIfEmpty = false
 	}
 
+
+	// 先根据 target 找出 16 个 和target比较近的 node  去做 p2p 发现
 	for {
 		// ask the alpha closest nodes that we haven't asked yet
 		for i := 0; i < len(result.entries) && pendingQueries < alpha; i++ {
@@ -302,7 +308,7 @@ func (tab *Table) lookup(targetID NodeID, refreshIfEmpty bool) []*Node {
 			if !asked[n.ID] {
 				asked[n.ID] = true
 				pendingQueries++
-				go tab.findnode(n, targetID, reply)
+				go tab.findnode(n, targetID, reply)   // todo 发起  FIND_NODE
 			}
 		}
 		if pendingQueries == 0 {
@@ -323,7 +329,7 @@ func (tab *Table) lookup(targetID NodeID, refreshIfEmpty bool) []*Node {
 
 func (tab *Table) findnode(n *Node, targetID NodeID, reply chan<- []*Node) {
 	fails := tab.db.findFails(n.ID)
-	r, err := tab.net.findnode(n.ID, n.addr(), targetID)
+	r, err := tab.net.findnode(n.ID, n.addr(), targetID)  // 向  n 节点发起 FIND_NODE 消息包, 请求查找 target 节点
 	if err != nil || len(r) == 0 {
 		fails++
 		tab.db.updateFindFails(n.ID, fails)
@@ -437,7 +443,7 @@ func (tab *Table) doRefresh(done chan struct{}) {
 	// Run self lookup to discover new neighbor nodes.
 	//
 	// 先加载一波静态节点，然后根据当前节点信息先去刷一波桶拉回据当前节点的邻居节点
-	tab.lookup(tab.self.ID, false)  // 这个才是做刷桶的动作
+	tab.lookup(tab.self.ID, false)  // 这个才是做刷桶的动作      (tab *Table) doRefresh(done chan struct{}) 刷桶
 
 	// The Kademlia paper specifies that the bucket refresh should
 	// perform a lookup in the least recently used bucket. We cannot
@@ -454,7 +460,7 @@ func (tab *Table) doRefresh(done chan struct{}) {
 	for i := 0; i < 3; i++ {  // todo  for 3 次循环，每次生成一个随机nodeID即：target，再根据target去刷桶拉回距随机target节点的邻居节点
 		var target NodeID
 		crand.Read(target[:])
-		tab.lookup(target, false) // 这个才是做刷桶的动作
+		tab.lookup(target, false) // 这个才是做刷桶的动作    (tab *Table) doRefresh(done chan struct{}) 刷桶  (3次刷桶, 对3个随机target节点做刷桶)
 	}
 }
 
@@ -495,7 +501,7 @@ func (tab *Table) doRevalidate(done chan<- struct{}) {  // 验证 k-bucket 中�
 	}
 	// No reply received, pick a replacement or delete the node if there aren't
 	// any replacements.
-	if r := tab.replace(b, last); r != nil {
+	if r := tab.replace(b, last); r != nil {  // 从 k-bucket 的备选队列 replacements 中将 node 移动到 正常队列 entries 中
 		log.Trace("Replaced dead node", "b", bi, "id", last.ID, "ip", last.IP, "r", r.ID, "rip", r.IP)
 	} else {
 		log.Trace("Removed dead node", "b", bi, "id", last.ID, "ip", last.IP)
@@ -554,10 +560,10 @@ func (tab *Table) closest(target common.Hash, nresults int) *nodesByDistance {
 	// This is a very wasteful way to find the closest nodes but
 	// obviously correct. I believe that tree-based buckets would make
 	// this easier to implement efficiently.
-	close := &nodesByDistance{target: target}
+	close := &nodesByDistance{target: target}  // 用来收集 和 target 距离最近的 一些 node
 	for _, b := range &tab.buckets {
 		for _, n := range b.entries {
-			close.push(n, nresults)
+			close.push(n, nresults)  // 取 距离target 更近的 nresults 个 node
 		}
 	}
 	return close
@@ -571,12 +577,12 @@ func (tab *Table) len() (n int) {
 }
 
 // bucket returns the bucket for the given node ID hash.
-func (tab *Table) bucket(sha common.Hash) *bucket {
-	d := logdist(tab.self.sha, sha)
+func (tab *Table) bucket(sha common.Hash) *bucket { // 根据sha 节点 和 当前本地节点的 距离, 返回 table 中对应的 k-bucket
+	d := logdist(tab.self.sha, sha)  // 计算 sha 节点 和 当前本地节点的 距离
 	if d <= bucketMinDistance {
 		return tab.buckets[0]
 	}
-	return tab.buckets[d-bucketMinDistance-1]
+	return tab.buckets[d-bucketMinDistance-1]  // 返回 table 中对应的 k-bucket
 }
 
 // add attempts to add the given node to its corresponding bucket. If the bucket has space
@@ -588,8 +594,8 @@ func (tab *Table) add(n *Node) {
 	tab.mutex.Lock()
 	defer tab.mutex.Unlock()
 
-	b := tab.bucket(n.sha)
-	if !tab.bumpOrAdd(b, n) {
+	b := tab.bucket(n.sha)   // 根据sha 节点 和 当前本地节点的 距离, 返回 table 中对应的 k-bucket
+	if !tab.bumpOrAdd(b, n) {  // 加入 k-bucket 中, 如果桶满了, 则加到 备选中
 		// Node is not in table. Add it to the replacement list.
 		tab.addReplacement(b, n)
 	}
@@ -667,7 +673,7 @@ func (tab *Table) addReplacement(b *bucket, n *Node) {
 		return
 	}
 	var removed *Node
-	b.replacements, removed = pushNode(b.replacements, n, maxReplacements)
+	b.replacements, removed = pushNode(b.replacements, n, maxReplacements)  // 加到 备选队列中 (10 个 node)
 	if removed != nil {
 		tab.removeIP(b, removed.IP)
 	}
@@ -676,7 +682,7 @@ func (tab *Table) addReplacement(b *bucket, n *Node) {
 // replace removes n from the replacement list and replaces 'last' with it if it is the
 // last entry in the bucket. If 'last' isn't the last entry, it has either been replaced
 // with someone else or became active.
-func (tab *Table) replace(b *bucket, last *Node) *Node {
+func (tab *Table) replace(b *bucket, last *Node) *Node {  // 从 k-bucket 的备选队列 replacements 中将 node 移动到 正常队列 entries 中
 	if len(b.entries) == 0 || b.entries[len(b.entries)-1].ID != last.ID {
 		// Entry has moved, don't replace it.
 		return nil
@@ -686,6 +692,8 @@ func (tab *Table) replace(b *bucket, last *Node) *Node {
 		tab.deleteInBucket(b, last)
 		return nil
 	}
+
+	// 从 k-bucket 的备选队列 replacements 中将 node 移动到 正常队列 entries 中
 	r := b.replacements[tab.rand.Intn(len(b.replacements))]
 	b.replacements = deleteNode(b.replacements, r)
 	b.entries[len(b.entries)-1] = r
@@ -713,10 +721,12 @@ func (tab *Table) bumpOrAdd(b *bucket, n *Node) bool {
 	if b.bump(n) {
 		return true
 	}
-	if len(b.entries) >= bucketSize || !tab.addIP(b, n.IP) {
+	if len(b.entries) >= bucketSize || !tab.addIP(b, n.IP) {   // 桶满了, 直接丢掉 n (在外面会把它 加入到 备选队列  replacements 中的 ...)
 		return false
 	}
-	b.entries, _ = pushNode(b.entries, n, bucketSize)
+
+	// 正常 加入 k-bucket 中,  需要检查是否从 备选队列 中移除, (因为上一次可能已经将 n 加入备选队列中了)
+	b.entries, _ = pushNode(b.entries, n, bucketSize) // 加入 k-bucket 的正常队列  （16个node）
 	b.replacements = deleteNode(b.replacements, n)
 	n.addedAt = time.Now()
 	if tab.nodeAddedHook != nil {
@@ -737,7 +747,7 @@ func pushNode(list []*Node, n *Node, max int) ([]*Node, *Node) {
 	}
 	removed := list[len(list)-1]
 	copy(list[1:], list)
-	list[0] = n
+	list[0] = n  // 新进来的 node 加到 bucket 头部
 	return list, removed
 }
 
@@ -753,15 +763,15 @@ func deleteNode(list []*Node, n *Node) []*Node {
 
 // nodesByDistance is a list of nodes, ordered by
 // distance to target.
-type nodesByDistance struct {
+type nodesByDistance struct {  // 用来收集 和 target 距离最近的 一些 node
 	entries []*Node
 	target  common.Hash
 }
 
 // push adds the given node to the list, keeping the total size below maxElems.
-func (h *nodesByDistance) push(n *Node, maxElems int) {
+func (h *nodesByDistance) push(n *Node, maxElems int) {  // 取 距离target 更近的 maxElems 个 node
 	ix := sort.Search(len(h.entries), func(i int) bool {
-		return distcmp(h.target, h.entries[i].sha, n.sha) > 0
+		return distcmp(h.target, h.entries[i].sha, n.sha) > 0   // 取 距离target 更近的 node
 	})
 	if len(h.entries) < maxElems {
 		h.entries = append(h.entries, n)

@@ -303,6 +303,9 @@ func (db *nodeDB) updateLastPongReceived(id NodeID, instance time.Time) error {
 }
 
 // findFails retrieves the number of findnode failures since bonding.
+//
+// `findFails()` 检索自绑定以来findnode失败的次数
+//
 func (db *nodeDB) findFails(id NodeID) int {
 	return int(db.fetchInt64(makeKey(id, nodeDBDiscoverFindFails)))
 }

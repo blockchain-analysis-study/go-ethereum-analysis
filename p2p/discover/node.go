@@ -349,10 +349,13 @@ func recoverNodeID(hash, sig []byte) (id NodeID, err error) {
 // distcmp compares the distances a->target and b->target.
 // Returns -1 if a is closer to target, 1 if b is closer to target
 // and 0 if they are equal.
+//
+// `distcmp()` 比较距离a-> target和b-> target。
+// 如果a更接近目标，则返回-1；如果b更接近目标，则返回1；如果相等则返回0。
 func distcmp(target, a, b common.Hash) int {
 	for i := range target {
-		da := a[i] ^ target[i]
-		db := b[i] ^ target[i]
+		da := a[i] ^ target[i]    	// a 和 target 的距离
+		db := b[i] ^ target[i]		// b 和 target 的距离
 		if da > db {
 			return 1
 		} else if da < db {

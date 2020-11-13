@@ -127,7 +127,7 @@ func (t *udp) nodeFromRPC(sender *net.UDPAddr, rn rpcNode) (*Node, error) {
 	if rn.UDP <= 1024 {
 		return nil, errors.New("low port")
 	}
-	if err := netutil.CheckRelayIP(sender.IP, rn.IP); err != nil {
+	if err := netutil.CheckRelayIP(sender.IP, rn.IP); err != nil {  // 根据 sender 对 rn节点的 合法性检查
 		return nil, err
 	}
 	if t.netrestrict != nil && !t.netrestrict.Contains(rn.IP) {
@@ -317,11 +317,11 @@ func (t *udp) findnode(toid NodeID, toaddr *net.UDPAddr, target NodeID) ([]*Node
 
 	nodes := make([]*Node, 0, bucketSize)
 	nreceived := 0
-	errc := t.pending(toid, neighborsPacket, func(r interface{}) bool {
+	errc := t.pending(toid, neighborsPacket, func(r interface{}) bool {  // todo  接收 对端 发回来的 一组 和 target 相近的 node
 		reply := r.(*neighbors)
-		for _, rn := range reply.Nodes {
+		for _, rn := range reply.Nodes {   // 逐个 收集这一组 node
 			nreceived++
-			n, err := t.nodeFromRPC(toaddr, rn)
+			n, err := t.nodeFromRPC(toaddr, rn)   // 根据 sender 对 rn节点的 合法性检查
 			if err != nil {
 				log.Trace("Invalid neighbor node received", "ip", rn.IP, "addr", toaddr, "err", err)
 				continue
@@ -330,7 +330,7 @@ func (t *udp) findnode(toid NodeID, toaddr *net.UDPAddr, target NodeID) ([]*Node
 		}
 		return nreceived >= bucketSize
 	})
-	t.send(toaddr, findnodePacket, &findnode{
+	t.send(toaddr, findnodePacket, &findnode{  // todo 向 toaddr 节点发起 FIND_NODE 消息, 请求查找 target节点
 		Target:     target,
 		Expiration: uint64(time.Now().Add(expiration).Unix()),
 	})
@@ -545,7 +545,7 @@ func (t *udp) readLoop(unhandled chan<- ReadPacket) {
 			log.Debug("UDP read error", "err", err)
 			return
 		}
-		if t.handlePacket(from, buf[:nbytes]) != nil && unhandled != nil {
+		if t.handlePacket(from, buf[:nbytes]) != nil && unhandled != nil {  // todo 处理 ping / pong / findnode/ neighbor 等四种 kad 网络协议消息包
 			select {
 			case unhandled <- ReadPacket{buf[:nbytes], from}:
 			default:
@@ -554,13 +554,13 @@ func (t *udp) readLoop(unhandled chan<- ReadPacket) {
 	}
 }
 
-func (t *udp) handlePacket(from *net.UDPAddr, buf []byte) error {
+func (t *udp) handlePacket(from *net.UDPAddr, buf []byte) error {  // todo 处理 ping / pong / findnode/ neighbor 等四种 kad 网络协议消息包
 	packet, fromID, hash, err := decodePacket(buf)
 	if err != nil {
 		log.Debug("Bad discv4 packet", "addr", from, "err", err)
 		return err
 	}
-	err = packet.handle(t, from, fromID, hash)
+	err = packet.handle(t, from, fromID, hash)  // todo 处理 ping / pong / findnode/ neighbor 等四种 kad 网络协议消息包
 	log.Trace("<< "+packet.name(), "addr", from, "err", err)
 	return err
 }
@@ -647,9 +647,9 @@ func (req *findnode) handle(t *udp, from *net.UDPAddr, fromID NodeID, mac []byte
 		// findnode) to the victim.
 		return errUnknownNode
 	}
-	target := crypto.Keccak256Hash(req.Target[:])
+	target := crypto.Keccak256Hash(req.Target[:])   // 计算对端peer 发来的 FIND_NODE 中的 需要被查找的 target node 的 nodeId Hash
 	t.mutex.Lock()
-	closest := t.closest(target, bucketSize).entries
+	closest := t.closest(target, bucketSize).entries   // 找出 16个和 target 相近的 node
 	t.mutex.Unlock()
 
 	p := neighbors{Expiration: uint64(time.Now().Add(expiration).Unix())}
@@ -661,13 +661,13 @@ func (req *findnode) handle(t *udp, from *net.UDPAddr, fromID NodeID, mac []byte
 			p.Nodes = append(p.Nodes, nodeToRPC(n))
 		}
 		if len(p.Nodes) == maxNeighbors {
-			t.send(from, neighborsPacket, &p)
+			t.send(from, neighborsPacket, &p)  // todo 将一组 node 封装成 neighbor 消息 发回给对端 peer
 			p.Nodes = p.Nodes[:0]
 			sent = true
 		}
 	}
 	if len(p.Nodes) > 0 || !sent {
-		t.send(from, neighborsPacket, &p)
+		t.send(from, neighborsPacket, &p) // todo 将一组 node 封装成 neighbor 消息 发回给对端 peer
 	}
 	return nil
 }

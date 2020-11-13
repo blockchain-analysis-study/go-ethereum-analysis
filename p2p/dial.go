@@ -311,7 +311,7 @@ func (s *dialstate) taskDone(t task, now time.Time) {
 
 func (t *dialTask) Do(srv *Server) {
 	if t.dest.Incomplete() {
-		if !t.resolve(srv) {  // 这里也会做  k-bucket 的刷桶
+		if !t.resolve(srv) {  // 这里也会做  k-bucket 的刷桶      (t *dialTask) Do() 连接对端peer时
 			return
 		}
 	}
@@ -321,7 +321,7 @@ func (t *dialTask) Do(srv *Server) {
 		log.Trace("Dial error", "task", t, "err", err)
 		// Try resolving the ID of static nodes if dialing failed.
 		if _, ok := err.(*dialError); ok && t.flags&staticDialedConn != 0 {
-			if t.resolve(srv) {  // 这里也会做 k-bucket 的刷桶
+			if t.resolve(srv) {  // 这里也会做 k-bucket 的刷桶        (t *dialTask) Do() 连接对端peer时
 				t.dial(srv, t.dest)  // todo 当前 peer 向 t.dest远端 peer 发起拨号连接. (里面会处理:  往 `srv.posthandshake` 通道 和 往 `srv.addpeer` 添加 conn 信号)
 			}
 		}
@@ -392,7 +392,7 @@ func (t *discoverTask) Do(srv *Server) {
 	srv.lastLookup = time.Now()
 	var target discover.NodeID
 	rand.Read(target[:])
-	t.results = srv.ntab.Lookup(target)  // 做 k-bucket 的刷桶
+	t.results = srv.ntab.Lookup(target)  // 做 k-bucket 的刷桶       (t *discoverTask) Do() 连接对端 peer 时
 }
 
 func (t *discoverTask) String() string {
