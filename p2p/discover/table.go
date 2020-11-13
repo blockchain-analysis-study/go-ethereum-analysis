@@ -295,7 +295,7 @@ func (tab *Table) lookup(targetID NodeID, refreshIfEmpty bool) []*Node {
 		// We actually wait for the refresh to complete here. The very
 		// first query will hit this case and run the bootstrapping
 		// logic.
-		<-tab.refresh()
+		<-tab.refresh()  // 调用 主动发起 刷桶请求, 并返回 done 的信号通道
 		refreshIfEmpty = false
 	}
 
@@ -350,7 +350,7 @@ func (tab *Table) findnode(n *Node, targetID NodeID, reply chan<- []*Node) {
 	reply <- r
 }
 
-func (tab *Table) refresh() <-chan struct{} {
+func (tab *Table) refresh() <-chan struct{} {  //  主动发起 刷桶请求, 并返回 done 的信号通道
 	done := make(chan struct{})
 	select {
 	case tab.refreshReq <- done:
@@ -390,13 +390,13 @@ loop:
 			}
 		// 接收到 刷桶 req
 		case req := <-tab.refreshReq:
-			waiting = append(waiting, req)
+			waiting = append(waiting, req)  // waiting 是个  done 信号通道的 队列
 			if refreshDone == nil {
 				refreshDone = make(chan struct{})
 				go tab.doRefresh(refreshDone) // 接收到 刷桶 req
 			}
 		case <-refreshDone:
-			for _, ch := range waiting {
+			for _, ch := range waiting {  // 逐个处理 done 通道
 				close(ch)
 			}
 			waiting, refreshDone = nil, nil
@@ -478,27 +478,30 @@ func (tab *Table) loadSeedNodes() {
 
 // doRevalidate checks that the last node in a random bucket is still live
 // and replaces or deletes the node if it isn't.
-func (tab *Table) doRevalidate(done chan<- struct{}) {  // 验证 k-bucket 中的 node 的有效性,  ping-pong
+func (tab *Table) doRevalidate(done chan<- struct{}) {  // 随机 验证 k-bucket 中的 某一个 node 的有效性,  ping-pong
 	defer func() { done <- struct{}{} }()
 
-	last, bi := tab.nodeToRevalidate()
+	last, bi := tab.nodeToRevalidate()  // todo 返回  随机的 k-bucket 中 最后一个 node 和 第几个k-bucket 的索引.  (在队头的是新加的, 理论上 队尾的才是和当前node 认识最久的. 这里和正常的 kad 网络做法相反, 人家的是 认识最久的在 队首 新加的在队尾)
 	if last == nil {
 		// No non-empty bucket found.
 		return
 	}
 
 	// Ping the selected node and wait for a pong.
-	err := tab.net.ping(last.ID, last.addr())
+	err := tab.net.ping(last.ID, last.addr())  // todo 对该 node 发出 ping 消息
 
 	tab.mutex.Lock()
 	defer tab.mutex.Unlock()
-	b := tab.buckets[bi]
+	b := tab.buckets[bi]  // todo 获取该 last node 对用的 k-bucket
 	if err == nil {
 		// The node responded, move it to the front.
 		log.Trace("Revalidated node", "b", bi, "id", last.ID)
 		b.bump(last)
 		return
 	}
+
+	// 如果有  ping - pong 的 p2p 消息 err,  那么需要使用一个 备选的 node 替换 这个 last node
+
 	// No reply received, pick a replacement or delete the node if there aren't
 	// any replacements.
 	if r := tab.replace(b, last); r != nil {  // 从 k-bucket 的备选队列 replacements 中将 node 移动到 正常队列 entries 中
@@ -509,7 +512,9 @@ func (tab *Table) doRevalidate(done chan<- struct{}) {  // 验证 k-bucket 中�
 }
 
 // nodeToRevalidate returns the last node in a random, non-empty bucket.
-func (tab *Table) nodeToRevalidate() (n *Node, bi int) {
+//
+// `nodeToRevalidate()` 返回 随机非空存储桶中的最后一个节点.
+func (tab *Table) nodeToRevalidate() (n *Node, bi int) {  // 随机返回 一个 node
 	tab.mutex.Lock()
 	defer tab.mutex.Unlock()
 
