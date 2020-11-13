@@ -137,8 +137,8 @@ func newTable(t transport, ourID NodeID, ourAddr *net.UDPAddr, nodeDBPath string
 	// Start the background expiration goroutine after loading seeds so that the search for
 	// seed nodes also considers older nodes that would otherwise be removed by the
 	// expiration.
-	tab.db.ensureExpirer()		// 启动  db 中清除 (不活跃) node的信息
-	go tab.loop()  // 异步启动刷桶逻辑
+	tab.db.ensureExpirer()		// todo 启动  每小时 从 db 中清除 (不活跃) node的信息  (某个 node 最后一次 和本地node的 PONG 时间已经超过 24小时, 那么它就是不活跃的 node)
+	go tab.loop()  // todo 异步启动刷桶逻辑
 	return tab, nil
 }
 

@@ -238,7 +238,7 @@ func (db *nodeDB) expirer() {
 	for {
 		select {
 		case <-tick.C:
-			if err := db.expireNodes(); err != nil {  // 每小时 执行一次, 将本地 db 中的 (不活跃) node信息删除
+			if err := db.expireNodes(); err != nil {  // todo 每小时 执行一次, 将本地 db 中的 (不活跃) node信息删除  (某个 node 最后一次 和本地node的 PONG 时间已经超过 24小时, 那么它就是 不活跃的node)
 				log.Error("Failed to expire nodedb items", "err", err)
 			}
 		case <-db.quit:
@@ -249,8 +249,8 @@ func (db *nodeDB) expirer() {
 
 // expireNodes iterates over the database and deletes all nodes that have not
 // been seen (i.e. received a pong from) for some allotted time.
-func (db *nodeDB) expireNodes() error {
-	threshold := time.Now().Add(-nodeDBNodeExpiration)   // 时间是否超过 24 小时
+func (db *nodeDB) expireNodes() error {  // 处理 过期的 node (24小时)
+	threshold := time.Now().Add(-nodeDBNodeExpiration)   // todo  时间是否超过 24 小时   (判断 k-bucket 中的 node 的失效时间)
 
 	// Find discovered nodes that are older than the allowance
 	it := db.lvl.NewIterator(nil, nil)
@@ -269,10 +269,9 @@ func (db *nodeDB) expireNodes() error {
 				continue
 			}
 		}
-		// 某个 node 最后一次 和本地node的 PONG 时间已经超过 24 小时, 需要从 本地 db 中删除
-		//
+
 		// Otherwise delete all associated information
-		db.deleteNode(id)
+		db.deleteNode(id)   // todo 某个 node 最后一次 和本地node的 PONG 时间已经超过 24小时, 需要从 本地 db 中删除
 	}
 	return nil
 }
