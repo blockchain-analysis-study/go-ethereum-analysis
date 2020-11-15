@@ -274,6 +274,13 @@ func (st *StateTransition) TransitionDb() (ret []byte, usedGas uint64, failed bo
 }
 
 func (st *StateTransition) refundGas() {
+
+	// todo 清理状态 和 清理存储槽 和 删除带有自会操作码的合约 都会收到 gas 退款
+	//
+	// 只有 tx 结束时 提供调用.
+	//
+	// 最高退款是 当前tx 已经消耗的 gas 的 一半.
+
 	// Apply refund counter, capped to half of the used gas.
 	//
 	// 申请退款柜台，上限为已用 gas 的一半。

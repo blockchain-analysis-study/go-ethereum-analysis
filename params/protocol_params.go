@@ -71,6 +71,8 @@ const (
 	Sha3WordGas      uint64 = 6     // Once per word of the SHA3 operation's data.
 	SstoreResetGas   uint64 = 5000  // Once per SSTORE operation if the zeroness changes from zero.
 	SstoreClearGas   uint64 = 5000  // Once per SSTORE operation if the zeroness doesn't change.
+
+	// 清理/删除存储 (退款 15000)
 	SstoreRefundGas  uint64 = 15000 // Once per SSTORE operation if the zeroness changes to zero.
 	JumpdestGas      uint64 = 1     // Refunded gas, once per SSTORE operation if the zeroness changes to zero.
 	EpochDuration    uint64 = 30000 // Duration between proof-of-work epochs.
@@ -87,6 +89,10 @@ const (
 	LogTopicGas      uint64 = 375   // Multiplied by the * of the LOG*, per LOG transaction. e.g. LOG0 incurs 0 * c_txLogTopicGas, LOG4 incurs 4 * c_txLogTopicGas.
 	CreateGas        uint64 = 32000 // Once per CREATE operation & contract-creation transaction.
 	Create2Gas       uint64 = 32000 // Once per CREATE2 operation
+
+	// todo 清理状态 和 清理存储槽 和 删除带有自会操作码的合约 都会收到 gas 退款
+
+	// 清理/自毁合约  (退款 24000)
 	SuicideRefundGas uint64 = 24000 // Refunded following a suicide operation.
 	MemoryGas        uint64 = 3     // Times the address of the (highest referenced byte in memory + 1). NOTE: referencing happens on read, write and in instructions such as RETURN and CALL.
 	TxDataNonZeroGas uint64 = 68    // Per byte of data attached to a transaction that is not equal to zero. NOTE: Not payable on data of calls between transactions.
