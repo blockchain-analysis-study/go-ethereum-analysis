@@ -615,7 +615,7 @@ func (evm *EVM) create(caller ContractRef, code []byte, gas uint64, value *big.I
 	// 检查是否超过了最大代码大小
 	//
 	// todo 即， 指令码集是否超过限制
-	maxCodeSizeExceeded := evm.ChainConfig().IsEIP158(evm.BlockNumber) && len(ret) > params.MaxCodeSize
+	maxCodeSizeExceeded := evm.ChainConfig().IsEIP158(evm.BlockNumber) && len(ret) > params.MaxCodeSize   // 24 KB
 	// if the contract creation ran successfully and no errors were returned
 	// calculate the gas required to store the code. If the code could not
 	// be stored due to not enough gas set an error and let it be handled

@@ -45,6 +45,10 @@ package trie
 		HEX encoding转KEYBYTES encoding
 		HEX encoding转COMPACT encoding
 		COMPACT encoding转HEX encoding
+
+
+	todo Hex 是在 sha3的 key 操作 MPT 之前计算的,  而 compact 是在 MPT 的节点 遍历 <各个节点计算各自的Hash> 时计算的,这时候node上的key可能只是完整key的某部分前缀而已, 需要判断是否为前缀 .
+
  */
 
 
@@ -56,6 +60,9 @@ Compact 编码:
 同时要加入当前 Compact 格式的标记位，还要考虑在 `奇偶不同长度 Hex 格式字符串下`，
 避免引入多余的 byte.
 
+todo Hex 是在 sha3的 key 操作 MPT 之前计算的,  而 compact 是在 MPT 的节点 遍历 <各个节点计算各自的Hash> 时计算的,这时候node上的key可能只是完整key的某部分前缀而已, 需要判断是否为前缀 .
+
+todo Compact 编码:又叫 hex prefix 编码，它的主要意图是将 Hex 格式的字符串恢复到 keybytes 的格式，同时要加入当前 Compact 格式的标记位，还要考虑在奇偶不同长度 Hex 格式字符串下，避免引入多余的 byte
 
 
 
@@ -64,7 +71,7 @@ Compact 编码:
 3) 如果输入 Hex 格式字符串有效长度为奇数，还可以将 Hex 字符串的第一个 nibble 放置在标记位 byte 里的低 4bit,并增加奇数位标志 0011xxxx
 
  */
-func hexToCompact(hex []byte) []byte {
+func hexToCompact(hex []byte) []byte { // node 计算Hash时, key 一定是 compact编码之后的 ...
 
 	/**
 		todo 入参的 hex 可能的几种情况
@@ -90,7 +97,7 @@ func hexToCompact(hex []byte) []byte {
 		hex = hex[:len(hex)-1]
 	}
 
-	// Compact开辟的空间长度为hex编码的一半再加1，这个1对应的空间是Compact的前缀
+	// Compact 开辟的空间长度为hex编码的一半再加1，这个1对应的空间是Compact的前缀
 	buf := make([]byte, len(hex)/2+1)
 
 	// Compact格式标记位,如果最后一位是16，才会有Compact格式标记位
@@ -123,12 +130,16 @@ func hexToCompact(hex []byte) []byte {
 
 /**
 将compact编码转化为Hex编码
+
+todo Hex 是在 sha3的 key 操作 MPT 之前计算的,  而 compact 是在 MPT 的节点 遍历 <各个节点计算各自的Hash> 时计算的,这时候node上的key可能只是完整key的某部分前缀而已, 需要判断是否为前缀 .
+
+todo Compact 编码:又叫 hex prefix 编码，它的主要意图是将 Hex 格式的字符串恢复到 keybytes 的格式，同时要加入当前 Compact 格式的标记位，还要考虑在奇偶不同长度 Hex 格式字符串下，避免引入多余的 byte
 */
 func compactToHex(compact []byte) []byte {
-	base := keybytesToHex(compact)
+	base := keybytesToHex(compact) // todo 先按照 bets 转 Hex 处理, 这时候末尾 肯定是被加了 16 休止符, 后面我们在决定 原先 hex转成 compact前的内容是否有 16 休止符，来决定是否去掉本次添加的 16 休止符
 	// delete terminator flag
-	if base[0] < 2 {
-		base = base[:len(base)-1]
+	if base[0] < 2 { // todo 说明 base 是 0001 或者 0000 <而非 0011 或者 0010 > 就是说 原来的 hex 在编成 compact 时是没有 16 休止符的，需要 去掉 bytes To hex 添加的末尾 16 休止符
+		base = base[:len(base)-1]  // 去掉 bytes To hex 添加的末尾 16 休止符
 
 		// apply terminator flag
 		// base[0]包括四种情况
@@ -144,15 +155,18 @@ func compactToHex(compact []byte) []byte {
 
 	// apply odd flag
 	//
-	// 如果是偶数位，chop等于2，否则等于1
-	chop := 2 - base[0]&1
+	// 如果是偶数位，chop等于0，否则等于1
+	chop := 2 - base[0]&1 // 到这里 base[0] 只会是 0000 <原来的hex是 偶数个byte原内容> 或者 0001 <原来的hex是 奇数个byte原内容>
 
-	// 去除compact标志位。偶数位去除2个字节，奇数位去除1个字节（因为奇数位的低四位放的是nibble数据）
+	// 截取 base 的内容
 	return base[chop:]
 }
 
 
 // todo 将 []byte 的 key  转成 16进制 的 []byte数组
+//
+//
+// todo Hex 是在 sha3的 key 操作 MPT 之前计算的,  而 compact 是在 MPT 的节点 遍历 <各个节点计算各自的Hash> 时计算的,这时候node上的key可能只是完整key的某部分前缀而已, 需要判断是否为前缀 .
 func keybytesToHex(str []byte) []byte {
 
 	// hex编码 str 总共会用到的空间大小     +1 是因为最后需要放入  `16` 数字 作为休止符
@@ -208,6 +222,8 @@ func keybytesToHex(str []byte) []byte {
 
 // hexToKeybytes turns hex nibbles into key bytes.
 // This can only be used for keys of even length.
+//
+// todo Hex 是在 sha3的 key 操作 MPT 之前计算的,  而 compact 是在 MPT 的节点 遍历 <各个节点计算各自的Hash> 时计算的,这时候node上的key可能只是完整key的某部分前缀而已, 需要判断是否为前缀 .
 func hexToKeybytes(hex []byte) []byte {
 
 	// 如果有尾缀 16

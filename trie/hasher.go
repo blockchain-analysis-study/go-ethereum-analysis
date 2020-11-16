@@ -157,7 +157,7 @@ func (h *hasher) hash(n node, db *Database, force bool) (node, node, error) {
 	// 	force参数的用途是当节点的RLP字节长度小于32也对节点的RLP进行hash计算，
 	// 	这样保证无论如何也会对根节点进行Hash计算.
 	//
-	hashed, err := h.store(collapsed, db, force)   // todo 将当前节点生成hash       (collapsed: 为 key做了 compact 编码, 需要存入 磁盘的 node)
+	hashed, err := h.store(collapsed, db, force)   // todo 将当前节点生成hash       (collapsed: 为 key做了 compact 编码, 需要存入 磁盘的 node)   使用compact编码key之后的node计算Hash
 	if err != nil {
 		return hashNode{}, n, err
 	}

@@ -285,7 +285,7 @@ func newParityChainSpec(network string, genesis *core.Genesis, bootnodes []strin
 	spec.Params.MinGasLimit = (hexutil.Uint64)(params.MinGasLimit)
 	spec.Params.GasLimitBoundDivisor = (hexutil.Uint64)(params.GasLimitBoundDivisor)
 	spec.Params.NetworkID = (hexutil.Uint64)(genesis.Config.ChainID.Uint64())
-	spec.Params.MaxCodeSize = params.MaxCodeSize
+	spec.Params.MaxCodeSize = params.MaxCodeSize // 24 KB
 	spec.Params.EIP155Transition = genesis.Config.EIP155Block.Uint64()
 	spec.Params.EIP98Transition = math.MaxUint64
 	spec.Params.EIP86Transition = math.MaxUint64
