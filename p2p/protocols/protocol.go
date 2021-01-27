@@ -1,18 +1,18 @@
-// Copyright 2017 The github.com/go-ethereum-analysis Authors
-// This file is part of the github.com/go-ethereum-analysis library.
+// Copyright 2017 The github.com/blockchain-analysis-study/go-ethereum-analysis Authors
+// This file is part of the github.com/blockchain-analysis-study/go-ethereum-analysis library.
 //
-// The github.com/go-ethereum-analysis library is free software: you can redistribute it and/or modify
+// The github.com/blockchain-analysis-study/go-ethereum-analysis library is free software: you can redistribute it and/or modify
 // it under the terms of the GNU Lesser General Public License as published by
 // the Free Software Foundation, either version 3 of the License, or
 // (at your option) any later version.
 //
-// The github.com/go-ethereum-analysis library is distributed in the hope that it will be useful,
+// The github.com/blockchain-analysis-study/go-ethereum-analysis library is distributed in the hope that it will be useful,
 // but WITHOUT ANY WARRANTY; without even the implied warranty of
 // MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
 // GNU Lesser General Public License for more details.
 //
 // You should have received a copy of the GNU Lesser General Public License
-// along with the github.com/go-ethereum-analysis library. If not, see <http://www.gnu.org/licenses/>.
+// along with the github.com/blockchain-analysis-study/go-ethereum-analysis library. If not, see <http://www.gnu.org/licenses/>.
 
 /*
 Package protocols is an extension to p2p. It offers a user friendly simple way to define
@@ -38,12 +38,12 @@ import (
 	"sync"
 	"time"
 
-	"github.com/go-ethereum-analysis/log"
-	"github.com/go-ethereum-analysis/metrics"
-	"github.com/go-ethereum-analysis/p2p"
-	"github.com/go-ethereum-analysis/rlp"
-	"github.com/go-ethereum-analysis/swarm/spancontext"
-	"github.com/go-ethereum-analysis/swarm/tracing"
+	"github.com/blockchain-analysis-study/go-ethereum-analysis/log"
+	"github.com/blockchain-analysis-study/go-ethereum-analysis/metrics"
+	"github.com/blockchain-analysis-study/go-ethereum-analysis/p2p"
+	"github.com/blockchain-analysis-study/go-ethereum-analysis/rlp"
+	"github.com/blockchain-analysis-study/go-ethereum-analysis/swarm/spancontext"
+	"github.com/blockchain-analysis-study/go-ethereum-analysis/swarm/tracing"
 	opentracing "github.com/opentracing/opentracing-go"
 )
 

@@ -1,18 +1,18 @@
-// Copyright 2016 The github.com/go-ethereum-analysis Authors
-// This file is part of the github.com/go-ethereum-analysis library.
+// Copyright 2016 The github.com/blockchain-analysis-study/go-ethereum-analysis Authors
+// This file is part of the github.com/blockchain-analysis-study/go-ethereum-analysis library.
 //
-// The github.com/go-ethereum-analysis library is free software: you can redistribute it and/or modify
+// The github.com/blockchain-analysis-study/go-ethereum-analysis library is free software: you can redistribute it and/or modify
 // it under the terms of the GNU Lesser General Public License as published by
 // the Free Software Foundation, either version 3 of the License, or
 // (at your option) any later version.
 //
-// The github.com/go-ethereum-analysis library is distributed in the hope that it will be useful,
+// The github.com/blockchain-analysis-study/go-ethereum-analysis library is distributed in the hope that it will be useful,
 // but WITHOUT ANY WARRANTY; without even the implied warranty of
 // MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
 // GNU Lesser General Public License for more details.
 //
 // You should have received a copy of the GNU Lesser General Public License
-// along with the github.com/go-ethereum-analysis library. If not, see <http://www.gnu.org/licenses/>.
+// along with the github.com/blockchain-analysis-study/go-ethereum-analysis library. If not, see <http://www.gnu.org/licenses/>.
 
 package http
 
@@ -20,17 +20,17 @@ import (
 	"fmt"
 	"net/http"
 
-	"github.com/go-ethereum-analysis/swarm/log"
+	"github.com/blockchain-analysis-study/go-ethereum-analysis/swarm/log"
 )
 
 /*
 http roundtripper to register for bzz url scheme
-see https://github.com/go-ethereum-analysis/issues/2040
+see https://github.com/blockchain-analysis-study/go-ethereum-analysis/issues/2040
 Usage:
 
 import (
- "github.com/go-ethereum-analysis/common/httpclient"
- "github.com/go-ethereum-analysis/swarm/api/http"
+ "github.com/blockchain-analysis-study/go-ethereum-analysis/common/httpclient"
+ "github.com/blockchain-analysis-study/go-ethereum-analysis/swarm/api/http"
 )
 client := httpclient.New()
 // for (private) swarm proxy running locally

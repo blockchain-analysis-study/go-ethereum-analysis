@@ -1,18 +1,18 @@
-// Copyright 2016 The github.com/go-ethereum-analysis Authors
-// This file is part of github.com/go-ethereum-analysis.
+// Copyright 2016 The github.com/blockchain-analysis-study/go-ethereum-analysis Authors
+// This file is part of github.com/blockchain-analysis-study/go-ethereum-analysis.
 //
-// github.com/go-ethereum-analysis is free software: you can redistribute it and/or modify
+// github.com/blockchain-analysis-study/go-ethereum-analysis is free software: you can redistribute it and/or modify
 // it under the terms of the GNU General Public License as published by
 // the Free Software Foundation, either version 3 of the License, or
 // (at your option) any later version.
 //
-// github.com/go-ethereum-analysis is distributed in the hope that it will be useful,
+// github.com/blockchain-analysis-study/go-ethereum-analysis is distributed in the hope that it will be useful,
 // but WITHOUT ANY WARRANTY; without even the implied warranty of
 // MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
 // GNU General Public License for more details.
 //
 // You should have received a copy of the GNU General Public License
-// along with github.com/go-ethereum-analysis. If not, see <http://www.gnu.org/licenses/>.
+// along with github.com/blockchain-analysis-study/go-ethereum-analysis. If not, see <http://www.gnu.org/licenses/>.
 
 package main
 
@@ -28,21 +28,21 @@ import (
 	"strings"
 	"syscall"
 
-	"github.com/go-ethereum-analysis/accounts"
-	"github.com/go-ethereum-analysis/accounts/keystore"
-	"github.com/go-ethereum-analysis/cmd/utils"
-	"github.com/go-ethereum-analysis/common"
-	"github.com/go-ethereum-analysis/console"
-	"github.com/go-ethereum-analysis/crypto"
-	"github.com/go-ethereum-analysis/internal/debug"
-	"github.com/go-ethereum-analysis/log"
-	"github.com/go-ethereum-analysis/node"
-	"github.com/go-ethereum-analysis/p2p/discover"
-	"github.com/go-ethereum-analysis/swarm"
-	bzzapi "github.com/go-ethereum-analysis/swarm/api"
-	swarmmetrics "github.com/go-ethereum-analysis/swarm/metrics"
-	"github.com/go-ethereum-analysis/swarm/tracing"
-	sv "github.com/go-ethereum-analysis/swarm/version"
+	"github.com/blockchain-analysis-study/go-ethereum-analysis/accounts"
+	"github.com/blockchain-analysis-study/go-ethereum-analysis/accounts/keystore"
+	"github.com/blockchain-analysis-study/go-ethereum-analysis/cmd/utils"
+	"github.com/blockchain-analysis-study/go-ethereum-analysis/common"
+	"github.com/blockchain-analysis-study/go-ethereum-analysis/console"
+	"github.com/blockchain-analysis-study/go-ethereum-analysis/crypto"
+	"github.com/blockchain-analysis-study/go-ethereum-analysis/internal/debug"
+	"github.com/blockchain-analysis-study/go-ethereum-analysis/log"
+	"github.com/blockchain-analysis-study/go-ethereum-analysis/node"
+	"github.com/blockchain-analysis-study/go-ethereum-analysis/p2p/discover"
+	"github.com/blockchain-analysis-study/go-ethereum-analysis/swarm"
+	bzzapi "github.com/blockchain-analysis-study/go-ethereum-analysis/swarm/api"
+	swarmmetrics "github.com/blockchain-analysis-study/go-ethereum-analysis/swarm/metrics"
+	"github.com/blockchain-analysis-study/go-ethereum-analysis/swarm/tracing"
+	sv "github.com/blockchain-analysis-study/go-ethereum-analysis/swarm/version"
 
 	"gopkg.in/urfave/cli.v1"
 )
@@ -243,7 +243,7 @@ var app = utils.NewApp(gitCommit, "Ethereum Swarm")
 func init() {
 	app.Action = bzzd
 	app.HideVersion = true // we have a command to print the version
-	app.Copyright = "Copyright 2013-2016 The github.com/go-ethereum-analysis Authors"
+	app.Copyright = "Copyright 2013-2016 The github.com/blockchain-analysis-study/go-ethereum-analysis Authors"
 	app.Commands = []cli.Command{
 		{
 			Action:             version,

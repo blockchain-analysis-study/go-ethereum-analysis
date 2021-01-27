@@ -1,18 +1,18 @@
-// Copyright 2014 The github.com/go-ethereum-analysis Authors
-// This file is part of the github.com/go-ethereum-analysis library.
+// Copyright 2014 The github.com/blockchain-analysis-study/go-ethereum-analysis Authors
+// This file is part of the github.com/blockchain-analysis-study/go-ethereum-analysis library.
 //
-// The github.com/go-ethereum-analysis library is free software: you can redistribute it and/or modify
+// The github.com/blockchain-analysis-study/go-ethereum-analysis library is free software: you can redistribute it and/or modify
 // it under the terms of the GNU Lesser General Public License as published by
 // the Free Software Foundation, either version 3 of the License, or
 // (at your option) any later version.
 //
-// The github.com/go-ethereum-analysis library is distributed in the hope that it will be useful,
+// The github.com/blockchain-analysis-study/go-ethereum-analysis library is distributed in the hope that it will be useful,
 // but WITHOUT ANY WARRANTY; without even the implied warranty of
 // MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
 // GNU Lesser General Public License for more details.
 //
 // You should have received a copy of the GNU Lesser General Public License
-// along with the github.com/go-ethereum-analysis library. If not, see <http://www.gnu.org/licenses/>.
+// along with the github.com/blockchain-analysis-study/go-ethereum-analysis library. If not, see <http://www.gnu.org/licenses/>.
 
 // Package state provides a caching layer atop the Ethereum state trie.
 package state
@@ -23,12 +23,12 @@ import (
 	"sort"
 	"sync"
 
-	"github.com/go-ethereum-analysis/common"
-	"github.com/go-ethereum-analysis/core/types"
-	"github.com/go-ethereum-analysis/crypto"
-	"github.com/go-ethereum-analysis/log"
-	"github.com/go-ethereum-analysis/rlp"
-	"github.com/go-ethereum-analysis/trie"
+	"github.com/blockchain-analysis-study/go-ethereum-analysis/common"
+	"github.com/blockchain-analysis-study/go-ethereum-analysis/core/types"
+	"github.com/blockchain-analysis-study/go-ethereum-analysis/crypto"
+	"github.com/blockchain-analysis-study/go-ethereum-analysis/log"
+	"github.com/blockchain-analysis-study/go-ethereum-analysis/rlp"
+	"github.com/blockchain-analysis-study/go-ethereum-analysis/trie"
 )
 
 // 修订版
@@ -541,7 +541,7 @@ func (self *StateDB) Copy() *StateDB {
 	//
 	// 只 copy 最近变动的 stateObject 的 Map 和标识位
 	for addr := range self.journal.dirties {
-		// As documented [here](https://github.com/go-ethereum-analysis/pull/16485#issuecomment-380438527),
+		// As documented [here](https://github.com/blockchain-analysis-study/go-ethereum-analysis/pull/16485#issuecomment-380438527),
 		// and in the Finalise-method, there is a case where an object is in the journal but not
 		// in the stateObjects: OOG after touch on ripeMD prior to Byzantium. Thus, we need to check for
 		// nil

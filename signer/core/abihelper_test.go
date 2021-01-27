@@ -1,18 +1,18 @@
-// Copyright 2018 The github.com/go-ethereum-analysis Authors
-// This file is part of github.com/go-ethereum-analysis.
+// Copyright 2018 The github.com/blockchain-analysis-study/go-ethereum-analysis Authors
+// This file is part of github.com/blockchain-analysis-study/go-ethereum-analysis.
 //
-// github.com/go-ethereum-analysis is free software: you can redistribute it and/or modify
+// github.com/blockchain-analysis-study/go-ethereum-analysis is free software: you can redistribute it and/or modify
 // it under the terms of the GNU General Public License as published by
 // the Free Software Foundation, either version 3 of the License, or
 // (at your option) any later version.
 //
-// github.com/go-ethereum-analysis is distributed in the hope that it will be useful,
+// github.com/blockchain-analysis-study/go-ethereum-analysis is distributed in the hope that it will be useful,
 // but WITHOUT ANY WARRANTY; without even the implied warranty of
 // MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
 // GNU General Public License for more details.
 //
 // You should have received a copy of the GNU General Public License
-// along with github.com/go-ethereum-analysis. If not, see <http://www.gnu.org/licenses/>.
+// along with github.com/blockchain-analysis-study/go-ethereum-analysis. If not, see <http://www.gnu.org/licenses/>.
 
 package core
 
@@ -25,8 +25,8 @@ import (
 	"math/big"
 	"reflect"
 
-	"github.com/go-ethereum-analysis/accounts/abi"
-	"github.com/go-ethereum-analysis/common"
+	"github.com/blockchain-analysis-study/go-ethereum-analysis/accounts/abi"
+	"github.com/blockchain-analysis-study/go-ethereum-analysis/common"
 )
 
 func verify(t *testing.T, jsondata, calldata string, exp []interface{}) {

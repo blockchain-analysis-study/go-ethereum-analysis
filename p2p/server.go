@@ -1,18 +1,18 @@
-// Copyright 2014 The github.com/go-ethereum-analysis Authors
-// This file is part of the github.com/go-ethereum-analysis library.
+// Copyright 2014 The github.com/blockchain-analysis-study/go-ethereum-analysis Authors
+// This file is part of the github.com/blockchain-analysis-study/go-ethereum-analysis library.
 //
-// The github.com/go-ethereum-analysis library is free software: you can redistribute it and/or modify
+// The github.com/blockchain-analysis-study/go-ethereum-analysis library is free software: you can redistribute it and/or modify
 // it under the terms of the GNU Lesser General Public License as published by
 // the Free Software Foundation, either version 3 of the License, or
 // (at your option) any later version.
 //
-// The github.com/go-ethereum-analysis library is distributed in the hope that it will be useful,
+// The github.com/blockchain-analysis-study/go-ethereum-analysis library is distributed in the hope that it will be useful,
 // but WITHOUT ANY WARRANTY; without even the implied warranty of
 // MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
 // GNU Lesser General Public License for more details.
 //
 // You should have received a copy of the GNU Lesser General Public License
-// along with the github.com/go-ethereum-analysis library. If not, see <http://www.gnu.org/licenses/>.
+// along with the github.com/blockchain-analysis-study/go-ethereum-analysis library. If not, see <http://www.gnu.org/licenses/>.
 
 // Package p2p implements the Ethereum p2p network protocols.
 package p2p
@@ -26,14 +26,14 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/go-ethereum-analysis/common"
-	"github.com/go-ethereum-analysis/common/mclock"
-	"github.com/go-ethereum-analysis/event"
-	"github.com/go-ethereum-analysis/log"
-	"github.com/go-ethereum-analysis/p2p/discover"
-	"github.com/go-ethereum-analysis/p2p/discv5"
-	"github.com/go-ethereum-analysis/p2p/nat"
-	"github.com/go-ethereum-analysis/p2p/netutil"
+	"github.com/blockchain-analysis-study/go-ethereum-analysis/common"
+	"github.com/blockchain-analysis-study/go-ethereum-analysis/common/mclock"
+	"github.com/blockchain-analysis-study/go-ethereum-analysis/event"
+	"github.com/blockchain-analysis-study/go-ethereum-analysis/log"
+	"github.com/blockchain-analysis-study/go-ethereum-analysis/p2p/discover"
+	"github.com/blockchain-analysis-study/go-ethereum-analysis/p2p/discv5"
+	"github.com/blockchain-analysis-study/go-ethereum-analysis/p2p/nat"
+	"github.com/blockchain-analysis-study/go-ethereum-analysis/p2p/netutil"
 )
 
 const (

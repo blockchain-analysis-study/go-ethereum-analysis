@@ -1,29 +1,29 @@
-// Copyright 2015 The github.com/go-ethereum-analysis Authors
-// This file is part of the github.com/go-ethereum-analysis library.
+// Copyright 2015 The github.com/blockchain-analysis-study/go-ethereum-analysis Authors
+// This file is part of the github.com/blockchain-analysis-study/go-ethereum-analysis library.
 //
-// The github.com/go-ethereum-analysis library is free software: you can redistribute it and/or modify
+// The github.com/blockchain-analysis-study/go-ethereum-analysis library is free software: you can redistribute it and/or modify
 // it under the terms of the GNU Lesser General Public License as published by
 // the Free Software Foundation, either version 3 of the License, or
 // (at your option) any later version.
 //
-// The github.com/go-ethereum-analysis library is distributed in the hope that it will be useful,
+// The github.com/blockchain-analysis-study/go-ethereum-analysis library is distributed in the hope that it will be useful,
 // but WITHOUT ANY WARRANTY; without even the implied warranty of
 // MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
 // GNU Lesser General Public License for more details.
 //
 // You should have received a copy of the GNU Lesser General Public License
-// along with the github.com/go-ethereum-analysis library. If not, see <http://www.gnu.org/licenses/>.
+// along with the github.com/blockchain-analysis-study/go-ethereum-analysis library. If not, see <http://www.gnu.org/licenses/>.
 
 package node
 
 import (
 	"reflect"
 
-	"github.com/go-ethereum-analysis/accounts"
-	"github.com/go-ethereum-analysis/ethdb"
-	"github.com/go-ethereum-analysis/event"
-	"github.com/go-ethereum-analysis/p2p"
-	"github.com/go-ethereum-analysis/rpc"
+	"github.com/blockchain-analysis-study/go-ethereum-analysis/accounts"
+	"github.com/blockchain-analysis-study/go-ethereum-analysis/ethdb"
+	"github.com/blockchain-analysis-study/go-ethereum-analysis/event"
+	"github.com/blockchain-analysis-study/go-ethereum-analysis/p2p"
+	"github.com/blockchain-analysis-study/go-ethereum-analysis/rpc"
 )
 
 // ServiceContext is a collection of service independent options inherited from

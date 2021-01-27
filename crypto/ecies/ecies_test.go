@@ -40,7 +40,7 @@ import (
 	"math/big"
 	"testing"
 
-	"github.com/go-ethereum-analysis/crypto"
+	"github.com/blockchain-analysis-study/go-ethereum-analysis/crypto"
 )
 
 var dumpEnc bool

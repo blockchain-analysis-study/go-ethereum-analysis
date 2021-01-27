@@ -4,7 +4,7 @@ import (
 	"bytes"
 	"testing"
 
-	"github.com/go-ethereum-analysis/common/hexutil"
+	"github.com/blockchain-analysis-study/go-ethereum-analysis/common/hexutil"
 )
 
 const serializedUpdateHeaderMultihashHex = "0x4f000000da070000fb0ed7efa696bdb0b54cd75554cc3117ffc891454317df7dd6fefad978e2f2fbf74a10ce8f26ffc8bfaa07c3031a34b2c61f517955e7deb1592daccf96c69cf001"

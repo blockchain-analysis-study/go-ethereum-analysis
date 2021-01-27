@@ -9,17 +9,17 @@ import (
 	"testing"
 	"time"
 
-	"github.com/go-ethereum-analysis/common/hexutil"
-	"github.com/go-ethereum-analysis/crypto"
-	"github.com/go-ethereum-analysis/log"
-	"github.com/go-ethereum-analysis/node"
-	"github.com/go-ethereum-analysis/p2p/discover"
-	"github.com/go-ethereum-analysis/p2p/simulations"
-	"github.com/go-ethereum-analysis/p2p/simulations/adapters"
-	"github.com/go-ethereum-analysis/swarm/network"
-	"github.com/go-ethereum-analysis/swarm/pss"
-	"github.com/go-ethereum-analysis/swarm/state"
-	whisper "github.com/go-ethereum-analysis/whisper/whisperv5"
+	"github.com/blockchain-analysis-study/go-ethereum-analysis/common/hexutil"
+	"github.com/blockchain-analysis-study/go-ethereum-analysis/crypto"
+	"github.com/blockchain-analysis-study/go-ethereum-analysis/log"
+	"github.com/blockchain-analysis-study/go-ethereum-analysis/node"
+	"github.com/blockchain-analysis-study/go-ethereum-analysis/p2p/discover"
+	"github.com/blockchain-analysis-study/go-ethereum-analysis/p2p/simulations"
+	"github.com/blockchain-analysis-study/go-ethereum-analysis/p2p/simulations/adapters"
+	"github.com/blockchain-analysis-study/go-ethereum-analysis/swarm/network"
+	"github.com/blockchain-analysis-study/go-ethereum-analysis/swarm/pss"
+	"github.com/blockchain-analysis-study/go-ethereum-analysis/swarm/state"
+	whisper "github.com/blockchain-analysis-study/go-ethereum-analysis/whisper/whisperv5"
 )
 
 var (

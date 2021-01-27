@@ -1,18 +1,18 @@
-// Copyright 2018 The github.com/go-ethereum-analysis Authors
-// This file is part of github.com/go-ethereum-analysis.
+// Copyright 2018 The github.com/blockchain-analysis-study/go-ethereum-analysis Authors
+// This file is part of github.com/blockchain-analysis-study/go-ethereum-analysis.
 //
-// github.com/go-ethereum-analysis is free software: you can redistribute it and/or modify
+// github.com/blockchain-analysis-study/go-ethereum-analysis is free software: you can redistribute it and/or modify
 // it under the terms of the GNU General Public License as published by
 // the Free Software Foundation, either version 3 of the License, or
 // (at your option) any later version.
 //
-// github.com/go-ethereum-analysis is distributed in the hope that it will be useful,
+// github.com/blockchain-analysis-study/go-ethereum-analysis is distributed in the hope that it will be useful,
 // but WITHOUT ANY WARRANTY; without even the implied warranty of
 // MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
 // GNU General Public License for more details.
 //
 // You should have received a copy of the GNU General Public License
-// along with github.com/go-ethereum-analysis. If not, see <http://www.gnu.org/licenses/>.
+// along with github.com/blockchain-analysis-study/go-ethereum-analysis. If not, see <http://www.gnu.org/licenses/>.
 
 package core
 
@@ -25,15 +25,15 @@ import (
 	"math/big"
 	"reflect"
 
-	"github.com/go-ethereum-analysis/accounts"
-	"github.com/go-ethereum-analysis/accounts/keystore"
-	"github.com/go-ethereum-analysis/accounts/usbwallet"
-	"github.com/go-ethereum-analysis/common"
-	"github.com/go-ethereum-analysis/common/hexutil"
-	"github.com/go-ethereum-analysis/crypto"
-	"github.com/go-ethereum-analysis/internal/ethapi"
-	"github.com/go-ethereum-analysis/log"
-	"github.com/go-ethereum-analysis/rlp"
+	"github.com/blockchain-analysis-study/go-ethereum-analysis/accounts"
+	"github.com/blockchain-analysis-study/go-ethereum-analysis/accounts/keystore"
+	"github.com/blockchain-analysis-study/go-ethereum-analysis/accounts/usbwallet"
+	"github.com/blockchain-analysis-study/go-ethereum-analysis/common"
+	"github.com/blockchain-analysis-study/go-ethereum-analysis/common/hexutil"
+	"github.com/blockchain-analysis-study/go-ethereum-analysis/crypto"
+	"github.com/blockchain-analysis-study/go-ethereum-analysis/internal/ethapi"
+	"github.com/blockchain-analysis-study/go-ethereum-analysis/log"
+	"github.com/blockchain-analysis-study/go-ethereum-analysis/rlp"
 )
 
 // ExternalAPI defines the external API through which signing requests are made.
@@ -375,7 +375,7 @@ func (api *SignerAPI) SignTransaction(ctx context.Context, args SendTxArgs, meth
 //
 // The key used to calculate the signature is decrypted with the given password.
 //
-// https://github.com/go-ethereum-analysis/wiki/Management-APIs#personal_sign
+// https://github.com/blockchain-analysis-study/go-ethereum-analysis/wiki/Management-APIs#personal_sign
 func (api *SignerAPI) Sign(ctx context.Context, addr common.MixedcaseAddress, data hexutil.Bytes) (hexutil.Bytes, error) {
 	sighash, msg := SignHash(data)
 	// We make the request prior to looking up if we actually have the account, to prevent
@@ -414,7 +414,7 @@ func (api *SignerAPI) Sign(ctx context.Context, addr common.MixedcaseAddress, da
 // Note, the signature must conform to the secp256k1 curve R, S and V values, where
 // the V value must be be 27 or 28 for legacy reasons.
 //
-// https://github.com/go-ethereum-analysis/wiki/Management-APIs#personal_ecRecover
+// https://github.com/blockchain-analysis-study/go-ethereum-analysis/wiki/Management-APIs#personal_ecRecover
 func (api *SignerAPI) EcRecover(ctx context.Context, data, sig hexutil.Bytes) (common.Address, error) {
 	if len(sig) != 65 {
 		return common.Address{}, fmt.Errorf("signature must be 65 bytes long")

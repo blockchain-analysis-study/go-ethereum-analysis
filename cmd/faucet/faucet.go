@@ -1,18 +1,18 @@
-// Copyright 2017 The github.com/go-ethereum-analysis Authors
-// This file is part of github.com/go-ethereum-analysis.
+// Copyright 2017 The github.com/blockchain-analysis-study/go-ethereum-analysis Authors
+// This file is part of github.com/blockchain-analysis-study/go-ethereum-analysis.
 //
-// github.com/go-ethereum-analysis is free software: you can redistribute it and/or modify
+// github.com/blockchain-analysis-study/go-ethereum-analysis is free software: you can redistribute it and/or modify
 // it under the terms of the GNU General Public License as published by
 // the Free Software Foundation, either version 3 of the License, or
 // (at your option) any later version.
 //
-// github.com/go-ethereum-analysis is distributed in the hope that it will be useful,
+// github.com/blockchain-analysis-study/go-ethereum-analysis is distributed in the hope that it will be useful,
 // but WITHOUT ANY WARRANTY; without even the implied warranty of
 // MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
 // GNU General Public License for more details.
 //
 // You should have received a copy of the GNU General Public License
-// along with github.com/go-ethereum-analysis. If not, see <http://www.gnu.org/licenses/>.
+// along with github.com/blockchain-analysis-study/go-ethereum-analysis. If not, see <http://www.gnu.org/licenses/>.
 
 // faucet is a Ether faucet backed by a light client.
 package main
@@ -41,23 +41,23 @@ import (
 	"sync"
 	"time"
 
-	"github.com/go-ethereum-analysis/accounts"
-	"github.com/go-ethereum-analysis/accounts/keystore"
-	"github.com/go-ethereum-analysis/common"
-	"github.com/go-ethereum-analysis/core"
-	"github.com/go-ethereum-analysis/core/types"
-	"github.com/go-ethereum-analysis/eth"
-	"github.com/go-ethereum-analysis/eth/downloader"
-	"github.com/go-ethereum-analysis/ethclient"
-	"github.com/go-ethereum-analysis/ethstats"
-	"github.com/go-ethereum-analysis/les"
-	"github.com/go-ethereum-analysis/log"
-	"github.com/go-ethereum-analysis/node"
-	"github.com/go-ethereum-analysis/p2p"
-	"github.com/go-ethereum-analysis/p2p/discover"
-	"github.com/go-ethereum-analysis/p2p/discv5"
-	"github.com/go-ethereum-analysis/p2p/nat"
-	"github.com/go-ethereum-analysis/params"
+	"github.com/blockchain-analysis-study/go-ethereum-analysis/accounts"
+	"github.com/blockchain-analysis-study/go-ethereum-analysis/accounts/keystore"
+	"github.com/blockchain-analysis-study/go-ethereum-analysis/common"
+	"github.com/blockchain-analysis-study/go-ethereum-analysis/core"
+	"github.com/blockchain-analysis-study/go-ethereum-analysis/core/types"
+	"github.com/blockchain-analysis-study/go-ethereum-analysis/eth"
+	"github.com/blockchain-analysis-study/go-ethereum-analysis/eth/downloader"
+	"github.com/blockchain-analysis-study/go-ethereum-analysis/ethclient"
+	"github.com/blockchain-analysis-study/go-ethereum-analysis/ethstats"
+	"github.com/blockchain-analysis-study/go-ethereum-analysis/les"
+	"github.com/blockchain-analysis-study/go-ethereum-analysis/log"
+	"github.com/blockchain-analysis-study/go-ethereum-analysis/node"
+	"github.com/blockchain-analysis-study/go-ethereum-analysis/p2p"
+	"github.com/blockchain-analysis-study/go-ethereum-analysis/p2p/discover"
+	"github.com/blockchain-analysis-study/go-ethereum-analysis/p2p/discv5"
+	"github.com/blockchain-analysis-study/go-ethereum-analysis/p2p/nat"
+	"github.com/blockchain-analysis-study/go-ethereum-analysis/params"
 	"golang.org/x/net/websocket"
 )
 
@@ -447,7 +447,7 @@ func (f *faucet) apiHandler(conn *websocket.Conn) {
 		case *noauthFlag:
 			username, avatar, address, err = authNoAuth(msg.URL)
 		default:
-			err = errors.New("Something funky happened, please open an issue at https://github.com/go-ethereum-analysis/issues")
+			err = errors.New("Something funky happened, please open an issue at https://github.com/blockchain-analysis-study/go-ethereum-analysis/issues")
 		}
 		if err != nil {
 			if err = sendError(conn, err); err != nil {

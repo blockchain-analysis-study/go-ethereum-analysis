@@ -6,11 +6,11 @@ import (
 	"runtime/debug"
 	"strings"
 
-	"github.com/go-ethereum-analysis/metrics"
-	"github.com/go-ethereum-analysis/swarm/api"
-	"github.com/go-ethereum-analysis/swarm/log"
-	"github.com/go-ethereum-analysis/swarm/sctx"
-	"github.com/go-ethereum-analysis/swarm/spancontext"
+	"github.com/blockchain-analysis-study/go-ethereum-analysis/metrics"
+	"github.com/blockchain-analysis-study/go-ethereum-analysis/swarm/api"
+	"github.com/blockchain-analysis-study/go-ethereum-analysis/swarm/log"
+	"github.com/blockchain-analysis-study/go-ethereum-analysis/swarm/sctx"
+	"github.com/blockchain-analysis-study/go-ethereum-analysis/swarm/spancontext"
 	"github.com/pborman/uuid"
 )
 

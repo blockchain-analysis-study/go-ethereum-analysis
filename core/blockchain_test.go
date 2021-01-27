@@ -1,18 +1,18 @@
-// Copyright 2014 The github.com/go-ethereum-analysis Authors
-// This file is part of the github.com/go-ethereum-analysis library.
+// Copyright 2014 The github.com/blockchain-analysis-study/go-ethereum-analysis Authors
+// This file is part of the github.com/blockchain-analysis-study/go-ethereum-analysis library.
 //
-// The github.com/go-ethereum-analysis library is free software: you can redistribute it and/or modify
+// The github.com/blockchain-analysis-study/go-ethereum-analysis library is free software: you can redistribute it and/or modify
 // it under the terms of the GNU Lesser General Public License as published by
 // the Free Software Foundation, either version 3 of the License, or
 // (at your option) any later version.
 //
-// The github.com/go-ethereum-analysis library is distributed in the hope that it will be useful,
+// The github.com/blockchain-analysis-study/go-ethereum-analysis library is distributed in the hope that it will be useful,
 // but WITHOUT ANY WARRANTY; without even the implied warranty of
 // MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
 // GNU Lesser General Public License for more details.
 //
 // You should have received a copy of the GNU Lesser General Public License
-// along with the github.com/go-ethereum-analysis library. If not, see <http://www.gnu.org/licenses/>.
+// along with the github.com/blockchain-analysis-study/go-ethereum-analysis library. If not, see <http://www.gnu.org/licenses/>.
 
 package core
 
@@ -24,16 +24,16 @@ import (
 	"testing"
 	"time"
 
-	"github.com/go-ethereum-analysis/common"
-	"github.com/go-ethereum-analysis/consensus"
-	"github.com/go-ethereum-analysis/consensus/ethash"
-	"github.com/go-ethereum-analysis/core/rawdb"
-	"github.com/go-ethereum-analysis/core/state"
-	"github.com/go-ethereum-analysis/core/types"
-	"github.com/go-ethereum-analysis/core/vm"
-	"github.com/go-ethereum-analysis/crypto"
-	"github.com/go-ethereum-analysis/ethdb"
-	"github.com/go-ethereum-analysis/params"
+	"github.com/blockchain-analysis-study/go-ethereum-analysis/common"
+	"github.com/blockchain-analysis-study/go-ethereum-analysis/consensus"
+	"github.com/blockchain-analysis-study/go-ethereum-analysis/consensus/ethash"
+	"github.com/blockchain-analysis-study/go-ethereum-analysis/core/rawdb"
+	"github.com/blockchain-analysis-study/go-ethereum-analysis/core/state"
+	"github.com/blockchain-analysis-study/go-ethereum-analysis/core/types"
+	"github.com/blockchain-analysis-study/go-ethereum-analysis/core/vm"
+	"github.com/blockchain-analysis-study/go-ethereum-analysis/crypto"
+	"github.com/blockchain-analysis-study/go-ethereum-analysis/ethdb"
+	"github.com/blockchain-analysis-study/go-ethereum-analysis/params"
 )
 
 // So we can deterministically seed different blockchains
@@ -1230,7 +1230,7 @@ func TestEIP161AccountRemoval(t *testing.T) {
 // tests that under weird reorg conditions the blockchain and its internal header-
 // chain return the same latest block/header.
 //
-// https://github.com/go-ethereum-analysis/pull/15941
+// https://github.com/blockchain-analysis-study/go-ethereum-analysis/pull/15941
 func TestBlockchainHeaderchainReorgConsistency(t *testing.T) {
 	// Generate a canonical chain to act as the main dataset
 	engine := ethash.NewFaker()

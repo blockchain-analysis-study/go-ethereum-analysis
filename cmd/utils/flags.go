@@ -1,20 +1,20 @@
-// Copyright 2015 The github.com/go-ethereum-analysis Authors
-// This file is part of github.com/go-ethereum-analysis.
+// Copyright 2015 The github.com/blockchain-analysis-study/go-ethereum-analysis Authors
+// This file is part of github.com/blockchain-analysis-study/go-ethereum-analysis.
 //
-// github.com/go-ethereum-analysis is free software: you can redistribute it and/or modify
+// github.com/blockchain-analysis-study/go-ethereum-analysis is free software: you can redistribute it and/or modify
 // it under the terms of the GNU General Public License as published by
 // the Free Software Foundation, either version 3 of the License, or
 // (at your option) any later version.
 //
-// github.com/go-ethereum-analysis is distributed in the hope that it will be useful,
+// github.com/blockchain-analysis-study/go-ethereum-analysis is distributed in the hope that it will be useful,
 // but WITHOUT ANY WARRANTY; without even the implied warranty of
 // MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
 // GNU General Public License for more details.
 //
 // You should have received a copy of the GNU General Public License
-// along with github.com/go-ethereum-analysis. If not, see <http://www.gnu.org/licenses/>.
+// along with github.com/blockchain-analysis-study/go-ethereum-analysis. If not, see <http://www.gnu.org/licenses/>.
 
-// Package utils contains internal helper functions for github.com/go-ethereum-analysis commands.
+// Package utils contains internal helper functions for github.com/blockchain-analysis-study/go-ethereum-analysis commands.
 package utils
 
 import (
@@ -28,35 +28,35 @@ import (
 	"strings"
 	"time"
 
-	"github.com/go-ethereum-analysis/accounts"
-	"github.com/go-ethereum-analysis/accounts/keystore"
-	"github.com/go-ethereum-analysis/common"
-	"github.com/go-ethereum-analysis/common/fdlimit"
-	"github.com/go-ethereum-analysis/consensus"
-	"github.com/go-ethereum-analysis/consensus/clique"
-	"github.com/go-ethereum-analysis/consensus/ethash"
-	"github.com/go-ethereum-analysis/core"
-	"github.com/go-ethereum-analysis/core/state"
-	"github.com/go-ethereum-analysis/core/vm"
-	"github.com/go-ethereum-analysis/crypto"
-	"github.com/go-ethereum-analysis/dashboard"
-	"github.com/go-ethereum-analysis/eth"
-	"github.com/go-ethereum-analysis/eth/downloader"
-	"github.com/go-ethereum-analysis/eth/gasprice"
-	"github.com/go-ethereum-analysis/ethdb"
-	"github.com/go-ethereum-analysis/ethstats"
-	"github.com/go-ethereum-analysis/les"
-	"github.com/go-ethereum-analysis/log"
-	"github.com/go-ethereum-analysis/metrics"
-	"github.com/go-ethereum-analysis/metrics/influxdb"
-	"github.com/go-ethereum-analysis/node"
-	"github.com/go-ethereum-analysis/p2p"
-	"github.com/go-ethereum-analysis/p2p/discover"
-	"github.com/go-ethereum-analysis/p2p/discv5"
-	"github.com/go-ethereum-analysis/p2p/nat"
-	"github.com/go-ethereum-analysis/p2p/netutil"
-	"github.com/go-ethereum-analysis/params"
-	whisper "github.com/go-ethereum-analysis/whisper/whisperv6"
+	"github.com/blockchain-analysis-study/go-ethereum-analysis/accounts"
+	"github.com/blockchain-analysis-study/go-ethereum-analysis/accounts/keystore"
+	"github.com/blockchain-analysis-study/go-ethereum-analysis/common"
+	"github.com/blockchain-analysis-study/go-ethereum-analysis/common/fdlimit"
+	"github.com/blockchain-analysis-study/go-ethereum-analysis/consensus"
+	"github.com/blockchain-analysis-study/go-ethereum-analysis/consensus/clique"
+	"github.com/blockchain-analysis-study/go-ethereum-analysis/consensus/ethash"
+	"github.com/blockchain-analysis-study/go-ethereum-analysis/core"
+	"github.com/blockchain-analysis-study/go-ethereum-analysis/core/state"
+	"github.com/blockchain-analysis-study/go-ethereum-analysis/core/vm"
+	"github.com/blockchain-analysis-study/go-ethereum-analysis/crypto"
+	"github.com/blockchain-analysis-study/go-ethereum-analysis/dashboard"
+	"github.com/blockchain-analysis-study/go-ethereum-analysis/eth"
+	"github.com/blockchain-analysis-study/go-ethereum-analysis/eth/downloader"
+	"github.com/blockchain-analysis-study/go-ethereum-analysis/eth/gasprice"
+	"github.com/blockchain-analysis-study/go-ethereum-analysis/ethdb"
+	"github.com/blockchain-analysis-study/go-ethereum-analysis/ethstats"
+	"github.com/blockchain-analysis-study/go-ethereum-analysis/les"
+	"github.com/blockchain-analysis-study/go-ethereum-analysis/log"
+	"github.com/blockchain-analysis-study/go-ethereum-analysis/metrics"
+	"github.com/blockchain-analysis-study/go-ethereum-analysis/metrics/influxdb"
+	"github.com/blockchain-analysis-study/go-ethereum-analysis/node"
+	"github.com/blockchain-analysis-study/go-ethereum-analysis/p2p"
+	"github.com/blockchain-analysis-study/go-ethereum-analysis/p2p/discover"
+	"github.com/blockchain-analysis-study/go-ethereum-analysis/p2p/discv5"
+	"github.com/blockchain-analysis-study/go-ethereum-analysis/p2p/nat"
+	"github.com/blockchain-analysis-study/go-ethereum-analysis/p2p/netutil"
+	"github.com/blockchain-analysis-study/go-ethereum-analysis/params"
+	whisper "github.com/blockchain-analysis-study/go-ethereum-analysis/whisper/whisperv6"
 	"gopkg.in/urfave/cli.v1"
 )
 

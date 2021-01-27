@@ -1,18 +1,18 @@
-// Copyright 2014 The github.com/go-ethereum-analysis Authors
-// This file is part of the github.com/go-ethereum-analysis library.
+// Copyright 2014 The github.com/blockchain-analysis-study/go-ethereum-analysis Authors
+// This file is part of the github.com/blockchain-analysis-study/go-ethereum-analysis library.
 //
-// The github.com/go-ethereum-analysis library is free software: you can redistribute it and/or modify
+// The github.com/blockchain-analysis-study/go-ethereum-analysis library is free software: you can redistribute it and/or modify
 // it under the terms of the GNU Lesser General Public License as published by
 // the Free Software Foundation, either version 3 of the License, or
 // (at your option) any later version.
 //
-// The github.com/go-ethereum-analysis library is distributed in the hope that it will be useful,
+// The github.com/blockchain-analysis-study/go-ethereum-analysis library is distributed in the hope that it will be useful,
 // but WITHOUT ANY WARRANTY; without even the implied warranty of
 // MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
 // GNU Lesser General Public License for more details.
 //
 // You should have received a copy of the GNU Lesser General Public License
-// along with the github.com/go-ethereum-analysis library. If not, see <http://www.gnu.org/licenses/>.
+// along with the github.com/blockchain-analysis-study/go-ethereum-analysis library. If not, see <http://www.gnu.org/licenses/>.
 
 // Package eth implements the Ethereum protocol.
 package eth
@@ -25,30 +25,30 @@ import (
 	"sync"
 	"sync/atomic"
 
-	"github.com/go-ethereum-analysis/accounts"
-	"github.com/go-ethereum-analysis/common"
-	"github.com/go-ethereum-analysis/common/hexutil"
-	"github.com/go-ethereum-analysis/consensus"
-	"github.com/go-ethereum-analysis/consensus/clique"
-	"github.com/go-ethereum-analysis/consensus/ethash"
-	"github.com/go-ethereum-analysis/core"
-	"github.com/go-ethereum-analysis/core/bloombits"
-	"github.com/go-ethereum-analysis/core/rawdb"
-	"github.com/go-ethereum-analysis/core/types"
-	"github.com/go-ethereum-analysis/core/vm"
-	"github.com/go-ethereum-analysis/eth/downloader"
-	"github.com/go-ethereum-analysis/eth/filters"
-	"github.com/go-ethereum-analysis/eth/gasprice"
-	"github.com/go-ethereum-analysis/ethdb"
-	"github.com/go-ethereum-analysis/event"
-	"github.com/go-ethereum-analysis/internal/ethapi"
-	"github.com/go-ethereum-analysis/log"
-	"github.com/go-ethereum-analysis/miner"
-	"github.com/go-ethereum-analysis/node"
-	"github.com/go-ethereum-analysis/p2p"
-	"github.com/go-ethereum-analysis/params"
-	"github.com/go-ethereum-analysis/rlp"
-	"github.com/go-ethereum-analysis/rpc"
+	"github.com/blockchain-analysis-study/go-ethereum-analysis/accounts"
+	"github.com/blockchain-analysis-study/go-ethereum-analysis/common"
+	"github.com/blockchain-analysis-study/go-ethereum-analysis/common/hexutil"
+	"github.com/blockchain-analysis-study/go-ethereum-analysis/consensus"
+	"github.com/blockchain-analysis-study/go-ethereum-analysis/consensus/clique"
+	"github.com/blockchain-analysis-study/go-ethereum-analysis/consensus/ethash"
+	"github.com/blockchain-analysis-study/go-ethereum-analysis/core"
+	"github.com/blockchain-analysis-study/go-ethereum-analysis/core/bloombits"
+	"github.com/blockchain-analysis-study/go-ethereum-analysis/core/rawdb"
+	"github.com/blockchain-analysis-study/go-ethereum-analysis/core/types"
+	"github.com/blockchain-analysis-study/go-ethereum-analysis/core/vm"
+	"github.com/blockchain-analysis-study/go-ethereum-analysis/eth/downloader"
+	"github.com/blockchain-analysis-study/go-ethereum-analysis/eth/filters"
+	"github.com/blockchain-analysis-study/go-ethereum-analysis/eth/gasprice"
+	"github.com/blockchain-analysis-study/go-ethereum-analysis/ethdb"
+	"github.com/blockchain-analysis-study/go-ethereum-analysis/event"
+	"github.com/blockchain-analysis-study/go-ethereum-analysis/internal/ethapi"
+	"github.com/blockchain-analysis-study/go-ethereum-analysis/log"
+	"github.com/blockchain-analysis-study/go-ethereum-analysis/miner"
+	"github.com/blockchain-analysis-study/go-ethereum-analysis/node"
+	"github.com/blockchain-analysis-study/go-ethereum-analysis/p2p"
+	"github.com/blockchain-analysis-study/go-ethereum-analysis/params"
+	"github.com/blockchain-analysis-study/go-ethereum-analysis/rlp"
+	"github.com/blockchain-analysis-study/go-ethereum-analysis/rpc"
 )
 
 type LesServer interface {

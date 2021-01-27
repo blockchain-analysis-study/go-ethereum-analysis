@@ -1,18 +1,18 @@
-// Copyright 2017 The github.com/go-ethereum-analysis Authors
-// This file is part of the github.com/go-ethereum-analysis library.
+// Copyright 2017 The github.com/blockchain-analysis-study/go-ethereum-analysis Authors
+// This file is part of the github.com/blockchain-analysis-study/go-ethereum-analysis library.
 //
-// The github.com/go-ethereum-analysis library is free software: you can redistribute it and/or modify
+// The github.com/blockchain-analysis-study/go-ethereum-analysis library is free software: you can redistribute it and/or modify
 // it under the terms of the GNU Lesser General Public License as published by
 // the Free Software Foundation, either version 3 of the License, or
 // (at your option) any later version.
 //
-// The github.com/go-ethereum-analysis library is distributed in the hope that it will be useful,
+// The github.com/blockchain-analysis-study/go-ethereum-analysis library is distributed in the hope that it will be useful,
 // but WITHOUT ANY WARRANTY; without even the implied warranty of
 // MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
 // GNU Lesser General Public License for more details.
 //
 // You should have received a copy of the GNU Lesser General Public License
-// along with the github.com/go-ethereum-analysis library. If not, see <http://www.gnu.org/licenses/>.
+// along with the github.com/blockchain-analysis-study/go-ethereum-analysis library. If not, see <http://www.gnu.org/licenses/>.
 
 package swarm
 
@@ -28,10 +28,10 @@ import (
 	"testing"
 	"time"
 
-	"github.com/go-ethereum-analysis/common"
-	"github.com/go-ethereum-analysis/crypto"
-	"github.com/go-ethereum-analysis/rpc"
-	"github.com/go-ethereum-analysis/swarm/api"
+	"github.com/blockchain-analysis-study/go-ethereum-analysis/common"
+	"github.com/blockchain-analysis-study/go-ethereum-analysis/crypto"
+	"github.com/blockchain-analysis-study/go-ethereum-analysis/rpc"
+	"github.com/blockchain-analysis-study/go-ethereum-analysis/swarm/api"
 )
 
 // TestNewSwarm validates Swarm fields in repsect to the provided configuration.
@@ -335,7 +335,7 @@ func TestLocalStoreAndRetrieve(t *testing.T) {
 // a file of length n with optional random data using API Store function,
 // and checks the output of API Retrieve function on the same instance.
 // This is a regression test for issue
-// https://github.com/ethersphere/github.com/go-ethereum-analysis/issues/639
+// https://github.com/ethersphere/github.com/blockchain-analysis-study/go-ethereum-analysis/issues/639
 // where pyramid chunker did not split correctly files with lengths that
 // are edge cases for chunk and tree parameters, depending whether there
 // is a tree chunk with only one data chunk and how the compress functionality

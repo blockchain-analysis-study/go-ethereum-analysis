@@ -1,18 +1,18 @@
-// Copyright 2017 The github.com/go-ethereum-analysis Authors
-// This file is part of github.com/go-ethereum-analysis.
+// Copyright 2017 The github.com/blockchain-analysis-study/go-ethereum-analysis Authors
+// This file is part of github.com/blockchain-analysis-study/go-ethereum-analysis.
 //
-// github.com/go-ethereum-analysis is free software: you can redistribute it and/or modify
+// github.com/blockchain-analysis-study/go-ethereum-analysis is free software: you can redistribute it and/or modify
 // it under the terms of the GNU General Public License as published by
 // the Free Software Foundation, either version 3 of the License, or
 // (at your option) any later version.
 //
-// github.com/go-ethereum-analysis is distributed in the hope that it will be useful,
+// github.com/blockchain-analysis-study/go-ethereum-analysis is distributed in the hope that it will be useful,
 // but WITHOUT ANY WARRANTY; without even the implied warranty of
 // MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
 // GNU General Public License for more details.
 //
 // You should have received a copy of the GNU General Public License
-// along with github.com/go-ethereum-analysis. If not, see <http://www.gnu.org/licenses/>.
+// along with github.com/blockchain-analysis-study/go-ethereum-analysis. If not, see <http://www.gnu.org/licenses/>.
 
 package main
 
@@ -21,11 +21,11 @@ import (
 	"errors"
 	"math"
 
-	"github.com/go-ethereum-analysis/common"
-	"github.com/go-ethereum-analysis/common/hexutil"
-	"github.com/go-ethereum-analysis/consensus/ethash"
-	"github.com/go-ethereum-analysis/core"
-	"github.com/go-ethereum-analysis/params"
+	"github.com/blockchain-analysis-study/go-ethereum-analysis/common"
+	"github.com/blockchain-analysis-study/go-ethereum-analysis/common/hexutil"
+	"github.com/blockchain-analysis-study/go-ethereum-analysis/consensus/ethash"
+	"github.com/blockchain-analysis-study/go-ethereum-analysis/core"
+	"github.com/blockchain-analysis-study/go-ethereum-analysis/params"
 )
 
 // cppEthereumGenesisSpec represents the genesis specification format used by the
@@ -85,10 +85,10 @@ type cppEthereumGenesisSpecLinearPricing struct {
 	Word uint64 `json:"word"`
 }
 
-// newCppEthereumGenesisSpec converts a github.com/go-ethereum-analysis genesis block into a Parity specific
+// newCppEthereumGenesisSpec converts a github.com/blockchain-analysis-study/go-ethereum-analysis genesis block into a Parity specific
 // chain specification format.
 func newCppEthereumGenesisSpec(network string, genesis *core.Genesis) (*cppEthereumGenesisSpec, error) {
-	// Only ethash is currently supported between github.com/go-ethereum-analysis and cpp-ethereum
+	// Only ethash is currently supported between github.com/blockchain-analysis-study/go-ethereum-analysis and cpp-ethereum
 	if genesis.Config.Ethash == nil {
 		return nil, errors.New("unsupported consensus engine")
 	}
@@ -256,10 +256,10 @@ type parityChainSpecAltBnPairingPricing struct {
 	Pair uint64 `json:"pair"`
 }
 
-// newParityChainSpec converts a github.com/go-ethereum-analysis genesis block into a Parity specific
+// newParityChainSpec converts a github.com/blockchain-analysis-study/go-ethereum-analysis genesis block into a Parity specific
 // chain specification format.
 func newParityChainSpec(network string, genesis *core.Genesis, bootnodes []string) (*parityChainSpec, error) {
-	// Only ethash is currently supported between github.com/go-ethereum-analysis and Parity
+	// Only ethash is currently supported between github.com/blockchain-analysis-study/go-ethereum-analysis and Parity
 	if genesis.Config.Ethash == nil {
 		return nil, errors.New("unsupported consensus engine")
 	}
@@ -355,10 +355,10 @@ type pyEthereumGenesisSpec struct {
 	ParentHash common.Hash       `json:"parentHash"`
 }
 
-// newPyEthereumGenesisSpec converts a github.com/go-ethereum-analysis genesis block into a Parity specific
+// newPyEthereumGenesisSpec converts a github.com/blockchain-analysis-study/go-ethereum-analysis genesis block into a Parity specific
 // chain specification format.
 func newPyEthereumGenesisSpec(network string, genesis *core.Genesis) (*pyEthereumGenesisSpec, error) {
-	// Only ethash is currently supported between github.com/go-ethereum-analysis and pyethereum
+	// Only ethash is currently supported between github.com/blockchain-analysis-study/go-ethereum-analysis and pyethereum
 	if genesis.Config.Ethash == nil {
 		return nil, errors.New("unsupported consensus engine")
 	}
